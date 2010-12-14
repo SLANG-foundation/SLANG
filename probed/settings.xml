@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+	<debug>false</debug>
+	<timestamp>sw</timestamp>
+	<interface>eth2</interface>
+	<port>60666</port>
+	<ping>
+		<name>lab-slang-2</name>
+		<!--<address>130.244.97.211</address>-->
+		<pps>10</pps>
+		<type>slang</type>
+	</ping>
+</config>
