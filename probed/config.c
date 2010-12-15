@@ -24,7 +24,7 @@ void config_read() {
 	/* reload configuration */
 	tmpdoc = xmlParseFile(cfgpath);
 	if (!doc) {
-		perror("xmlParseFile: not reloading");
+		syslog(LOG_ERR, "Invalid configuration. (xmlParseFile)");
 		return;
 	}
 	xmlFreeDoc(doc);
@@ -34,7 +34,7 @@ void config_read() {
 	c.port = 0; /* server port */
 	c.ts = 'u'; /* timestamping mode (s)w (k)ern (h)w */
 	/* configuration application */
-	if (c.debug) puts("Reloading configuration...");
+	syslog(LOG_INFO, "Reloading configuration...");
 	/* timestamping mode and interface */
 	config_getkey("/config/interface", c.iface, sizeof(c.iface)); 
 	if (config_getkey("/config/timestamp", tmp, TMPLEN) < 0)
@@ -49,8 +49,13 @@ void config_read() {
 		proto_bind(atoi(tmp));
 	/* extra output */
 	if (config_getkey("/config/debug", tmp, TMPLEN) == 0) {
-		if (tmp[0] == 't' || tmp[0] == '1') c.debug = 1;
-		else c.debug = 0;
+		if (tmp[0] == 't' || tmp[0] == '1') {
+			setlogmask(LOG_UPTO(LOG_DEBUG));
+			c.debug = 1;
+		} else {
+			setlogmask(LOG_UPTO(LOG_INFO));
+			c.debug = 0;
+		}
 	}
 	config_scan();
 }
@@ -66,9 +71,10 @@ void config_scan() {
 	xmlNode *n, *r;
 	xmlChar *c;
 
-	doc = xmlParseFile(cfgpath);
-	if (!doc) die("Invalid config file!");
-	if (!doc->children) die("Empty config file!");
+	if (!doc->children) {
+		syslog(LOG_ERR, "Empty configuration.");
+		return;
+	}
 	r = doc->children;
 	for (n = r->children; n != 0; n = n->next) {
 		if (n->type != XML_ELEMENT_NODE) continue;
@@ -87,18 +93,17 @@ int config_getkey(char *xpath, char *str, size_t bytes) {
 
 	ctx = xmlXPathNewContext(doc);
 	if (!ctx) {
-		perror("xmlXPathNewContext");
+		syslog(LOG_ERR, "xmlXPathNewContext: %s", strerror(errno));
 		return -1;
 	}
 	o = xmlXPathEvalExpression((xmlChar*)xpath, ctx);
 	if (!o) {
-		perror("xmlXPathEvalExpression");
+		syslog(LOG_ERR, "xmlXPathEvalExpression: %s", strerror(errno));
 		xmlXPathFreeContext(ctx);
 		return -1;
 	}
 	set = o->nodesetval;
 	if (xmlXPathNodeSetIsEmpty(set)) {
-		if (c.debug) printf("Configuration key %s not found\n", xpath);
 		xmlXPathFreeObject(o);
 		xmlXPathFreeContext(ctx);
 		return -1;
@@ -115,8 +120,5 @@ int config_getkey(char *xpath, char *str, size_t bytes) {
 
 void config_init() {
 	doc = xmlParseFile(cfgpath);
-	if (!doc) {
-		perror("xmlParseFile");
-		die("Invalid configuration file!");
-	}
+	if (!doc) die("Invalid configuration. (xmlParseFile)");
 }

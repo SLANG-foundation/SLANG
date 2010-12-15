@@ -30,7 +30,7 @@ void tstamp_hw() {
 	strncpy(dev.ifr_name, c.iface, sizeof(dev.ifr_name));
 	/* now that we have ioctl, check for ip address :) */
 	if (ioctl(s, SIOCGIFADDR, &dev) < 0)
-		perror("ioctl: SIOCGIFADDR: No IP configured");
+		syslog(LOG_ERR, "SIOCGIFADDR: no IP: %s", strerror(errno));
 	/* point ioctl req data at hw tstamp cfg, reset tstamp cfg */
 	dev.ifr_data = (void *)&hwcfg;
 	memset(&hwcfg, 0, sizeof(&hwcfg)); 
@@ -40,10 +40,10 @@ void tstamp_hw() {
 	hwcfg.rx_filter = HWTSTAMP_FILTER_ALL; 
 	/* apply by sending to ioctl */
 	if (ioctl(s, SIOCSHWTSTAMP, &dev) < 0) {
-		perror("ioctl: SIOCSHWTSTAMP");
-		printf("Check your NIC %s, and that you're root.\n", c.iface);
+		syslog(LOG_ERR, "ioctl: SIOCSHWTSTAMP: %s", strerror(errno));
+		syslog(LOG_ERR, "Check %s, and that you're root.\n", c.iface);
 		/* otherwise, try kernel timestamps (socket only) */ 
-		puts("Falling back to kernel timestamps.");
+		syslog(LOG_INFO, "Falling back to kernel timestamps.");
 		tstamp_kernel();
 		return;
 	}
@@ -53,12 +53,12 @@ void tstamp_hw() {
 	f |= SOF_TIMESTAMPING_RAW_HARDWARE;
 	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPING, &f, sizeof(f)) < 0) {
 		/* try software timestamps (socket only) */ 
-		perror("setsockopt: SO_TIMESTAMPING");
-		puts("Falling back to software timestamps.");
+		syslog(LOG_ERR, "SO_TIMESTAMPING: %s", strerror(errno));
+		syslog(LOG_INFO, "Falling back to software timestamps.");
 		tstamp_sw();
 		return;
 	}
-	puts("Using hardware timestamps.");
+	syslog(LOG_INFO, "Using hardware timestamps.");
 	c.ts = 'h'; /* remember hw is used */
 }
 
@@ -70,20 +70,20 @@ void tstamp_kernel() {
 	f |= SOF_TIMESTAMPING_RX_SOFTWARE;
 	f |= SOF_TIMESTAMPING_SOFTWARE;
 	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPING, &f, sizeof(f)) < 0) {
-		perror("setsockopt: SO_TIMESTAMPING");
-		puts("Falling back to software timestamps.");
+		syslog(LOG_ERR, "SO_TIMESTAMPING: %s", strerror(errno));
+		syslog(LOG_INFO, "Falling back to software timestamps.");
 		tstamp_sw();
 		return;
 	}
-	puts("Using kernel timestamps.");
+	syslog(LOG_INFO, "Using kernel timestamps.");
 	c.ts = 'k'; /* remember kernel is used */
 }
 
 void tstamp_sw() {
 	if (c.ts == 's') return; /* check if it has already been run */
 	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPNS, &yes, sizeof(yes)) < 0)
-		perror("setsockopt: SO_TIMESTAMP");
-	puts("Using software timestamps.");
+		syslog(LOG_ERR, "SO_TIMESTAMP: %s", strerror(errno));
+	syslog(LOG_INFO, "Using software timestamps.");
 	c.ts = 's';
 }
 

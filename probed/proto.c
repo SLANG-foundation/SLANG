@@ -21,7 +21,7 @@ void proto() {
 	tv.tv_sec = 0;
 	tv.tv_usec = 1;
 	if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
-		perror("setsockopt: SO_RCVTIMEO");
+		syslog(LOG_ERR, "setsockopt: SO_RCVTIMEO: %s", strerror(errno));
 	while (1) {
 		p.data[0] = 0;
 		data_recv(0); /* wait for ping/pong/ts */
@@ -37,7 +37,7 @@ void proto() {
 			them.sin_family = AF_INET;
 			them.sin_port = htons(c.port);
 			if (inet_aton(addr, &them.sin_addr) < 0)
-				perror("inet_aton: Check the IP address");
+				syslog(LOG_INFO, "aton: %s", strerror(errno));
 			pp.type = TYPE_PING;
 			pp.seq = seq;
 			data_send((char*)&pp, sizeof(pp));
@@ -67,12 +67,12 @@ void proto_server() {
 	rx = p.ts; /* save timestamp */
 	pp = (struct packet_ping*)&p.data;
 	pp->type = TYPE_PONG;
-	printf("* PING %d\n", pp->seq);
+	syslog(LOG_INFO, "* PING %d\n", pp->seq);
 	data_send((char*)pp, sizeof(struct packet_ping)); /* send pong */
 	tx = p.ts; /* save timestamp */
 
 	diff_ts(&di, &tx, &rx);
-	if (c.debug) printf("DI %010ld.%09ld\n", di.tv_sec, di.tv_nsec);
+	syslog(LOG_DEBUG, "DI %010ld.%09ld\n", di.tv_sec, di.tv_nsec);
 	pt.type = TYPE_TIME;
 	pt.seq1 = pp->seq;
 	pt.rx1 = rx;
@@ -86,7 +86,7 @@ void proto_client() {
 
 	rx = p.ts; /* save timestamp */
 	pp = (struct packet_ping*)&p.data;
-	printf("* PONG %d\n", pp->seq);
+	syslog(LOG_INFO, "* PONG %d\n", pp->seq);
 	
 	/*data_recv(0);
 	diff_ts(&di, &rx, &tx);
@@ -106,7 +106,7 @@ void proto_timestamp() {
 
 	pt = (struct packet_time*)&p.data;
 	diff_ts(&di, &(pt->tx1), &(pt->rx1));
-	printf("* TIME %d %09ld\n", pt->seq1, di.tv_nsec);
+	syslog(LOG_INFO, "* TIME %d %09ld\n", pt->seq1, di.tv_nsec);
 	
 	/*data_recv(0);
 	diff_ts(&di, &rx, &tx);
@@ -122,10 +122,11 @@ void proto_timestamp() {
 
 void proto_bind(int port) {
 	if (port == c.port) return;
-	printf("Binding port %d\n", port);
+	syslog(LOG_INFO, "Binding port %d\n", port);
 	c.port = port;
 	my.sin_family = AF_INET;
 	my.sin_addr.s_addr = htonl(INADDR_ANY);
 	my.sin_port = htons(port);
-	if (bind(s, (struct sockaddr *)&my, slen) < 0) perror("bind");
+	if (bind(s, (struct sockaddr *)&my, slen) < 0) 
+		syslog(LOG_ERR, "bind: %s", strerror(errno));
 }

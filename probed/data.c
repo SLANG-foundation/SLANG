@@ -32,7 +32,7 @@ void data_recv(int flags) {
 
 	if (recvmsg(s, &msg, flags) < 0) {
 		if (flags & MSG_ERRQUEUE)
-			perror("recvmsg: tstamp");
+			syslog(LOG_INFO, "recvmsg: %s (ts)", strerror(errno));
 		/*else
 			perror("recvmsg: data");*/
 		return;
@@ -42,14 +42,12 @@ void data_recv(int flags) {
 			return;
 		} else {
 			them = addr;
-			if (c.debug) {
-				printf("* RX from: %s\n", 
+			syslog(LOG_DEBUG, "* RX from: %s\n", 
 						inet_ntoa(them.sin_addr));
-				printf("* RX data: %d bytes\n", 
+			syslog(LOG_DEBUG, "* RX data: %d bytes\n", 
 						(int)sizeof(p.data));
-				printf("* RX time: %010ld.%09ld\n", 
+			syslog(LOG_DEBUG, "* RX time: %010ld.%09ld\n", 
 						p.ts.tv_sec, p.ts.tv_nsec);
-			}	
 		}
 	}
 }
@@ -58,10 +56,10 @@ void data_send(char *d, int size) {
 	fd_set fs; /* select fd set for hw tstamps */
 	struct timeval tv; /* select timeout for hw tstamps */
 
-	if (c.debug) printf("* TX to: %s\n", inet_ntoa(them.sin_addr));
+	syslog(LOG_DEBUG, "* TX to: %s\n", inet_ntoa(them.sin_addr));
 	if (c.ts == 's') clock_gettime(CLOCK_REALTIME, &p.ts); /* get sw tx */
 	if (sendto(s, d, size, 0, (struct sockaddr*)&them, slen) < 0)
-		perror("sendto");
+		syslog(LOG_INFO, "sendto: %s", strerror(errno));
 	if (c.ts != 's') { /* get kernel/hw tx */
 		tv.tv_sec = 1; /* wait for nic tx tstamp during 1sec */ 
 		tv.tv_usec = 0;
@@ -72,9 +70,9 @@ void data_send(char *d, int size) {
 				data_recv(MSG_ERRQUEUE); /* get tx kernel ts */
 		} else {
 			clock_gettime(CLOCK_REALTIME, &p.ts); /* get tx sw */
-			puts("Hardware TX timestamp error, using clock");
+			syslog(LOG_ERR, "Kernel TX timestamp error.");
 		}
 	}
-	if (c.debug) printf("* TX time: %010ld.%09ld\n", 
+	syslog(LOG_DEBUG, "* TX time: %010ld.%09ld\n", 
 			p.ts.tv_sec, p.ts.tv_nsec);
 }
