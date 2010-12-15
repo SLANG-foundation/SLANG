@@ -6,8 +6,9 @@
 	<port>60666</port>
 	<ping>
 		<name>lab-slang-2</name>
-		<!--<address>130.244.97.211</address>-->
+		<address>130.244.97.211</address>
 		<pps>10</pps>
+		<interval>100000</interval>
 		<type>slang</type>
 	</ping>
 </config>

@@ -102,6 +102,7 @@ struct scm_timestamping {
 int main(int argc, char *argv[]);
 void die(char *msg);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
+void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
 void proto();
 void proto_client();
 void proto_server();

@@ -12,16 +12,17 @@ struct sockaddr_in my;
 void proto() {
 	struct packet_ping pp;
 	struct timespec tx;
-	struct timeval tv;
-	int seq, i, r;
+	struct timeval tv, last, now;
+	int seq, r;
 	char addr[50];
-	char pps[10];
 
-	seq = i = 0;
+	seq = 0;
 	tv.tv_sec = 0;
 	tv.tv_usec = 1;
 	if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
 		syslog(LOG_ERR, "setsockopt: SO_RCVTIMEO: %s", strerror(errno));
+	
+	gettimeofday(&last, 0);
 	while (1) {
 		p.data[0] = 0;
 		data_recv(0); /* wait for ping/pong/ts */
@@ -29,10 +30,10 @@ void proto() {
 		if (p.data[0] == TYPE_PING) proto_server();
 		if (p.data[0] == TYPE_TIME) proto_timestamp();
 		/* send ping (client) */
-		if (i % 100 == 0) {
+		gettimeofday(&now, 0);
+		diff_tv(&tv, &now, &last);
+		if (tv.tv_sec >= 0 && tv.tv_usec >= 10000) {
 			r = config_getkey("/config/ping[1]/address", addr, 50);
-			if (r < 0) continue;
-			r = config_getkey("/config/ping[1]/pps", pps, 10);
 			if (r < 0) continue;
 			them.sin_family = AF_INET;
 			them.sin_port = htons(c.port);
@@ -43,8 +44,8 @@ void proto() {
 			data_send((char*)&pp, sizeof(pp));
 			tx = p.ts; /* save timestamp */
 			seq++;
+			gettimeofday(&last, 0);
 		}
-		i++;
 		//if (i == 1000-USLEEP) i = 0;
 
 		/*
