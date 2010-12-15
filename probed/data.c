@@ -10,9 +10,10 @@
 struct packet p;
 
 void data_recv(int flags) {
+	char tmp[INET6_ADDRSTRLEN];
 	struct msghdr msg; /* message */
 	struct iovec entry; /* misc data, such as timestamp */
-	struct sockaddr_in addr; /* message remote addr */
+	struct sockaddr_in6 addr; /* message remote addr */
 	struct {
 		struct cmsghdr cm;
 		char control[512];
@@ -41,11 +42,13 @@ void data_recv(int flags) {
 		if (flags & MSG_ERRQUEUE) {
 			return;
 		} else {
-			them = addr;
-			syslog(LOG_DEBUG, "* RX from: %s\n", 
-						inet_ntoa(them.sin_addr));
-			syslog(LOG_DEBUG, "* RX data: %d bytes\n", 
-						(int)sizeof(p.data));
+			them = addr; /* save latest peer spoken to */
+			inet_ntop(AF_INET6, &(them.sin6_addr), tmp, 
+					INET6_ADDRSTRLEN);
+			
+			syslog(LOG_DEBUG, "* RX from: %s\n", tmp); 
+			syslog(LOG_DEBUG, "* RX data: %zu bytes\n", 
+						sizeof(p.data));
 			syslog(LOG_DEBUG, "* RX time: %010ld.%09ld\n", 
 						p.ts.tv_sec, p.ts.tv_nsec);
 		}
@@ -53,10 +56,12 @@ void data_recv(int flags) {
 }
 
 void data_send(char *d, int size) {
+	char tmp[INET6_ADDRSTRLEN];
 	fd_set fs; /* select fd set for hw tstamps */
 	struct timeval tv; /* select timeout for hw tstamps */
 
-	syslog(LOG_DEBUG, "* TX to: %s\n", inet_ntoa(them.sin_addr));
+	inet_ntop(AF_INET6, &(them.sin6_addr), tmp, INET6_ADDRSTRLEN);
+	syslog(LOG_DEBUG, "* TX to: %s\n", tmp);
 	if (c.ts == 's') clock_gettime(CLOCK_REALTIME, &p.ts); /* get sw tx */
 	if (sendto(s, d, size, 0, (struct sockaddr*)&them, slen) < 0)
 		syslog(LOG_INFO, "sendto: %s", strerror(errno));

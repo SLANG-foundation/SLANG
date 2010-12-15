@@ -2,7 +2,8 @@
 
 int                s;       /* bind socket */
 unsigned int       yes = 1; /* usefull macro */
-struct sockaddr_in them;    /* other side's ip address */
+unsigned int       no = 0; /* usefull macro */
+struct sockaddr_in6 them;    /* other side's ip address */
 int                slen;    /* size of sockaddr_in */
 
 int main(int argc, char *argv[]) {
@@ -18,12 +19,14 @@ int main(int argc, char *argv[]) {
 	config_init();
 	/* macros */
 	slen = sizeof(them);
-	/* give us a socket */
-	s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	/* give us a dual-stack (ipv4/6) socket */
+	s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (s < 0) {
 		syslog(LOG_ERR, "socket: %s", strerror(errno));
 		die("Could not create UDP socket.");
 	} 
+	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no)) < 0)
+		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
 	/* read config, enabling timestamps */
 	signal(SIGHUP, config_read);
 	config_read();

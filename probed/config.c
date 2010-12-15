@@ -122,3 +122,4 @@ void config_init() {
 	doc = xmlParseFile(cfgpath);
 	if (!doc) die("Invalid configuration. (xmlParseFile)");
 }
+

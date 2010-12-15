@@ -4,7 +4,7 @@ L = -lrt -lxml2
 S = main.c proto.c tstamp.c data.c config.c 
 I = sla-ng.h
 O = $(S:.c=.o)
-T = sla-ng
+T = probed 
 
 all: $T 
 

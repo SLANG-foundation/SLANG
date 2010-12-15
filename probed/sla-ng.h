@@ -42,8 +42,9 @@ extern const char         *cfgpath;/* config file path */
 extern xmlDoc* doc;
 extern int                s;       /* bind socket */
 extern unsigned int       yes;     /* usefull macro */
+extern unsigned int       no;      /* usefull macro */
 extern int                slen;    /* size of sockaddr_in */
-extern struct sockaddr_in them;    /* other side's ip address */
+extern struct sockaddr_in6 them;    /* other side's ip address */
 extern struct cfg         c;
 extern struct packet      p;
 
