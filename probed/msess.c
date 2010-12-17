@@ -4,7 +4,7 @@
 #include <sys/queue.h>
 #include <arpa/inet.h>
 
-#include "sla-ng.h"
+#include "probed.h"
 #include "msess.h"
 
 struct msess *sessions;
@@ -43,7 +43,6 @@ struct msess *msess_add(void) {
  * Find a msess entry for the given address and ID
  */
 struct msess *msess_find(struct sockaddr *peer, msess_id id) {
-/* struct msess *msess_find(struct sockaddr_in6 *peer, uint16_t id) { */
 
 	struct msess *sess;
 	struct sockaddr_in6 *msess_addr, *query_addr;
@@ -102,7 +101,7 @@ msess_id msess_next_id(void) {
 /*
  * Handle a new timestamp
  */
-void mess_add_ts(struct sockaddr *peer, msess_id id, enum TS_TYPES tstype) {
+void mess_add_ts(struct sockaddr *peer, msess_id id, enum TS_TYPES tstype, struct timeval *ts) {
 
 	struct msess *sess;
 
@@ -110,9 +109,14 @@ void mess_add_ts(struct sockaddr *peer, msess_id id, enum TS_TYPES tstype) {
 	sess = msess_find(peer, id); 
 	
 	/* if we receive a t1, we have a new session */
-	if (tstype == t1) {
+	if (tstype == T1) {
 
-		LIST_INSERT_HEAD();
+		struct msess_probe *p;
+		p = malloc(sizeof (struct msess_probe));
+		memset(p, 0, sizeof (struct msess_probe));
+		memcpy(&(p->t1), ts, sizeof (struct timeval));
+
+		LIST_INSERT_HEAD(&(sess->probes), p, entries);
 
 	}
 
