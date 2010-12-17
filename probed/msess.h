@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <stdint.h>
+#include <probed.h>
 
 /* define structs to hold first element of linked lists */
 LIST_HEAD(msess_head, msess);
@@ -33,7 +34,9 @@ struct msess_probe {
 };
 
 void msess_init(void);
-void msess_printf(void);
+void msess_print(struct msess *sess);
+void msess_print_all(void);
+void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct timeval *ts);
 msess_id msess_next_id(void);
 struct msess *msess_add(void);
 struct msess *msess_find(struct sockaddr *peer, uint16_t id);
