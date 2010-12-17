@@ -11,7 +11,7 @@
  * document with for(n=doc->children;n!=0;n=n->next). 
  */
 
-#include "sla-ng.h"
+#include "probed.h"
 
 xmlDoc *doc;
 const char *cfgpath = "settings.xml";
@@ -29,13 +29,17 @@ void config_read() {
 	}
 	xmlFreeDoc(doc);
 	doc = tmpdoc;
-	/* default config */
-	c.debug = 1; /* extra output */
-	c.port = 0; /* server port */
-	c.ts = 'u'; /* timestamping mode (s)w (k)ern (h)w */
 	/* configuration application */
 	syslog(LOG_INFO, "Reloading configuration...");
-	/* timestamping mode and interface */
+	/* extra output */
+	if (config_getkey("/config/debug", tmp, TMPLEN) == 0) {
+		if (tmp[0] == 't' || tmp[0] == '1') debug(1); 
+		 else debug(0);
+	}
+	/* server port */
+	if (config_getkey("/config/port", tmp, TMPLEN) == 0)
+		proto_bind(atoi(tmp));
+	/* timestamping mode and interface, depend on socket/bind */
 	config_getkey("/config/interface", c.iface, sizeof(c.iface)); 
 	if (config_getkey("/config/timestamp", tmp, TMPLEN) < 0)
 	       tstamp_hw(); /* default is hw with fallback */
@@ -43,19 +47,6 @@ void config_read() {
 		if (tmp[0] == 'k') tstamp_kernel();
 		else if (tmp[0] == 's') tstamp_sw();
 		else tstamp_hw();
-	}
-	/* server port */
-	if (config_getkey("/config/port", tmp, TMPLEN) == 0)
-		proto_bind(atoi(tmp));
-	/* extra output */
-	if (config_getkey("/config/debug", tmp, TMPLEN) == 0) {
-		if (tmp[0] == 't' || tmp[0] == '1') {
-			setlogmask(LOG_UPTO(LOG_DEBUG));
-			c.debug = 1;
-		} else {
-			setlogmask(LOG_UPTO(LOG_INFO));
-			c.debug = 0;
-		}
 	}
 	config_scan();
 }
@@ -121,5 +112,9 @@ int config_getkey(char *xpath, char *str, size_t bytes) {
 void config_init() {
 	doc = xmlParseFile(cfgpath);
 	if (!doc) die("Invalid configuration. (xmlParseFile)");
+	/* default config */
+	c.debug = 0; /* extra output */
+	c.port = 0; /* server port */
+	c.ts = 'u'; /* timestamping mode (s)w (k)ern (h)w */
 }
 

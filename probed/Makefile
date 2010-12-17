@@ -2,7 +2,7 @@ C = gcc
 F = -c -Wall -I/usr/include/libxml2
 L = -lrt -lxml2
 S = main.c proto.c tstamp.c data.c config.c msess.c
-I = sla-ng.h
+I = probed.h
 O = $(S:.c=.o)
 T = probed 
 

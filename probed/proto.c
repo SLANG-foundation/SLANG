@@ -5,9 +5,9 @@
  * Protocol code for both client and server. 
  */
 
-#include "sla-ng.h"
+#include "probed.h"
 
-struct sockaddr_in my;
+struct sockaddr_in6 my;
 struct timespec rxglob, txglob;
 
 void proto() {
@@ -33,7 +33,7 @@ void proto() {
 		/* send ping (client) */
 		gettimeofday(&now, 0);
 		diff_tv(&tv, &now, &last);
-		if (tv.tv_sec >= 0 && tv.tv_usec >= 100000) {
+		if (tv.tv_sec >= 1 && tv.tv_usec >= 100000) {
 			r = config_getkey("/config/probe[1]/address", tmp, 48);
 			if (r < 0) continue;
 			them.sin6_family = AF_INET6;
@@ -99,12 +99,26 @@ void proto_timestamp() {
 }
 
 void proto_bind(int port) {
+	/* not changing port? quit, rebind fucks with the sockets */
 	if (port == c.port) return;
+	/* close previous socket, i didn't get reuse to work. */ 
+	close(s);
+	/* also, reset timestamp-mode, since it depends on socket */
+	c.ts = 'u';
+	s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+	if (s < 0) {
+		syslog(LOG_ERR, "socket: %s", strerror(errno));
+		die("Could not create UDP socket.");
+	} 
+	/* give us a dual-stack (ipv4/6) socket */
+	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no)) < 0)
+		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
+	/* bind port */
 	syslog(LOG_INFO, "Binding port %d\n", port);
 	c.port = port;
-	my.sin_family = AF_INET6;
-	my.sin_addr.s_addr = htonl(INADDR_ANY);
-	my.sin_port = htons(port);
+	my.sin6_family = AF_INET6;
+	my.sin6_addr = in6addr_any;
+	my.sin6_port = htons(port);
 	if (bind(s, (struct sockaddr *)&my, slen) < 0) 
 		syslog(LOG_ERR, "bind: %s", strerror(errno));
 }

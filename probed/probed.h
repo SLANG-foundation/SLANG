@@ -108,13 +108,15 @@ enum TS_TYPES {
 
 int main(int argc, char *argv[]);
 void die(char *msg);
+void debug(char enabled);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
 void proto();
 void proto_client();
 void proto_server();
 void proto_timestamp();
-void proto_bind();
+void proto_bind(int port);
+void proto_socket();
 void tstamp_hw();
 void tstamp_kernel();
 void tstamp_sw();

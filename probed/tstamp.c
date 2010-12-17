@@ -16,13 +16,12 @@
  * Extracts the timestamp from a message.
  */ 
 
-#include "sla-ng.h"
+#include "probed.h"
 
 void tstamp_hw() {
 	struct ifreq dev; /* request to ioctl */
 	struct hwtstamp_config hwcfg; /* hw tstamp cfg to ioctl req */
 	int f = 0; /* flags to setsockopt for socket request */
-	
 	if (c.ts == 'h') return; /* check if it has already been run */
 	/* STEP 1: ENABLE HW TIMESTAMP ON IFACE IN IOCTL */
 	memset(&dev, 0, sizeof(dev));
