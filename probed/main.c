@@ -12,7 +12,6 @@ int main(int argc, char *argv[]) {
 
 	/* get initial xml config to *doc */
 	config_init();
-	setlogmask(LOG_UPTO(LOG_INFO));
 	/* command line arguments */
 	while ((arg = getopt(argc, argv, "vd")) != -1) {
 		if (arg == 'v') syslog_flags |= LOG_PERROR;

@@ -86,26 +86,58 @@ void tstamp_sw() {
 	c.ts = 's';
 }
 
-void tstamp_get(struct msghdr *msg) {
+int tstamp_get(struct msghdr *msg) {
 	struct cmsghdr *cmsg;
 	struct scm_timestamping *t;
 	struct timespec *t2;
-
+	//puts("NEW");
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		//printf("LEVL: %d sol %d ip %d\n", cmsg->cmsg_level, SOL_SOCKET, IPPROTO_IP);
+		//printf("TYPE: %d ts %d err %d pkt %d\n", cmsg->cmsg_type, SO_TIMESTAMPING, IP_RECVERR, IP_PKTINFO);
 		if (cmsg->cmsg_level == SOL_SOCKET) {
 			/* if hw/kernel timestamps, check SO_TIMESTAMPING */
 			if (c.ts != 's' && cmsg->cmsg_type == SO_TIMESTAMPING) {
 				t = (struct scm_timestamping *)CMSG_DATA(cmsg);
 				if (c.ts == 'h') p.ts = t->hwtimeraw;
 				if (c.ts == 'k') p.ts = t->systime;
-				return;
+				return 0;
 			}
 			/* if software timestamps, check SO_TIMESTAMPNS */
 			if (c.ts == 's' && cmsg->cmsg_type == SO_TIMESTAMPNS) {
 				t2 = (struct timespec *)CMSG_DATA(cmsg);
 				p.ts = *t2;
-				return;	
+				return 0;
 			}
 		}
 	}
+	return -1;
+}
+
+/*
+ * Function that waits for a TX timestamp on the error queue, used for 
+ * the kernel (and hardware) timestamping mode. It does so by select()ing 
+ * reads, and checking for approx 1 second. Note that normal packets will
+ * trigger the select() as well, therefore the while-loop is needed. 
+ * As usual, the timestamp is stored by data_recv() calling tstamp_get()
+ * in the global variable ts.
+ */
+void tstamp_recv() {
+	fd_set fs; /* select fd set for hw tstamps */
+	struct timeval tv, now, last; /* timeout for select and while */
+
+	tv.tv_sec = 1; /* wait for nic tx tstamp during at least 1sec */ 
+	tv.tv_usec = 0;
+	gettimeofday(&last, 0);
+	gettimeofday(&now, 0);
+	while (now.tv_sec - last.tv_sec < 2) {
+		FD_ZERO(&fs);
+		FD_SET(s, &fs);
+		if (select(s + 1, &fs, 0, 0, &tv) > 0) 
+			if (data_recv(MSG_ERRQUEUE) == 0)  /* get tx ts */
+				return;
+		gettimeofday(&now, 0);
+	}
+	syslog(LOG_ERR, "Kernel TX timestamp error.");
+	p.ts.tv_sec = 0;
+	p.ts.tv_nsec = 0;
 }

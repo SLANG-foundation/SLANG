@@ -113,8 +113,9 @@ void config_init() {
 	doc = xmlParseFile(cfgpath);
 	if (!doc) die("Invalid configuration. (xmlParseFile)");
 	/* default config */
-	c.debug = 0; /* extra output */
-	c.port = 0; /* server port */
-	c.ts = 'u'; /* timestamping mode (s)w (k)ern (h)w */
+	c.debug = 0; /* no extra output */
+	c.port = 0; /* no server port, bind! */
+	c.ts = 'u'; /* no timestamp mode, activate! */
+	setlogmask(LOG_UPTO(LOG_INFO)); /* default syslog level */
 }
 

@@ -33,7 +33,7 @@ void proto() {
 		/* send ping (client) */
 		gettimeofday(&now, 0);
 		diff_tv(&tv, &now, &last);
-		if (tv.tv_sec >= 1 && tv.tv_usec >= 100000) {
+		if (tv.tv_sec >= 0 && tv.tv_usec >= 100000) {
 			r = config_getkey("/config/probe[1]/address", tmp, 48);
 			if (r < 0) continue;
 			them.sin6_family = AF_INET6;
@@ -54,21 +54,17 @@ void proto() {
 void proto_server() {
 	struct packet_ping *pp;
 	struct packet_time pt;
-	struct timespec rx, tx, di;
+	struct timespec rx;
 
 	rx = p.ts; /* save timestamp */
 	pp = (struct packet_ping*)&p.data;
 	pp->type = TYPE_PONG;
-	syslog(LOG_DEBUG, "* PING %d\n", pp->seq);
-	data_send((char*)pp, sizeof(struct packet_ping)); /* send pong */
-	tx = p.ts; /* save timestamp */
-
-	diff_ts(&di, &tx, &rx);
-	syslog(LOG_DEBUG, "DI %010ld.%09ld\n", di.tv_sec, di.tv_nsec);
 	pt.type = TYPE_TIME;
 	pt.seq1 = pp->seq;
+	data_send((char*)pp, sizeof(struct packet_ping)); /* send pong */
 	pt.rx1 = rx;
-	pt.tx1 = tx;
+	pt.tx1 = p.ts; /* "save" tx timestamp */
+	syslog(LOG_DEBUG, "* SEND PONG %d\n", pt.seq1);
 	data_send((char*)&pt, sizeof(pt)); /* send diff */
 }
 
@@ -94,7 +90,7 @@ void proto_timestamp() {
 	diff_ts(&di2, &rxglob, &txglob);
 	if (c.debug) printf("DI %010ld.%09ld\n", di2.tv_sec, di2.tv_nsec);
 	rtt = di2.tv_nsec - di.tv_nsec;
-	printf("RT %d\n", rtt); 
+	printf("RT %d %d\n", rtt, pt->seq1); 
 
 }
 

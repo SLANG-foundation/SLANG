@@ -4,7 +4,7 @@
 #include <sys/queue.h>
 #include <arpa/inet.h>
 
-#include "sla-ng.h"
+#include "probed.h"
 #include "msess.h"
 
 struct msess *sessions;
