@@ -99,6 +99,12 @@ struct scm_timestamping {
 	struct timespec hwtimesys;
 	struct timespec hwtimeraw;
 };
+enum TS_TYPES {
+	T1,
+	T2,
+	T3,
+	T4
+};
 
 int main(int argc, char *argv[]);
 void die(char *msg);

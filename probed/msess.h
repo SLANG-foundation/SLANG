@@ -7,27 +7,17 @@
 LIST_HEAD(msess_head, msess);
 LIST_HEAD(probes_head, msess_probe);
 
+typedef uint16_t msess_id;
+
 /* Struct for storing configuration for one measurement session */
 struct msess {
-
-	/* 
-	 * We need:
-	 * remote address
-	 * port
-	 * dscp
-	 * last sequence number (uint32_t)
-	 * interval (interger number of milliseconds)
-	 * 
-	 * pointer to next element in list
-	 */
-
-	struct sockaddr dst;
+	msess_id id;
+	struct sockaddr_storage dst;
 	uint32_t interval_usec;
 	uint8_t dscp;
 	uint32_t last_seq;
 	struct probes_head probes;
 	LIST_ENTRY(msess) entries;
-	
 };
 
 /*
@@ -43,5 +33,7 @@ struct msess_probe {
 };
 
 void msess_init(void);
-void msess_add(struct msess *s);
 void msess_printf(void);
+msess_id msess_next_id(void);
+struct msess *msess_add(void);
+struct msess *msess_find(struct sockaddr *peer, uint16_t id);
