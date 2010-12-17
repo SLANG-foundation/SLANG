@@ -4,7 +4,7 @@
 #include <sys/queue.h>
 #include <arpa/inet.h>
 
-#include "probed.h"
+/* #include "probed.h" */
 #include "msess.h"
 
 struct msess *sessions;
@@ -43,7 +43,6 @@ struct msess *msess_add(void) {
  * Find a msess entry for the given address and ID
  */
 struct msess *msess_find(struct sockaddr *peer, msess_id id) {
-/* struct msess *msess_find(struct sockaddr_in6 *peer, uint16_t id) { */
 
 	struct msess *sess;
 	struct sockaddr_in6 *msess_addr, *query_addr;
@@ -102,18 +101,57 @@ msess_id msess_next_id(void) {
 /*
  * Handle a new timestamp
  */
-void mess_add_ts(struct sockaddr *peer, msess_id id, enum TS_TYPES tstype) {
+void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct timeval *ts) {
+
+	struct msess_probe *p;
+
+	/* if we receive a t1, we have a new session */
+	if (tstype == T1) {
+
+		p = malloc(sizeof (struct msess_probe));
+		memset(p, 0, sizeof (struct msess_probe));
+
+		p->seq = seq;
+		memcpy(&(p->t1), ts, sizeof (struct timeval));
+
+		LIST_INSERT_HEAD(&(sess->probes), p, entries);
+			
+	} else {
+
+		// find session
+		for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
+			if (p->seq == seq) {
+
+				// set correct timestamp
+				switch (tstype) {
+					case T1: /* needed to make gcc shut up */
+						break;
+					case T2:
+						memcpy(&(p->t2), ts, sizeof (struct timeval));
+						break;
+					case T3:
+						memcpy(&(p->t3), ts, sizeof (struct timeval));
+						break;
+					case T4:
+						memcpy(&(p->t4), ts, sizeof (struct timeval));
+						break;
+				}
+
+			}
+		}
+		
+		// Session not found! Log error.
+
+	}
+
+}
+
+void msess_print_all(void) {
 
 	struct msess *sess;
 
-	/* find peer */
-	sess = msess_find(peer, id); 
-	
-	/* if we receive a t1, we have a new session */
-	if (tstype == t1) {
-
-		LIST_INSERT_HEAD();
-
+	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
+		msess_print(sess);
 	}
 
 }
@@ -121,25 +159,30 @@ void mess_add_ts(struct sockaddr *peer, msess_id id, enum TS_TYPES tstype) {
 /*
  * Print current sessions to console
  */
-void msess_printf(void) {
+void msess_print(struct msess *sess) {
 
-	int i = 0;
 	char addr_str[INET6_ADDRSTRLEN];
 	struct sockaddr_in6 *addr;
-	struct msess *sess;
+	struct msess_probe *p;
 
-	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
+	addr = (struct sockaddr_in6 *)&(sess->dst);
+	inet_ntop(AF_INET6, addr->sin6_addr.s6_addr, addr_str, INET6_ADDRSTRLEN);
+	printf("Measurement session %d:\n", sess->id);
+	printf(" Destination address: %s\n", addr_str);
+	printf(" Destination port: %d\n", ntohs(addr->sin6_port));
+	printf(" Interval: %d\n", sess->interval_usec);
+	printf(" Current state:\n");
 
-		addr = (struct sockaddr_in6 *)&(sess->dst);
-		inet_ntop(AF_INET6, addr->sin6_addr.s6_addr, addr_str, INET6_ADDRSTRLEN);
-		printf("Measurement session %d:\n", i);
-		printf(" Destination address: %s\n", addr_str);
-		printf(" Destination port: %d\n", ntohs(addr->sin6_port));
-		printf(" Interval: %d\n", sess->interval_usec);
-		printf(" ID: %d\n", sess->id);
+	for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
+
+		printf("  Sequence: %d\n", p->seq);
+		printf("  T1 sec: %d usec: %d\n", (int)p->t1.tv_sec, (int)p->t1.tv_usec);
+		printf("  T2 sec: %d usec: %d\n", (int)p->t2.tv_sec, (int)p->t2.tv_usec);
+		printf("  T3 sec: %d usec: %d\n", (int)p->t3.tv_sec, (int)p->t3.tv_usec);
+		printf("  T4 sec: %d usec: %d\n", (int)p->t4.tv_sec, (int)p->t4.tv_usec);
 		printf("\n");
-		i++;
-
 	}
+	
+	printf("\n");
 
 }
