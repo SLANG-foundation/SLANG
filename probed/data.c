@@ -5,7 +5,7 @@
  * Function recv_
  */
 
-#include "sla-ng.h"
+#include "probed.h"
 
 struct packet p;
 
@@ -32,10 +32,9 @@ void data_recv(int flags) {
 	msg.msg_controllen = sizeof(control);
 
 	if (recvmsg(s, &msg, flags) < 0) {
-		if (flags & MSG_ERRQUEUE)
+		if (flags & MSG_ERRQUEUE) 
 			syslog(LOG_INFO, "recvmsg: %s (ts)", strerror(errno));
-		/*else
-			perror("recvmsg: data");*/
+		
 		return;
 	} else {
 		tstamp_get(&msg); /* store kernel/hw rx/tx tstamp */
@@ -73,10 +72,8 @@ void data_send(char *d, int size) {
 		if (select(s + 1, &fs, 0, 0, &tv) > 0) {
 			if (FD_ISSET(s, &fs))
 				data_recv(MSG_ERRQUEUE); /* get tx kernel ts */
-		} else {
-			clock_gettime(CLOCK_REALTIME, &p.ts); /* get tx sw */
+		} else 
 			syslog(LOG_ERR, "Kernel TX timestamp error.");
-		}
 	}
 	syslog(LOG_DEBUG, "* TX time: %010ld.%09ld\n", 
 			p.ts.tv_sec, p.ts.tv_nsec);

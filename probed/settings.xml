@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <config>
-	<debug>false</debug>
+	<!--<debug>false</debug>-->
 	<timestamp>hw</timestamp>
 	<interface>eth2</interface>
-	<port>60666</port>
+	<port>60660</port>
 	<probe>
 		<name>lab-slang-3</name>
-		<address>::ffff:10.10.10.3</address>
+		<!--<address>::ffff:10.10.10.3</address>-->
+		<!--<address>fc00::2</address>-->
 		<interval>100000</interval>
 		<type>slang</type>
 	</probe>

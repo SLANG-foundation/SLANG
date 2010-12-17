@@ -1,4 +1,4 @@
-#include "sla-ng.h"
+#include "probed.h"
 
 int                s;       /* bind socket */
 unsigned int       yes = 1; /* usefull macro */
@@ -10,23 +10,18 @@ int main(int argc, char *argv[]) {
 	int syslog_flags = 0;
 	int arg;
 
-	/* command line arguments */
-	while ((arg = getopt(argc, argv, "d")) != -1)
-		if (arg == 'd') syslog_flags |= LOG_PERROR;
-	/* syslog */
-	openlog("probed", syslog_flags, LOG_USER);
 	/* get initial xml config to *doc */
 	config_init();
+	setlogmask(LOG_UPTO(LOG_INFO));
+	/* command line arguments */
+	while ((arg = getopt(argc, argv, "vd")) != -1) {
+		if (arg == 'v') syslog_flags |= LOG_PERROR;
+		if (arg == 'd') debug(1);
+	}
+	/* syslog */
+	openlog("probed", syslog_flags, LOG_USER);
 	/* macros */
 	slen = sizeof(them);
-	/* give us a dual-stack (ipv4/6) socket */
-	s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-	if (s < 0) {
-		syslog(LOG_ERR, "socket: %s", strerror(errno));
-		die("Could not create UDP socket.");
-	} 
-	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no)) < 0)
-		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
 	/* read config, enabling timestamps */
 	signal(SIGHUP, config_read);
 	config_read();
@@ -43,6 +38,13 @@ void die(char *msg) {
 	exit(1);
 }
 
+void debug(char enabled) {
+	c.debug = enabled;
+	if (enabled) setlogmask(LOG_UPTO(LOG_DEBUG));
+	else setlogmask(LOG_UPTO(LOG_INFO));
+	return;
+}
+
 /* calculate nsec precision diff for positive time */
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg) {
 	if ((end->tv_nsec - beg->tv_nsec) < 0) {
@@ -53,6 +55,7 @@ void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg) {
 		r->tv_nsec = end->tv_nsec - beg->tv_nsec;
 	}
 }
+
 /* calculate usec precision diff for positive time */
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg) {
 	if ((end->tv_usec - beg->tv_usec) < 0) {
