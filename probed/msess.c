@@ -146,6 +146,9 @@ void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct
 
 }
 
+/*
+ * Prints all sessions currently configured to console
+ */
 void msess_print_all(void) {
 
 	struct msess *sess;
@@ -157,7 +160,7 @@ void msess_print_all(void) {
 }
 
 /*
- * Print current sessions to console
+ * Print one session to console
  */
 void msess_print(struct msess *sess) {
 
@@ -167,7 +170,7 @@ void msess_print(struct msess *sess) {
 
 	addr = (struct sockaddr_in6 *)&(sess->dst);
 	inet_ntop(AF_INET6, addr->sin6_addr.s6_addr, addr_str, INET6_ADDRSTRLEN);
-	printf("Measurement session %d:\n", sess->id);
+	printf("Measurement session ID %d:\n", sess->id);
 	printf(" Destination address: %s\n", addr_str);
 	printf(" Destination port: %d\n", ntohs(addr->sin6_port));
 	printf(" Interval: %d\n", sess->interval_usec);
@@ -181,8 +184,25 @@ void msess_print(struct msess *sess) {
 		printf("  T3 sec: %d usec: %d\n", (int)p->t3.tv_sec, (int)p->t3.tv_usec);
 		printf("  T4 sec: %d usec: %d\n", (int)p->t4.tv_sec, (int)p->t4.tv_usec);
 		printf("\n");
+
 	}
 	
 	printf("\n");
+
+}
+
+/*
+ * Flush completed probes (to database?)
+ */
+void msess_flush(void) {
+
+    struct msess *sess;
+
+	// find completed probe runs
+	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
+		/*for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
+			
+		}*/
+	} 
 
 }

@@ -3,88 +3,204 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-/* #include <time.h> */
 
 #include "msess.h"
+#include "test.h"
+
+/*
+ * Create n_sess sessions.
+ * Pre-generate n_probes probes per session.
+ * Populate session with n_probes each.
+ * Update timestamps of all probes in all sessions.
+ * 
+ * For each pre-generated probe we need the following:
+ *  - host (pointer to sockaddr_in6)
+ *  - sequence number (in random order)
+ *  - timestamp
+ *  - timestamp type (in increasing order)
+ *  - ID of measurement
+ *
+ */
 
 int main(int argc, char *argv[]) {
 
-	int i;
-	struct msess *a, *b;
+	unsigned int i, n, k, l, n_sess, n_probes = 0;
+	struct msess *a, *b = 0;
 	struct sockaddr_in6 addr, *addr2;
-	struct timeval t;
+	struct timeval t0, t1, t2, t3, r;
 	char addrstr[INET6_ADDRSTRLEN];
+
+	struct sockaddr_in6 *hosts;
+	msess_id *sess_id;
+
+	struct s_probe {
+		msess_id id;
+		uint32_t seq;
+		struct sockaddr_in6 *peer;
+		enum TS_TYPES tstype;
+		struct timeval ts;
+	};
+
+	struct s_probe *probes;
+	struct s_probe tmp_probe;
+
+	/* handle CLI arguments */
+	if (argc < 2) {
+		printf("%s num_sessions num_probes\n", argv[0]);
+		exit(1);
+	}
+	n_sess = atoi(argv[1]);
+	n_probes = atoi(argv[2]);
+	
+	printf("n_sess %d n_probes %d\n", n_sess, n_probes);
+
+	hosts = malloc(sizeof (struct sockaddr_in6) * n_sess);
+	sess_id = malloc(sizeof (msess_id) * n_sess);
+	probes = malloc(sizeof (struct s_probe) * n_sess*n_probes*4);
 
 	msess_init();
 
+	/* create entries */
+/*	printf("Generating %d destinations...\n", n_sess); */
+	gettimeofday(&t0, NULL);
+	for (i = 0; i < n_sess; i++) {
 
-	// create entry
-	for (i = 0; i < 10; i++) {
+		/* create host (sockaddr_in6) */
+		memset(&hosts[i], 0, sizeof hosts[i]);
+		hosts[i].sin6_family = AF_INET6;
+		hosts[i].sin6_port = htons(60666);
+		sprintf(addrstr, "1::%X:1", i);
+/*		printf("Generated address %s\n", addrstr); */
+		inet_pton(AF_INET6, addrstr, &(hosts[i].sin6_addr.s6_addr));
 
+		// create session
 		a = msess_add();
-
 		a->interval_usec = 100000+100*i;
 		a->dscp = i;
-		a->last_seq = 10202+i;
-
-		sprintf(addrstr, "::ffff:127.0.0.%d", i);
-		memset(&addr, 0, sizeof addr);
-		addr.sin6_family = AF_INET6;
-		addr.sin6_port = htons(60666);
-		inet_pton(AF_INET6, addrstr, &(addr.sin6_addr.s6_addr));
-		memcpy(&a->dst, &addr, sizeof addr);
+		a->last_seq = 0;
+		sess_id[i] = a->id;
+		memcpy(&a->dst, &hosts[i], sizeof addr);
 
 	}
 
-	msess_print_all();
+	/* msess_print_all(); */
 
-	inet_pton(AF_INET6, "::ffff:127.0.0.5", &(addr.sin6_addr.s6_addr));
+	/*
+	 * create probes
+	 */
 
-	printf("\nSEARCHING FOR MSESS\n");
-	if ( ( a = msess_find((struct sockaddr *)&addr, 6) ) != NULL ) { 
+/*	printf("Generating probe data.\n"); */
+	/* T1 */
+	for (n = 0; n < n_probes; n++) {
 
-		// print stuff
-		addr2 = (struct sockaddr_in6 *)&(a->dst);
-		inet_ntop(AF_INET6, addr2->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
-		printf("Found addr %s :: port %d :: interval %d :: dscp %d :: id %d\n", addrstr, ntohs(addr2->sin6_port), a->interval_usec, a->dscp, a->id);
+		for (i = 0; i < n_sess; i++) {
 
-	} else {
-		printf("msess not found.\n");
+			probes[n_sess*n+i].peer = &hosts[i];
+			probes[n_sess*n+i].seq = n;
+			probes[n_sess*n+i].tstype = T1;
+			probes[n_sess*n+i].id = sess_id[i];
+
+		}
+
 	}
 
-	printf("Filling up sessions with data...\n");
+/*
+	printf("In order:\n");
+	for (i = 0; i < n_sess*n_probes; i+=1) {
 
-	for (i = 0; i < 1000; i++) {
-
-		sprintf(addrstr, "::ffff:127.0.0.%d", i % 10);
-		inet_pton(AF_INET6, addrstr, &(addr.sin6_addr.s6_addr));
-		memcpy(&(a->dst), &addr, sizeof addr);
-		b = msess_find((struct sockaddr *)&addr, (i % 10) + 1);
-
-		t.tv_sec = 1292600146+i;
-		t.tv_usec = 100*(i % 10000);
-		msess_add_ts(b, i, T1, &t);
-
-		t.tv_sec = 1292600146+i;
-		t.tv_usec = 100*2*(i % 10000);
-		msess_add_ts(b, i, T2, &t);
-
-		t.tv_sec = 1292600146+i;
-		t.tv_usec = 100*3*(i % 10000);
-		msess_add_ts(b, i, T3, &t);
-
-		t.tv_sec = 1292600146+i;
-		t.tv_usec = 100*4*(i % 10000);
-		msess_add_ts(b, i, T4, &t);
+		if (probes[i].peer == NULL) {
+			printf("Missing peer for probe %d!\n", i);
+		} else {
+			inet_ntop(AF_INET6, probes[i].peer->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
+			printf("Found addr %s and seq %d\n", addrstr, probes[i].seq);
+		}
 		
+	} 
+*/
+
+	/* Copy T1 to T2-T4 */
+	for (k = 1; k < 4; k++) {
+
+		gettimeofday(&t0, NULL);
+
+		for (i = n_sess*n_probes*k; i < n_sess*n_probes*(k+1); i++) {
+
+			memcpy(&probes[i], &probes[i-n_sess*n_probes*k], sizeof (struct s_probe));
+			probes[i].tstype = (enum TS_TYPES) k;
+			memcpy(&probes[i].ts, &t0, sizeof t0);
+
+		}
+
 	}
 
-	inet_pton(AF_INET6, "::ffff:127.0.0.5", &(addr.sin6_addr.s6_addr));
-	memcpy(&(a->dst), &addr, sizeof addr);
+	/* Randomize order */
+	for (k = 0; k < 4; k++) {
 
-	b = msess_find((struct sockaddr *)&addr, 6);
-	msess_print(b);
+		for (i = n_sess*n_probes*k; i < n_sess*n_probes*(k+1); i++) {
 
+			l = random() % n_sess*n_probes - i;
+
+			memcpy(&tmp_probe, &probes[i], sizeof (struct s_probe));
+			memcpy(&probes[i], &probes[i+l], sizeof (struct s_probe));
+			memcpy(&probes[i+l], &tmp_probe, sizeof (struct s_probe));
+
+		}
+
+	}
+
+	gettimeofday(&t1, NULL);
+	diff_tv(&r, &t1, &t0);
+	printf("generation %d values %d.%06d s\n", n_sess*n_probes*4, (int)r.tv_sec, (int)r.tv_usec);
+
+/*
+	printf("Randomized order:\n");
+	for (i = 0; i < n_sess*n_probes*4; i++) {
+
+		inet_ntop(AF_INET6, probes[i].peer->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
+		printf("Found addr %10s and seq %5d\n", addrstr, probes[i].seq);
+		
+	} 
+*/
+
+	/* Add "received" timestamps; first create sessions (add T1) */
+/*	printf("Creating sessions (adding T1).\n"); */
+	for (i = 0; i < n_sess*n_probes; i++) {
+
+		a = msess_find((struct sockaddr *)probes[i].peer, probes[i].id);
+		if (a == NULL) {
+			inet_ntop(AF_INET6, probes[i].peer->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
+			printf("Unable to find msess with addr %10s id %3d!\n", addrstr, probes[i].id);
+			continue;
+		}
+
+		msess_add_ts(a, probes[i].seq, probes[i].tstype, &probes[i].ts);
+
+	}
+
+	gettimeofday(&t2, NULL);
+	diff_tv(&r, &t2, &t1);
+	printf("adding %d values %d.%06d s\n", n_sess*n_probes, (int)r.tv_sec, (int)r.tv_usec);
+
+	/* add T2-T3 */
+/*	printf("Saving T2-T4.\n"); */
+	for (i = n_sess*n_probes; i < n_sess*n_probes*4; i++) {
+
+		a = msess_find((struct sockaddr *)probes[i].peer, probes[i].id);
+		if (a == NULL) {
+			inet_ntop(AF_INET6, probes[i].peer->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
+			printf("Unable to find msess with addr %10s id %3d!\n", addrstr, probes[i].id);
+			continue;
+	}
+
+		msess_add_ts(a, probes[i].seq, probes[i].tstype, &probes[i].ts);
+	}
+
+	gettimeofday(&t3, NULL);
+	diff_tv(&r, &t3, &t2);
+	printf("saving %d values %d.%06d s\n", n_sess*n_probes*3, (int)r.tv_sec, (int)r.tv_usec);
+	diff_tv(&r, &t3, &t1);
+	printf("total %d.%0d s\n", (int)r.tv_sec, (int)r.tv_usec);
+	
 	return 0;
 
 }
