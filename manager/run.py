@@ -6,9 +6,6 @@ from manager import Manager
 import manager
 from config import Config
 
-# read config
-c = Config("settings.xml")
-
 # set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -24,7 +21,11 @@ ls = logging.handlers.SysLogHandler()
 ls.setFormatter(lformat)
 logger.addHandler(ls)
 
+# read config
+c = Config("../probed/settings.xml")
+
+# start up
 logger.debug("Starting up...")
 
-m = Manager(c)
+m = Manager()
 m.run()

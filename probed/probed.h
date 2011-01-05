@@ -111,6 +111,7 @@ void die(char *msg);
 void debug(char enabled);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
+int cmp_ts(struct timespec *t1, struct timespec *t2);
 void proto();
 void proto_client();
 void proto_server();

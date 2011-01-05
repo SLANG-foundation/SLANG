@@ -4,6 +4,8 @@
 	<timestamp>hw</timestamp>
 	<interface>eth2</interface>
 	<port>60666</port>
+  <timeout>2</timeout>
+  <dbpath>/tmp/probed.db</dbpath>
 	<probe>
 		<name>lab-slang-3</name>
 		<address>::ffff:10.10.10.3</address>

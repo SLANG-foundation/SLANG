@@ -18,28 +18,36 @@ class Config:
 
     if len(self.__shared_state) == 0 and filename == None:
       raise ConfigError("No config file chosen")
-    elif len(self.__shared_state) > 0:
-      return self
 
-    self.logger = logging.getLogger(self.__class__.__name__)
-
-    self.filename = filename
-    self.readFile()
+    elif len(self.__shared_state) == 0:
+      
+      # creating a brand new instance
+      self.filename = filename
+      self.logger = logging.getLogger(self.__class__.__name__)
+      self.logger.debug("Initializing configuration module.")
+      self.readFile()
 
   def readFile(self):
     """ Reads configuration file.
         
         Reads the configuration file passed to the config object constructor.
     """
-    self.logger.debug('Loading config file', filename)
-    self.tree = tree = etree.parse(filename)
+    self.logger.info('Loading config file %s' % self.filename)
+    self.tree = etree.parse(self.filename)
 
   def getParam(self, param):
     """ Get a config parameter
         
         Returns a string containing the value for config patameter param.
     """
-    pass
+    r = self.tree.xpath(param)
+    if len(r) == 0:
+      raise NotFoundError
+
+    return r[0].text
 
 class ConfigError(Exception):
+  pass
+
+class NotFoundError(ConfigError):
   pass

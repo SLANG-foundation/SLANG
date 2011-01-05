@@ -3,19 +3,68 @@
 #include <stdio.h>
 #include <sys/queue.h>
 #include <arpa/inet.h>
+#include <sqlite3.h>
 
-/* #include "probed.h" */
+#include "probed.h"
 #include "msess.h"
 
 struct msess *sessions;
 struct msess_head sessions_head;
+struct timespec timeout;
+struct sqlite3 *db;
+struct sqlite3_stmt *stmt_insert_probe;
 
 /*
- * Initialize measurement session list
+ * Initialize measurement session list handler
  */
 void msess_init(void) {
 
+	int rcode;
+	char tmpstr[64];
+
 	LIST_INIT(&sessions_head);
+
+	/* set timeout */
+	rcode = config_getkey("/config/timeout", &tmpstr[0], sizeof tmpstr);
+  if (rcode == 0) {
+
+		syslog(LOG_INFO, "Using timeout %d s", (int)timeout.tv_sec);
+		timeout.tv_sec = atoi(tmpstr);
+		timeout.tv_nsec = 0;
+
+	} else {
+
+		syslog(LOG_ERR, "Unable to get timeout (%d). Using default.", rcode);
+		timeout.tv_sec = 2;
+		timeout.tv_nsec = 0;
+
+	}
+
+	/* open sqlite db */
+	config_getkey("/config/dbpath", &tmpstr[0], sizeof tmpstr);
+	rcode = sqlite3_open(tmpstr, &db);
+	if (rcode) {
+		syslog(LOG_CRIT, "Unable to open database: %s", sqlite3_errmsg(db));
+		sqlite3_close(db);
+		die("Unable to open database!");
+	}
+
+	/* Prepare SQL statements */
+	rcode = sqlite3_prepare_v2(db, "INSERT INTO probes (\
+		session_id, seq, \
+		t1_sec, t1_nsec, \
+		t2_sec, t2_nsec, \
+		t3_sec, t3_nsec, \
+		t4_sec, t4_nsec, \
+		state\
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);", 
+		-1, &stmt_insert_probe, NULL);
+	if (rcode != SQLITE_OK) {
+		syslog(LOG_ERR, 
+			"Unable to prepare statement stmt_insert_probe: %s", 
+			sqlite3_errmsg(db));
+		die("Unable to prepare statement stmt_insert_probe");
+	}
 
 }
 
@@ -35,9 +84,29 @@ struct msess *msess_add(void) {
 	// add error check
 	s->id = msess_next_id();
 
-  return s;
+	return s;
 	
 }
+
+/*
+ * Remove measurement session from list
+ */
+void msess_remove(struct msess *sess) {
+
+	struct msess_probe *p;
+	
+	/* remove probes */
+	for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
+		msess_probe_remove(p);
+	}
+
+	/* remove msess */
+	LIST_REMOVE(sess, entries);
+	free(sess);
+
+	/* remove session result from database? */
+
+} 
 
 /*
  * Find a msess entry for the given address and ID
@@ -147,6 +216,25 @@ void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct
 }
 
 /*
+ * Remove a probe
+ */
+void msess_probe_remove(struct msess_probe *p) {
+
+	LIST_REMOVE(p, entries);
+	free(p);
+
+}
+
+/*
+ * Save a probe to database
+ */
+void msess_probe_save(struct msess_probe *p) {
+	
+	
+
+}
+
+/*
  * Prints all sessions currently configured to console
  */
 void msess_print_all(void) {
@@ -179,10 +267,10 @@ void msess_print(struct msess *sess) {
 	for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
 
 		printf("  Sequence: %d\n", p->seq);
-		printf("  T1 sec: %d usec: %d\n", (int)p->t1.tv_sec, (int)p->t1.tv_usec);
-		printf("  T2 sec: %d usec: %d\n", (int)p->t2.tv_sec, (int)p->t2.tv_usec);
-		printf("  T3 sec: %d usec: %d\n", (int)p->t3.tv_sec, (int)p->t3.tv_usec);
-		printf("  T4 sec: %d usec: %d\n", (int)p->t4.tv_sec, (int)p->t4.tv_usec);
+		printf("  T1 sec: %d usec: %d\n", (int)p->t1.tv_sec, (int)p->t1.tv_nsec);
+		printf("  T2 sec: %d usec: %d\n", (int)p->t2.tv_sec, (int)p->t2.tv_nsec);
+		printf("  T3 sec: %d usec: %d\n", (int)p->t3.tv_sec, (int)p->t3.tv_nsec);
+		printf("  T4 sec: %d usec: %d\n", (int)p->t4.tv_sec, (int)p->t4.tv_nsec);
 		printf("\n");
 
 	}
@@ -196,13 +284,69 @@ void msess_print(struct msess *sess) {
  */
 void msess_flush(void) {
 
-    struct msess *sess;
+	struct msess *sess;
+	struct msess_probe *p;
+	struct timespec c_now;
+	struct timespec c_diff;
+	int save, state = 0;
+
+	clock_gettime(CLOCK_REALTIME, &c_now);
+
+	/* begin transaction -- ADD ERROR CHECK */
+	sqlite3_exec(db, "BEGIN;", NULL, NULL, NULL);
 
 	// find completed probe runs
 	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
-		/*for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
+
+		save = 0;
+		state = PROBE_STATE_SUCCESS;
+
+		for (p = sess->probes.lh_first; p != NULL; p = p->entries.le_next) {
 			
-		}*/
+			/* Timed out? */
+			diff_ts(&c_diff, &c_now, &p->t1);
+
+			if (cmp_ts(&c_diff, &timeout) == 1) {
+				state = PROBE_STATE_TIMEOUT;
+				save = 1;
+			}
+
+			/* Got all timestamps? */
+			if (p->t1.tv_sec && p->t2.tv_sec && p->t3.tv_sec && p->t4.tv_sec) {
+				state = PROBE_STATE_SUCCESS;
+				save = 1;
+			}
+
+			/* save probe, if needed */
+			if (save) {
+
+				sqlite3_bind_int(stmt_insert_probe, 0, sess->id);
+				sqlite3_bind_int(stmt_insert_probe, 1, p->seq);
+				sqlite3_bind_int(stmt_insert_probe, 2, p->t1.tv_sec);
+				sqlite3_bind_int(stmt_insert_probe, 3, p->t1.tv_nsec);
+				sqlite3_bind_int(stmt_insert_probe, 4, p->t2.tv_sec);
+				sqlite3_bind_int(stmt_insert_probe, 5, p->t2.tv_nsec);
+				sqlite3_bind_int(stmt_insert_probe, 6, p->t3.tv_sec);
+				sqlite3_bind_int(stmt_insert_probe, 7, p->t3.tv_nsec);
+				sqlite3_bind_int(stmt_insert_probe, 8, p->t4.tv_sec);
+				sqlite3_bind_int(stmt_insert_probe, 9, p->t4.tv_nsec);
+				sqlite3_bind_int(stmt_insert_probe, 9, state);
+
+				if (sqlite3_step(stmt_insert_probe) != SQLITE_OK) {
+					/* RATE LIMIT IN SOME WAY! */
+					syslog(LOG_ERR, "Unable to save data, data lost: %s", sqlite3_errmsg(db));
+				}
+
+				sqlite3_reset(stmt_insert_probe);
+				msess_probe_remove(p);
+				
+			}
+	
+		}
+
+	/* commit transaction -- ADD ERROR CHECK */
+	sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+
 	} 
 
 }

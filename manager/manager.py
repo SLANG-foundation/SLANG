@@ -7,18 +7,26 @@ import logging
 from signal import *
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
+import config
+import msess
+
 class Manager:
 
-  def __init__(self, config):
+  logger = None
+  config = None
+  msess = None
+
+  def __init__(self):
     """Constructor
     """
 
-    self.config = config
+    self.config = config.Config()
     self.logger = logging.getLogger('Manager')
+    self.msess = msess.Msess()
 
     # start probe application
     try:
-      self.probe = subprocess.Popen(['./sla-ng', 'c'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+      self.probe = subprocess.Popen(['../probed/probed', 'c'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
       self.logger.debug('Probe application started')
     except :
       self.logger.critical("Unable to start probe application!")

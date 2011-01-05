@@ -1,8 +1,12 @@
-//#include <time.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <stdint.h>
-#include <probed.h>
+/* #include "probed.h" */
+
+/* constants */
+#define PROBE_STATE_SUCCESS 0
+#define PROBE_STATE_TIMEOUT 1
 
 /* define structs to hold first element of linked lists */
 LIST_HEAD(msess_head, msess);
@@ -15,6 +19,7 @@ struct msess {
 	msess_id id;
 	struct sockaddr_storage dst;
 	uint32_t interval_usec;
+	struct timespec timeout;
 	uint8_t dscp;
 	uint32_t last_seq;
 	struct probes_head probes;
@@ -26,10 +31,10 @@ struct msess {
  */
 struct msess_probe {
 	uint32_t seq;
-	struct timeval t1;
-	struct timeval t2;
-	struct timeval t3;
-	struct timeval t4;
+	struct timespec t1;
+	struct timespec t2;
+	struct timespec t3;
+	struct timespec t4;
 	LIST_ENTRY(msess_probe) entries;
 };
 
@@ -39,4 +44,6 @@ void msess_print_all(void);
 void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct timeval *ts);
 msess_id msess_next_id(void);
 struct msess *msess_add(void);
+void msess_remove(struct msess *sess);
 struct msess *msess_find(struct sockaddr *peer, uint16_t id);
+void msess_probe_remove(struct msess_probe *p);
