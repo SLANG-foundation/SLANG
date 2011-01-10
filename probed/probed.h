@@ -128,3 +128,4 @@ void config_read();
 void config_scan();
 int config_getkey(char *xpath, char *str, size_t bytes);
 void config_init();
+void reload();

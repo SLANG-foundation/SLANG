@@ -60,10 +60,7 @@ void msess_init(void) {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);", 
 		-1, &stmt_insert_probe, NULL);
 	if (rcode != SQLITE_OK) {
-		syslog(LOG_ERR, 
-			"Unable to prepare statement stmt_insert_probe: %s", 
-			sqlite3_errmsg(db));
-		die("Unable to prepare statement stmt_insert_probe");
+		syslog(LOG_ERR, "Unable to prepare statement stmt_insert_probe: %s", sqlite3_errmsg(db));
 	}
 
 }
@@ -114,7 +111,6 @@ void msess_remove(struct msess *sess) {
 struct msess *msess_find(msess_id id) {
 
 	struct msess *sess;
-	struct sockaddr_in6 *msess_addr, *query_addr;
 
 	/* iterate all sessions and compare IDs */
 	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
@@ -341,8 +337,8 @@ int msess_flush(void) {
 	
 		}
 
-	/* commit transaction -- ADD ERROR CHECK */
-	sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
+		/* commit transaction -- ADD ERROR CHECK */
+		sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
 
 	} 
 

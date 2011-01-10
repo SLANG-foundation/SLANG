@@ -59,11 +59,12 @@ int main(int argc, char *argv[]) {
 	sess_id = malloc(sizeof (msess_id) * n_sess);
 	probes = malloc(sizeof (struct s_probe) * n_sess*n_probes*4);
 
+	openlog("msess_t", LOG_PERROR, LOG_USER);
 	config_init();
 	msess_init();
 
 	/* create entries */
-/*	printf("Generating %d destinations...\n", n_sess); */
+	printf("Generating %d destinations...\n", n_sess);
 	gettimeofday(&t0, NULL);
 	for (i = 0; i < n_sess; i++) {
 
@@ -85,7 +86,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	/* msess_print_all(); */
+	msess_print_all();
 
 	/*
 	 * create probes
@@ -201,10 +202,10 @@ int main(int argc, char *argv[]) {
 	gettimeofday(&t3, NULL);
 	diff_tv(&r, &t3, &t2);
 	printf("saving %d values %d.%06d s\n", n_sess*n_probes*3, (int)r.tv_sec, (int)r.tv_usec);
-	msess_flush();
+	i = msess_flush();
 	gettimeofday(&t4, NULL);
 	diff_tv(&r, &t4, &t3);
-	printf("flushing %d probes, not all written to DB %d.%06d s\n", n_sess*n_probes, (int)r.tv_sec, (int)r.tv_usec);
+	printf("flushing %d probes, %d written to DB %d.%06d s\n", n_sess*n_probes, i, (int)r.tv_sec, (int)r.tv_usec);
 
 	diff_tv(&r, &t4, &t1);
 	printf("total %d.%0d s\n", (int)r.tv_sec, (int)r.tv_usec);

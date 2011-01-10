@@ -18,7 +18,7 @@ const char *cfgpath = "settings.xml";
 struct cfg c;
 
 void config_read() {
-	char tmp[TMPLEN];
+
 	xmlDoc *tmpdoc;
 
 	/* reload configuration */
@@ -29,26 +29,9 @@ void config_read() {
 	}
 	xmlFreeDoc(doc);
 	doc = tmpdoc;
-	/* configuration application */
-	syslog(LOG_INFO, "Reloading configuration...");
-	/* extra output */
-	if (config_getkey("/config/debug", tmp, TMPLEN) == 0) {
-		if (tmp[0] == 't' || tmp[0] == '1') debug(1); 
-		 else debug(0);
-	}
-	/* server port */
-	if (config_getkey("/config/port", tmp, TMPLEN) == 0)
-		proto_bind(atoi(tmp));
-	/* timestamping mode and interface, depend on socket/bind */
-	config_getkey("/config/interface", c.iface, sizeof(c.iface)); 
-	if (config_getkey("/config/timestamp", tmp, TMPLEN) < 0)
-	       tstamp_hw(); /* default is hw with fallback */
-	else {
-		if (tmp[0] == 'k') tstamp_kernel();
-		else if (tmp[0] == 's') tstamp_sw();
-		else tstamp_hw();
-	}
+
 	config_scan();
+
 }
 
 void config_root(xmlNode *n, char *c) {
