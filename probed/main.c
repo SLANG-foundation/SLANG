@@ -40,14 +40,3 @@ int main(int argc, char *argv[]) {
 
 }
 
-void die(char *msg) {
-	syslog(LOG_ERR, msg);
-	exit(1);
-}
-
-void debug(char enabled) {
-	c.debug = enabled;
-	if (enabled) setlogmask(LOG_UPTO(LOG_DEBUG));
-	else setlogmask(LOG_UPTO(LOG_INFO));
-	return;
-}

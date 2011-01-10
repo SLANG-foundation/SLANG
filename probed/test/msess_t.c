@@ -4,8 +4,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "probed.h"
 #include "msess.h"
-#include "test.h"
+/* #include "test.h" */
 
 /*
  * Create n_sess sessions.
@@ -24,10 +25,10 @@
 
 int main(int argc, char *argv[]) {
 
-	unsigned int i, n, k, l, n_sess, n_probes = 0;
-	struct msess *a, *b = 0;
-	struct sockaddr_in6 addr, *addr2;
-	struct timeval t0, t1, t2, t3, r;
+	unsigned int i, n, k, l, n_sess, n_probes;
+	struct msess *a = 0;
+	struct sockaddr_in6 addr;
+	struct timeval t0, t1, t2, t3, t4, r;
 	char addrstr[INET6_ADDRSTRLEN];
 
 	struct sockaddr_in6 *hosts;
@@ -58,6 +59,7 @@ int main(int argc, char *argv[]) {
 	sess_id = malloc(sizeof (msess_id) * n_sess);
 	probes = malloc(sizeof (struct s_probe) * n_sess*n_probes*4);
 
+	config_init();
 	msess_init();
 
 	/* create entries */
@@ -125,6 +127,7 @@ int main(int argc, char *argv[]) {
 
 		for (i = n_sess*n_probes*k; i < n_sess*n_probes*(k+1); i++) {
 
+			t0.tv_sec += random() % 6 - 3;
 			memcpy(&probes[i], &probes[i-n_sess*n_probes*k], sizeof (struct s_probe));
 			probes[i].tstype = (enum TS_TYPES) k;
 			memcpy(&probes[i].ts, &t0, sizeof t0);
@@ -198,7 +201,12 @@ int main(int argc, char *argv[]) {
 	gettimeofday(&t3, NULL);
 	diff_tv(&r, &t3, &t2);
 	printf("saving %d values %d.%06d s\n", n_sess*n_probes*3, (int)r.tv_sec, (int)r.tv_usec);
-	diff_tv(&r, &t3, &t1);
+	msess_flush();
+	gettimeofday(&t4, NULL);
+	diff_tv(&r, &t4, &t3);
+	printf("flushing %d probes, not all written to DB %d.%06d s\n", n_sess*n_probes, (int)r.tv_sec, (int)r.tv_usec);
+
+	diff_tv(&r, &t4, &t1);
 	printf("total %d.%0d s\n", (int)r.tv_sec, (int)r.tv_usec);
 	
 	return 0;

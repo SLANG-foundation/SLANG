@@ -281,14 +281,15 @@ void msess_print(struct msess *sess) {
 
 /*
  * Flush completed probes (to database?)
+ * Returns number of entries saved to database.
  */
-void msess_flush(void) {
+int msess_flush(void) {
 
 	struct msess *sess;
 	struct msess_probe *p;
 	struct timespec c_now;
 	struct timespec c_diff;
-	int save, state = 0;
+	int save, state, nsaved = 0;
 
 	clock_gettime(CLOCK_REALTIME, &c_now);
 
@@ -339,6 +340,7 @@ void msess_flush(void) {
 
 				sqlite3_reset(stmt_insert_probe);
 				msess_probe_remove(p);
+				nsaved++;
 				
 			}
 	
@@ -348,5 +350,7 @@ void msess_flush(void) {
 	sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
 
 	} 
+
+	return nsaved;
 
 }
