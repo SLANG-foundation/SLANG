@@ -45,6 +45,6 @@ void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct
 msess_id msess_next_id(void);
 struct msess *msess_add(void);
 void msess_remove(struct msess *sess);
-struct msess *msess_find(struct sockaddr *peer, uint16_t id);
+struct msess *msess_find(uint16_t id);
 void msess_probe_remove(struct msess_probe *p);
 int msess_flush(void);

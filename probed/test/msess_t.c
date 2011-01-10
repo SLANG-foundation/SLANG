@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
 /*	printf("Creating sessions (adding T1).\n"); */
 	for (i = 0; i < n_sess*n_probes; i++) {
 
-		a = msess_find((struct sockaddr *)probes[i].peer, probes[i].id);
+		a = msess_find(probes[i].id);
 		if (a == NULL) {
 			inet_ntop(AF_INET6, probes[i].peer->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
 			printf("Unable to find msess with addr %10s id %3d!\n", addrstr, probes[i].id);
@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
 /*	printf("Saving T2-T4.\n"); */
 	for (i = n_sess*n_probes; i < n_sess*n_probes*4; i++) {
 
-		a = msess_find((struct sockaddr *)probes[i].peer, probes[i].id);
+		a = msess_find(probes[i].id);
 		if (a == NULL) {
 			inet_ntop(AF_INET6, probes[i].peer->sin6_addr.s6_addr, addrstr, INET6_ADDRSTRLEN);
 			printf("Unable to find msess with addr %10s id %3d!\n", addrstr, probes[i].id);

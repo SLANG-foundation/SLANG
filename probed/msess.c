@@ -111,23 +111,18 @@ void msess_remove(struct msess *sess) {
 /*
  * Find a msess entry for the given address and ID
  */
-struct msess *msess_find(struct sockaddr *peer, msess_id id) {
+struct msess *msess_find(msess_id id) {
 
 	struct msess *sess;
 	struct sockaddr_in6 *msess_addr, *query_addr;
 
-	query_addr = (struct sockaddr_in6 *)peer;
-	
-	/* iterate all sessions and compare address */
+	/* iterate all sessions and compare IDs */
 	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
 
-		msess_addr = (struct sockaddr_in6 *)&(sess->dst);
-
-		if (memcmp(&(msess_addr->sin6_addr.s6_addr), &(query_addr->sin6_addr.s6_addr), sizeof query_addr->sin6_addr.s6_addr) == 0) {
-			if (sess->id == id) {
-				return sess;
-			}
+		if (sess->id == id) {
+			return sess;
 		}
+
 	}
 
 	// no msess found
