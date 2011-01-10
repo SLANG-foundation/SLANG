@@ -11,21 +11,17 @@ int main(int argc, char *argv[]) {
 	int syslog_flags = 0;
 	int arg;
 
+	/* get xml config *doc and default values */
+	config_init();
 	/* command line arguments */
 	while ((arg = getopt(argc, argv, "vd")) != -1) {
 		if (arg == 'v') syslog_flags |= LOG_PERROR;
 		if (arg == 'd') debug(1);
 	}
-
 	/* syslog */
 	openlog("probed", syslog_flags, LOG_USER);
-
-	/* get initial xml config to *doc */
-	config_init();
-
-  /* initialize measurement session storage */
-  msess_init();
-
+	/* initialize measurement session storage */
+	msess_init();
 	/* macros */
 	slen = sizeof(them);
 	/* read config, enabling timestamps */
