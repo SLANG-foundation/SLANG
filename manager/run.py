@@ -12,14 +12,15 @@ logger.setLevel(logging.DEBUG)
 
 lformat = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
 
+ls = logging.handlers.SysLogHandler(address='/dev/log')
+ls.setFormatter(lformat)
+ls.setLevel(logging.DEBUG)
+logger.addHandler(ls)
+
 lc = logging.StreamHandler()
 lc.setLevel(logging.DEBUG)
 lc.setFormatter(lformat)
 logger.addHandler(lc)
-
-ls = logging.handlers.SysLogHandler()
-ls.setFormatter(lformat)
-logger.addHandler(ls)
 
 # read config
 c = Config("../probed/settings.xml")
