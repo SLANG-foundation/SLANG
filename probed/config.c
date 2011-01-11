@@ -14,7 +14,7 @@
 #include "probed.h"
 
 xmlDoc *doc;
-const char *cfgpath = "settings.xml";
+char *cfgpath;
 struct cfg c;
 
 void config_read() {
@@ -42,6 +42,7 @@ void config_root(xmlNode *n, char *c) {
 }
 
 void config_scan() {
+
 	xmlNode *n, *r;
 	xmlChar *c;
 
@@ -49,6 +50,7 @@ void config_scan() {
 		syslog(LOG_ERR, "Empty configuration.");
 		return;
 	}
+
 	r = doc->children;
 	for (n = r->children; n != 0; n = n->next) {
 		if (n->type != XML_ELEMENT_NODE) continue;
@@ -92,7 +94,12 @@ int config_getkey(char *xpath, char *str, size_t bytes) {
 	return 0;
 }
 
-void config_init() {
+void config_init(char *cfgfile) {
+
+	/* copy configuration file path */
+	cfgpath = malloc(strlen(cfgfile));
+	memcpy(cfgpath, cfgfile, strlen(cfgfile));
+	
 	doc = xmlParseFile(cfgpath);
 	if (!doc) die("Invalid configuration. (xmlParseFile)");
 	/* default config */
@@ -100,5 +107,47 @@ void config_init() {
 	c.port = 0; /* no server port, bind! */
 	c.ts = 'u'; /* no timestamp mode, activate! */
 	setlogmask(LOG_UPTO(LOG_INFO)); /* default syslog level */
+
+}
+/*
+ * Sync measurement sessions from config to msess
+ */
+void config_msess(void) {
+
+	xmlNode *n, *r, *k;
+	xmlAttr *a;
+	xmlChar *c;
+
+	if (!doc->children) {
+		syslog(LOG_ERR, "Empty configuration.");
+		return;
+	}
+
+	/* iterate config - look for <probe> */
+	r = doc->children;
+	for (n = r->children; n != NULL; n = n->next) {
+
+		if ( !(
+			n->type == XML_ELEMENT_NODE && 
+			( strncmp((char *)n->name, MSESS_NODE_NAME, strlen(MSESS_NODE_NAME)) == 0 ) 
+			)) continue; 
+		
+		printf("Node: %s\n", (char *)n->name);
+
+		/* <probe> found, get ID */
+		for (a = n->properties; a != NULL; a = a->next) {
+			printf(" Prop name: %s\n", (char *)a->name);
+			if (strncmp(&a->name, "id", strlen("ID")) != 0) continue;
+			printf("a\n");
+			for (k = a->children; a != NULL; k = k->next) {
+				printf("  Node %s: \n", (char *)k->name);
+			}
+		}
+		
+		c = xmlNodeGetContent(n);
+		printf(" Content: %s\n", c);
+		xmlFree(c);
+
+	} 
 }
 

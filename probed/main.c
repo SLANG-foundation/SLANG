@@ -8,27 +8,44 @@ struct sockaddr_in6 them;    /* other side's ip address */
 int                slen;    /* size of sockaddr_in */
 
 int main(int argc, char *argv[]) {
+
 	int syslog_flags = 0;
+	char *cfgfile = NULL;
 	int arg;
 
-	/* get xml config *doc and default values */
-	config_init();
 	/* command line arguments */
-	while ((arg = getopt(argc, argv, "vd")) != -1) {
+	while ((arg = getopt(argc, argv, "vdc:")) != -1) {
 		if (arg == 'v') syslog_flags |= LOG_PERROR;
 		if (arg == 'd') debug(1);
+		if (arg == 'c') {
+			cfgfile = malloc(strlen(optarg));
+			memcpy(cfgfile, optarg, strlen(optarg));
+		}
 	}
+
 	/* syslog */
 	openlog("probed", syslog_flags, LOG_USER);
+
+	/* missing config file path in argc, using default */
+	if (cfgfile == NULL) {
+		config_init("settings.xml");
+	} else {
+		config_init(cfgfile);
+	}
+
 	/* initialize measurement session storage */
 	msess_init();
+
 	/* macros */
 	slen = sizeof(them);
+
 	/* read config, enabling timestamps */
 	signal(SIGHUP, reload);
 	reload();
+
 	/* start the ping protocol loop */
 	proto();
+
 	/* close */
 	close(s);
 	closelog();
@@ -67,5 +84,8 @@ void reload() {
 		else if (tmp[0] == 's') tstamp_sw();
 		else tstamp_hw();
 	}
+
+	/* (re)load measurement sessions */
+	config_msess();
 
 }

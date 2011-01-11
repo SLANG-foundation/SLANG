@@ -52,6 +52,27 @@ int cmp_ts(struct timespec *t1, struct timespec *t2) {
 
 }
 
+/* 
+ * compare two timevals 
+ *
+ * Returns -1 if t1 < t2, 1 if t1 > t2 and 0 if t1 == t2
+ */
+int cmp_tv(struct timeval *t1, struct timeval *t2) {
+
+	if (t1->tv_sec < t2->tv_sec) {
+		return -1;
+	} else if (t1->tv_sec > t2->tv_sec) {
+		return 1;
+	} else if (t1->tv_usec < t2->tv_usec) {
+		return -1;
+	} else if (t1->tv_usec > t2->tv_usec) {
+		return 1;
+	} else { /* equal */
+		return 0;
+	}
+
+}
+
 /*
  * Exit and log message
  */

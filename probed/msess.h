@@ -1,16 +1,14 @@
+#ifndef _MSESS_H
+#define _MSESS_H 1
+
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <stdint.h>
 /* #include "probed.h" */
 
-/* constants */
-#define PROBE_STATE_SUCCESS 0
-#define PROBE_STATE_TIMEOUT 1
-
 /* define structs to hold first element of linked lists */
 LIST_HEAD(msess_head, msess);
-LIST_HEAD(probes_head, msess_probe);
 
 typedef uint16_t msess_id;
 
@@ -18,33 +16,21 @@ typedef uint16_t msess_id;
 struct msess {
 	msess_id id;
 	struct sockaddr_storage dst;
-	uint32_t interval_usec;
-	struct timespec timeout;
+	struct timeval interval;
 	uint8_t dscp;
 	uint32_t last_seq;
-	struct probes_head probes;
+	struct timeval last_sent;
 	LIST_ENTRY(msess) entries;
-};
-
-/*
- * Keeps state of sessions
- */
-struct msess_probe {
-	uint32_t seq;
-	struct timespec t1;
-	struct timespec t2;
-	struct timespec t3;
-	struct timespec t4;
-	LIST_ENTRY(msess_probe) entries;
 };
 
 void msess_init(void);
 void msess_print(struct msess *sess);
 void msess_print_all(void);
-void msess_add_ts(struct msess *sess, uint32_t seq, enum TS_TYPES tstype, struct timeval *ts);
-msess_id msess_next_id(void);
-struct msess *msess_add(void);
+struct msess *msess_add(msess_id id);
 void msess_remove(struct msess *sess);
 struct msess *msess_find(uint16_t id);
-void msess_probe_remove(struct msess_probe *p);
-int msess_flush(void);
+uint32_t msess_get_seq(struct msess *sess);
+struct msess *msess_next(void);
+void msess_reset(void);
+
+#endif

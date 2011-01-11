@@ -6,7 +6,7 @@
 	<port>60666</port>
 	<timeout>2</timeout>
 	<dbpath>/tmp/probed.db</dbpath>
-	<probe>
+	<probe id="123">
 		<name>lab-slang-3</name>
 		<address>::ffff:10.10.10.3</address>
 	 	<!--<address>fc00::2</address>-->

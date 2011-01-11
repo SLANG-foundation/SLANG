@@ -27,6 +27,7 @@
 #include "sockios.h"
 //#include "linux/net_tstamp.h"
 //#include "linux/sockios.h"
+#include "msess.h"
 
 #ifndef SO_TIMESTAMPING
 #define SO_TIMESTAMPING 37
@@ -37,8 +38,9 @@
 #define TYPE_TIME 't'
 #define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
+#define MSESS_NODE_NAME "probe"
 
-extern const char         *cfgpath;/* config file path */
+extern char         *cfgpath;/* config file path */
 extern xmlDoc* doc;
 extern int                s;       /* bind socket */
 extern unsigned int       yes;     /* usefull macro */
@@ -61,6 +63,7 @@ struct packet {                    /* PACKET */
 struct packet_ping {
 	char type;
 	int32_t seq;
+	msess_id id;
 	char data[32];
 };
 struct packet_time {
@@ -112,6 +115,7 @@ void debug(char enabled);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
 int cmp_ts(struct timespec *t1, struct timespec *t2);
+int cmp_tv(struct timeval *t1, struct timeval *t2);
 void proto();
 void proto_client();
 void proto_server();
@@ -128,4 +132,5 @@ void config_read();
 void config_scan();
 int config_getkey(char *xpath, char *str, size_t bytes);
 void config_init();
+void config_msess(void);
 void reload();
