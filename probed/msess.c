@@ -17,9 +17,6 @@ struct timespec timeout;
  */
 void msess_init(void) {
 
-	int rcode;
-	char tmpstr[64];
-
 	LIST_INIT(&sessions_head);
 
 }
@@ -41,6 +38,32 @@ struct msess *msess_add(msess_id id) {
 
 	return s;
 	
+}
+
+/*
+ * Add to list or update already existing measurement session 
+ */
+void msess_add_or_update(struct msess *nsess) {
+
+	struct msess *ssess;
+
+	ssess = msess_find(nsess->id);
+
+	/* does the session exist? */
+	if (ssess == NULL) {
+		/* add new */
+		LIST_INSERT_HEAD(&sessions_head, nsess, entries);
+		return;
+	}
+
+	/* update the sessions */
+	ssess->dscp = nsess->dscp;
+	memcpy(&ssess->interval, &nsess->interval, sizeof ssess->interval);
+	memcpy(&ssess->dst, &nsess->dst, sizeof nsess->dst);
+	free(nsess);
+
+	return;
+
 }
 
 /*

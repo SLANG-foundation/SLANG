@@ -8,9 +8,17 @@
 	<dbpath>/tmp/probed.db</dbpath>
 	<probe id="123">
 		<name>lab-slang-3</name>
+		<port>60666</port>
 		<address>::ffff:10.10.10.3</address>
-	 	<!--<address>fc00::2</address>-->
+		<dscp>8</dscp>
 		<interval>100000</interval>
+		<type>slang</type>
+	</probe>
+	<probe id="999">
+		<port>60666</port>
+		<address>::ffff:1.3.3.7</address>
+		<dscp>8</dscp>
+		<interval>200000</interval>
 		<type>slang</type>
 	</probe>
 </config>

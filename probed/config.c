@@ -118,6 +118,9 @@ void config_msess(void) {
 	xmlAttr *a;
 	xmlChar *c;
 
+	struct sockaddr_in6 addr;
+	struct msess *sess;
+
 	if (!doc->children) {
 		syslog(LOG_ERR, "Empty configuration.");
 		return;
@@ -130,19 +133,66 @@ void config_msess(void) {
 		if ( !(
 			n->type == XML_ELEMENT_NODE && 
 			( strncmp((char *)n->name, MSESS_NODE_NAME, strlen(MSESS_NODE_NAME)) == 0 ) 
-			)) continue; 
+			) ) continue; 
 		
-		printf("Node: %s\n", (char *)n->name);
+		/* <probe> found - reset */
+		sess = malloc(sizeof (struct msess));
+		memset(sess, 0, sizeof (struct msess));
+		memset(&addr, 0, sizeof addr);
+		addr.sin6_family = AF_INET6;
 
-		/* <probe> found, get ID */
-		for (a = n->properties; a != NULL; a = a->next) {
-			printf(" Prop name: %s\n", (char *)a->name);
-			if (strncmp(&a->name, "id", strlen("ID")) != 0) continue;
-			printf("a\n");
-			for (k = a->children; a != NULL; k = k->next) {
-				printf("  Node %s: \n", (char *)k->name);
-			}
+		/* get ID */
+		c = xmlGetProp(n, (xmlChar *)"id");
+		if (c != NULL) {
+			printf("  id: %s\n", c);
+			sess->id = atoi((char *)c);
+		} else {
+			syslog(LOG_ERR, "Found probe withour ID");
+			continue;
 		}
+		xmlFree(c);
+
+		/* get child nodes */
+		for (k = n->children; k != NULL; k = k->next) {
+
+			if (k->type != XML_ELEMENT_NODE) {
+				continue;
+			}
+
+			c = xmlNodeGetContent(k);
+			printf("  Child name: %s content: %s\n", (char *)k->name, c);
+
+			/* interval */
+			if (strcmp((char *)k->name, "interval") == 0) {
+				sess->interval.tv_usec = atoi((char *)c);
+				printf("   Got interval %d\n", (int)sess->interval.tv_usec);
+			}
+			
+			/* address */
+			if (strcmp((char *)k->name, "address") == 0) {
+				inet_pton(AF_INET6, (char *)c, &addr.sin6_addr.s6_addr);
+				printf("   Got address %s\n", c);
+			}
+
+			/* dscp */
+			if (strcmp((char *)k->name, "dscp") == 0) {
+				sess->dscp = atoi((char *)c);
+				printf("   Got dscp %s\n", c);
+			}
+
+			/* port */
+			if (strcmp((char *)k->name, "port") == 0) {
+				addr.sin6_port = htons(atoi((char *)c));
+				printf("   Got port %d\n", (int)sess->interval.tv_usec);
+			}
+
+			xmlFree(c);
+			
+		}
+
+		memcpy(&sess->dst, &addr, sizeof addr);
+
+		msess_add_or_update(sess);
 		
 		c = xmlNodeGetContent(n);
 		printf(" Content: %s\n", c);

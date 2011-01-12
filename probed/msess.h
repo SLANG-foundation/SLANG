@@ -32,5 +32,6 @@ struct msess *msess_find(uint16_t id);
 uint32_t msess_get_seq(struct msess *sess);
 struct msess *msess_next(void);
 void msess_reset(void);
+void msess_add_or_update(struct msess *nsess);
 
 #endif
