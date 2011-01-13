@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <syslog.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -38,25 +39,21 @@
 #define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
 
-extern const char         *cfgpath;/* config file path */
-extern xmlDoc* doc;
-extern int                s;       /* bind socket */
-extern unsigned int       yes;     /* usefull macro */
-extern unsigned int       no;      /* usefull macro */
-extern int                slen;    /* size of sockaddr_in */
+/*extern const char *cfgpath;
+extern xmlDoc* doc;*/
 extern struct sockaddr_in6 them;    /* other side's ip address */
-extern struct cfg         c;
-extern struct packet      p;
+extern struct config cfg;
+extern struct packet pkt;
 
-struct cfg {                       /* CONFIGURATION */
-	char              debug;   /* extra output */
-	int               port;    /* server port */
-	char              ts;      /* timestamping mode (s)w (k)ern (h)w */
-	char              iface[9];/* hw timestamping interface */
+struct config {
+	char debug; /* extra output */
+	int port; /* server port */
+	char ts; /* timestamping type (u)ser (k)ern (h)w */
 };
-struct packet {                    /* PACKET */
-	char              data[40];/* message data */
-	struct timespec   ts;      /* latest fetched timestamp */
+struct packet {
+	struct sockaddr_in6 addr; 
+	char data[40];
+	struct timespec ts;
 };
 struct packet_ping {
 	char type;
@@ -65,21 +62,9 @@ struct packet_ping {
 };
 struct packet_time {
 	char type;
-	int32_t seq1;
-	struct timespec rx1;
-	struct timespec tx1;
-	int32_t seq2;
-	struct timespec rx2;
-	struct timespec tx2;
-	int32_t seq3;
-	struct timespec rx3;
-	struct timespec tx3;
-	int32_t seq4;
-	struct timespec rx4;
-	struct timespec tx4;
-	int32_t seq5;
-	struct timespec rx5;
-	struct timespec tx5;
+	int32_t seq;
+	struct timespec rx;
+	struct timespec tx;
 };
 struct packet_rpm {
 	int32_t t1_sec;
@@ -99,12 +84,12 @@ struct scm_timestamping {
 	struct timespec hwtimesys;
 	struct timespec hwtimeraw;
 };
-enum TS_TYPES {
+/*enum TS_TYPES {
 	T1,
 	T2,
 	T3,
 	T4
-};
+};*/
 
 int main(int argc, char *argv[]);
 void die(char *msg);

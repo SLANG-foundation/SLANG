@@ -1,15 +1,19 @@
 /*
- * HARDWARE TIMESTAMPING ACTIVATION
+ * TIMESTAMPING API 
  * Author: Anders Berggren
+ *
+ * - Hardware timestamps require SO_TIMESTAMPING on socket and ioctl on device.
+ * - Kernel   timestamps require SO_TIMESTAMPING on socket.
+ * - Userland timestamps require SO_TIMESTAMPNS  on socket. 
  *
  * Function tstamp_hw()
  * Contains commands for activating hardware timestamping on both socket "s"
  * and on network interface "iface". Has to be run synchroniously.
- * - Hardware timestamps require SO_TIMESTAMPING on socket and ioctl on device.
- * - Kernel   timestamps require SO_TIMESTAMPING on socket.
- * - Software timestamps require SO_TIMESTAMPNS on socket. 
  * 
- * Function tstamp_sw()
+ * Function tstamp_kernel()
+ * Enable kernel timestamping, disable hardware timestamping.
+ * 
+ * Function tstamp_userland()
  * Enable software timestamping, disable kernel and hardware timestamping.
  * 
  * Function tstamp_get(msg)
@@ -18,22 +22,22 @@
 
 #include "probed.h"
 
-void tstamp_hw() {
+void tstamp_hw(int &s, char *iface) {
 	struct ifreq dev; /* request to ioctl */
 	struct hwtstamp_config hwcfg; /* hw tstamp cfg to ioctl req */
 	int f = 0; /* flags to setsockopt for socket request */
-	if (c.ts == 'h') return; /* check if it has already been run */
+	
 	/* STEP 1: ENABLE HW TIMESTAMP ON IFACE IN IOCTL */
 	memset(&dev, 0, sizeof(dev));
 	/* get interface by iface name */
-	strncpy(dev.ifr_name, c.iface, sizeof(dev.ifr_name));
+	strncpy(dev.ifr_name, iface, sizeof dev.ifr_name);
 	/* now that we have ioctl, check for ip address :) */
 	if (ioctl(s, SIOCGIFADDR, &dev) < 0)
 		syslog(LOG_ERR, "SIOCGIFADDR: no IP: %s", strerror(errno));
 	/* point ioctl req data at hw tstamp cfg, reset tstamp cfg */
 	dev.ifr_data = (void *)&hwcfg;
-	memset(&hwcfg, 0, sizeof(&hwcfg)); 
-	/* enable tx hw tstamp, ptp style, i82580 limit */
+	memset(&hwcfg, 0, sizeof &hwcfg); 
+	/* enable tx hw tstamp, ptp style, intel 82580 limit */
 	hwcfg.tx_type = HWTSTAMP_TX_ON; 
 	/* enable rx hw tstamp, all packets, yey! */
 	hwcfg.rx_filter = HWTSTAMP_FILTER_ALL; 
@@ -50,62 +54,60 @@ void tstamp_hw() {
 	f |= SOF_TIMESTAMPING_TX_HARDWARE;
 	f |= SOF_TIMESTAMPING_RX_HARDWARE;
 	f |= SOF_TIMESTAMPING_RAW_HARDWARE;
-	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPING, &f, sizeof(f)) < 0) {
-		/* try software timestamps (socket only) */ 
+	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPING, &f, sizeof f) < 0) {
+		/* bail to userland timestamps (socket only) */ 
 		syslog(LOG_ERR, "SO_TIMESTAMPING: %s", strerror(errno));
-		syslog(LOG_INFO, "Falling back to software timestamps.");
-		tstamp_sw();
+		syslog(LOG_INFO, "Falling back to userland timestamps.");
+		tstamp_userland();
 		return;
 	}
 	syslog(LOG_INFO, "Using hardware timestamps.");
-	c.ts = 'h'; /* remember hw is used */
+	cfg.ts = 'h';
 }
 
 void tstamp_kernel() {
 	int f = 0; /* flags to setsockopt for socket request */
 
-	if (c.ts == 'k') return; /* check if it has already been run */
 	f |= SOF_TIMESTAMPING_TX_SOFTWARE;
 	f |= SOF_TIMESTAMPING_RX_SOFTWARE;
 	f |= SOF_TIMESTAMPING_SOFTWARE;
-	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPING, &f, sizeof(f)) < 0) {
+	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPING, &f, sizeof f) < 0) {
 		syslog(LOG_ERR, "SO_TIMESTAMPING: %s", strerror(errno));
-		syslog(LOG_INFO, "Falling back to software timestamps.");
-		tstamp_sw();
+		syslog(LOG_INFO, "Falling back to userland timestamps.");
+		tstamp_userland();
 		return;
 	}
 	syslog(LOG_INFO, "Using kernel timestamps.");
-	c.ts = 'k'; /* remember kernel is used */
+	cfg.ts = 'k';
 }
 
-void tstamp_sw() {
-	if (c.ts == 's') return; /* check if it has already been run */
-	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPNS, &yes, sizeof(yes)) < 0)
+void tstamp_userland() {
+	if (setsockopt(s, SOL_SOCKET, SO_TIMESTAMPNS, &yes, sizeof yes) < 0)
 		syslog(LOG_ERR, "SO_TIMESTAMP: %s", strerror(errno));
 	syslog(LOG_INFO, "Using software timestamps.");
-	c.ts = 's';
+	cfg.ts = 'u';
 }
 
-int tstamp_get(struct msghdr *msg) {
+/* 
+ * Extracts the timestamp from a packet 'msg'
+ */
+int tstamp_extract(struct msghdr *msg, struct timespec *ts) {
 	struct cmsghdr *cmsg;
 	struct scm_timestamping *t;
-	struct timespec *t2;
-	//puts("NEW");
+	struct timespec *ts_p;
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
-		//printf("LEVL: %d sol %d ip %d\n", cmsg->cmsg_level, SOL_SOCKET, IPPROTO_IP);
-		//printf("TYPE: %d ts %d err %d pkt %d\n", cmsg->cmsg_type, SO_TIMESTAMPING, IP_RECVERR, IP_PKTINFO);
 		if (cmsg->cmsg_level == SOL_SOCKET) {
 			/* if hw/kernel timestamps, check SO_TIMESTAMPING */
-			if (c.ts != 's' && cmsg->cmsg_type == SO_TIMESTAMPING) {
+			if (cfg.ts != 'u' && cmsg->cmsg_type == SO_TIMESTAMPING) {
 				t = (struct scm_timestamping *)CMSG_DATA(cmsg);
-				if (c.ts == 'h') p.ts = t->hwtimeraw;
-				if (c.ts == 'k') p.ts = t->systime;
+				if (cfg.ts == 'h') ts = t->hwtimeraw;
+				if (cfg.ts == 'k') ts = t->systime;
 				return 0;
 			}
 			/* if software timestamps, check SO_TIMESTAMPNS */
-			if (c.ts == 's' && cmsg->cmsg_type == SO_TIMESTAMPNS) {
-				t2 = (struct timespec *)CMSG_DATA(cmsg);
-				p.ts = *t2;
+			if (cfg.ts == 's' && cmsg->cmsg_type == SO_TIMESTAMPNS) {
+				ts_p = (struct timespec *)CMSG_DATA(cmsg);
+				ts = *ts_p;
 				return 0;
 			}
 		}
@@ -121,23 +123,24 @@ int tstamp_get(struct msghdr *msg) {
  * As usual, the timestamp is stored by data_recv() calling tstamp_get()
  * in the global variable ts.
  */
-void tstamp_recv() {
+int tstamp_fetch_tx(struct timespec *ts) {
 	fd_set fs; /* select fd set for hw tstamps */
 	struct timeval tv, now, last; /* timeout for select and while */
 
-	tv.tv_sec = 1; /* wait for nic tx tstamp during at least 1sec */ 
+	tv.tv_sec = 1; /* wait for tx tstamp during at least 1 sec... */ 
 	tv.tv_usec = 0;
 	gettimeofday(&last, 0);
 	gettimeofday(&now, 0);
-	while (now.tv_sec - last.tv_sec < 2) {
+	while (now.tv_sec - last.tv_sec < 2) { /* ...during max 2 sec */
 		FD_ZERO(&fs);
 		FD_SET(s, &fs);
 		if (select(s + 1, &fs, 0, 0, &tv) > 0) 
 			if (data_recv(MSG_ERRQUEUE) == 0)  /* get tx ts */
-				return;
+				return 0;
 		gettimeofday(&now, 0);
 	}
 	syslog(LOG_ERR, "Kernel TX timestamp error.");
-	p.ts.tv_sec = 0;
-	p.ts.tv_nsec = 0;
+	ts.tv_sec = 0;
+	ts.tv_nsec = 0;
+	return -1;
 }

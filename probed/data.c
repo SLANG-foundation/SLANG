@@ -6,9 +6,8 @@
 #include "probed.h"
 
 struct packet p;
-
-int data_recv(int flags) {
-	char tmp[INET6_ADDRSTRLEN];
+int cpfisk = 0;
+int recv_with_ts(int flags, struct timespec *ts) {
 	struct msghdr msg; /* message */
 	struct iovec entry; /* misc data, such as timestamp */
 	struct sockaddr_in6 addr; /* message remote addr */
@@ -43,17 +42,21 @@ int data_recv(int flags) {
 			return 0;
 		} else {
 			/* store rx tstamp */
-			if (tstamp_get(&msg) < 0) 
-				syslog(LOG_ERR, "RX timestamp error."); 
+			if (tstamp_get(&msg) < 0) { 
+				syslog(LOG_ERR, "RX timestamp error.");
+				cpfisk = 1;
+			}	
 			them = addr; /* save latest peer spoken to */
-			/* below is some debugging, delete? */
+			/* below is some debugging, delete? 
+			char tmp[INET6_ADDRSTRLEN];
 			inet_ntop(AF_INET6, &(them.sin6_addr), tmp, 
 					INET6_ADDRSTRLEN);
 			syslog(LOG_DEBUG, "* RX from: %s\n", tmp); 
 			syslog(LOG_DEBUG, "* RX data: %zu bytes\n", 
 						sizeof(p.data));
 			syslog(LOG_DEBUG, "* RX time: %010ld.%09ld\n", 
-						p.ts.tv_sec, p.ts.tv_nsec);
+						p.ts.tv_sec,
+						p.ts.tv_nsec);*/
 			return 0;
 		}
 	}
@@ -61,10 +64,10 @@ int data_recv(int flags) {
 }
 
 void data_send(char *d, int size) {
-	/* debugging, delete */
+	/* debugging, delete 
 	char tmp[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &(them.sin6_addr), tmp, INET6_ADDRSTRLEN);
-	syslog(LOG_DEBUG, "* TX to: %s\n", tmp);
+	syslog(LOG_DEBUG, "* TX to: %s\n", tmp); */
 
 	if (c.ts == 's') /* get sw tx timestamp (before send hehe) */  
 		clock_gettime(CLOCK_REALTIME, &p.ts);
@@ -73,7 +76,7 @@ void data_send(char *d, int size) {
 	if (c.ts != 's') /* get kernel tx timestamp */
 		tstamp_recv();
 
-	/* debugging, delete */
+	/* debugging, delete 
 	syslog(LOG_DEBUG, "* TX time: %010ld.%09ld\n", 
-			p.ts.tv_sec, p.ts.tv_nsec);
+			p.ts.tv_sec, p.ts.tv_nsec);*/
 }

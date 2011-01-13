@@ -64,7 +64,7 @@ void proto_server() {
 	data_send((char*)pp, sizeof(struct packet_ping)); /* send pong */
 	pt.rx1 = rx;
 	pt.tx1 = p.ts; /* "save" tx timestamp */
-	syslog(LOG_DEBUG, "* SEND PONG %d\n", pt.seq1);
+	if (c.debug) syslog(LOG_DEBUG, "* SEND PONG %d\n", pt.seq1);
 	data_send((char*)&pt, sizeof(pt)); /* send diff */
 }
 
