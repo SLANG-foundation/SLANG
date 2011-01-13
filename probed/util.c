@@ -1,13 +1,8 @@
 /*
- * util.c
- *
  * Contains various utilities.
- *
  */
 
-#include <time.h>
 #include "probed.h"
-
 
 /* calculate nsec precision diff for positive time */
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg) {
@@ -52,20 +47,23 @@ int cmp_ts(struct timespec *t1, struct timespec *t2) {
 
 }
 
-/*
- * Exit and log message
+/* 
+ * compare two timevals 
+ *
+ * Returns -1 if t1 < t2, 1 if t1 > t2 and 0 if t1 == t2
  */
-void die(char *msg) {
-	syslog(LOG_ERR, msg);
-	exit(1);
-}
+int cmp_tv(struct timeval *t1, struct timeval *t2) {
 
-/*
- * Enable debugging
- */
-void debug(char enabled) {
-	c.debug = enabled;
-	if (enabled) setlogmask(LOG_UPTO(LOG_DEBUG));
-	else setlogmask(LOG_UPTO(LOG_INFO));
-	return;
+	if (t1->tv_sec < t2->tv_sec) {
+		return -1;
+	} else if (t1->tv_sec > t2->tv_sec) {
+		return 1;
+	} else if (t1->tv_usec < t2->tv_usec) {
+		return -1;
+	} else if (t1->tv_usec > t2->tv_usec) {
+		return 1;
+	} else { /* equal */
+		return 0;
+	}
+
 }

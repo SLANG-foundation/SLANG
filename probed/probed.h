@@ -28,6 +28,7 @@
 #include "sockios.h"
 //#include "linux/net_tstamp.h"
 //#include "linux/sockios.h"
+#include "msess.h"
 
 #ifndef SO_TIMESTAMPING
 #define SO_TIMESTAMPING 37
@@ -38,12 +39,10 @@
 #define TYPE_TIME 't'
 #define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
+#define DATALEN 40
+#define MSESS_NODE_NAME "probe"
 
-/*extern const char *cfgpath;
-extern xmlDoc* doc;*/
-extern struct sockaddr_in6 them;    /* other side's ip address */
 extern struct config cfg;
-extern struct packet pkt;
 
 struct config {
 	char debug; /* extra output */
@@ -52,12 +51,18 @@ struct config {
 };
 struct packet {
 	struct sockaddr_in6 addr; 
-	char data[40];
+	char data[DATALEN];
 	struct timespec ts;
+};
+struct packet_p {
+	struct sockaddr_in6 *addr;
+	char *data;
+	struct timespec *ts;
 };
 struct packet_ping {
 	char type;
 	int32_t seq;
+	msess_id id;
 	char data[32];
 };
 struct packet_time {
@@ -92,24 +97,27 @@ struct scm_timestamping {
 };*/
 
 int main(int argc, char *argv[]);
-void die(char *msg);
+void help();
+void reload(xmlDoc **cfgdoc, char *cfgpath);
 void debug(char enabled);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
 int cmp_ts(struct timespec *t1, struct timespec *t2);
-void proto();
-void proto_client();
-void proto_server();
-void proto_timestamp();
-void proto_bind(int port);
-void tstamp_hw();
-void tstamp_kernel();
-void tstamp_sw();
-int tstamp_get(struct msghdr *msg);
-void tstamp_recv();
-int data_recv(int flags);
-void data_send(char *data, int size);
-void config_read();
-void config_scan();
-int config_getkey(char *xpath, char *str, size_t bytes);
-void config_init();
+int cmp_tv(struct timeval *t1, struct timeval *t2);
+
+int udp_bind(int *sock, int port);
+int udp_client(int sock, char *addr, char *port);
+
+void tstamp_mode_hardware(int sock, char *iface);
+void tstamp_mode_kernel(int sock);
+void tstamp_mode_userland(int sock);
+int tstamp_extract(struct msghdr *msg, struct timespec *ts);
+int tstamp_fetch_tx(int sock, struct timespec *ts);
+
+int recv_w_ts(int sock, int flags, struct packet *pkt);
+//int send_w_ts(int sock, char *d, int size, struct sockaddr_in6 *addr, struct timespec *ts_p);
+int send_w_ts(int sock, struct packet_p *pkt_p);
+
+int config_read(xmlDoc **doc, char *cfgpath);
+int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
+int config_msess(xmlDoc *doc);

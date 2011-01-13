@@ -1,7 +1,8 @@
 C = gcc
-F = -c -Wall -I/usr/include/libxml2
-L = -lrt -lxml2 -lsqlite3
-S = main.c proto.c tstamp.c data.c config.c util.c msess.c util.c
+F = -c -Wall -I/usr/include/libxml2 -g
+L = -lrt -lxml2
+#S = main.c proto.c tstamp.c data.c config.c util.c msess.c
+S = main.c tstamp.c udp.c data.c config.c util.c msess.c
 I = probed.h
 O = $(S:.c=.o)
 T = probed 
