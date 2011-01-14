@@ -1,9 +1,5 @@
-#include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <sys/queue.h>
 #include <arpa/inet.h>
-#include <sqlite3.h>
 
 #include "probed.h"
 #include "msess.h"

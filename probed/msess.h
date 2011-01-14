@@ -1,10 +1,8 @@
 #ifndef _MSESS_H
 #define _MSESS_H 1
 
-#include <time.h>
-#include <sys/socket.h>
 #include <sys/queue.h>
-#include <stdint.h>
+
 /* #include "probed.h" */
 
 /* define structs to hold first element of linked lists */

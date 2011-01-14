@@ -3,6 +3,9 @@
  * Author: Anders Berggren
  */
 
+#include <time.h>
+#include <errno.h>
+#include <string.h>
 #include "probed.h"
 
 int recv_w_ts(int sock, int flags, struct packet *pkt) {

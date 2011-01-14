@@ -1,34 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <signal.h>
-#include <syslog.h>
-#include <errno.h>
-#include <ctype.h>
-
-#include <sys/time.h>
 #include <sys/socket.h>
-#include <sys/select.h>
-#include <sys/types.h> 
-#include <sys/ioctl.h>
-
-#include <arpa/inet.h>
-#include <unistd.h>
 #include <netinet/in.h>
-#include <net/if.h>
-
+#include "msess.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <libxml/xpath.h>
-
-#include "asm/types.h"
-#include "linux/errqueue.h"
-#include "net_tstamp.h"
-#include "sockios.h"
-//#include "linux/net_tstamp.h"
-//#include "linux/sockios.h"
-#include "msess.h"
+#include <syslog.h>
 
 #ifndef SO_TIMESTAMPING
 #define SO_TIMESTAMPING 37

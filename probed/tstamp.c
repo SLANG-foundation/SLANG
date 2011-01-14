@@ -21,6 +21,13 @@
  */ 
 
 #include "probed.h"
+#include <string.h>
+#include <errno.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include "sockios.h"
+#include "net_tstamp.h"
 
 void tstamp_mode_hardware(int sock, char *iface) {
 	struct ifreq dev; /* request to ioctl */
@@ -109,7 +116,7 @@ int tstamp_extract(struct msghdr *msg, struct timespec *ts) {
 			/* if software timestamps, check SO_TIMESTAMPNS */
 			if (cfg.ts == 's' && cmsg->cmsg_type == SO_TIMESTAMPNS) {
 				ts_p = (struct timespec *)CMSG_DATA(cmsg);
-				ts = ts_p;
+				*ts = *ts_p;
 				return 0;
 			}
 		}

@@ -12,6 +12,9 @@
  */
 
 #include "probed.h"
+#include <string.h>
+#include <errno.h>
+#include <arpa/inet.h>
 
 int config_read(xmlDoc **doc, char *cfgpath) {
 	xmlDoc *tmpdoc;
