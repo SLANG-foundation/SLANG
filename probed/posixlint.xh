@@ -1,0 +1,44 @@
+typedef unsigned int socklen_t;
+
+struct timeval {
+  long  tv_sec;
+  long  tv_usec;
+} ;
+
+
+struct msghdr
+{
+  /*@dependent@*/ void *msg_name;
+  socklen_t msg_namelen;
+  /*@dependent@*/ struct iovec *msg_iov;
+  size_t msg_iovlen;
+  /*@dependent@*/ void *msg_control;
+  size_t msg_controllen;
+  int msg_flags;
+}
+;
+struct iovec {
+  /*@dependent@*/ void *iov_base;
+  size_t iov_len; /*: maxSet(iov_base) = iov_len */
+};
+extern ssize_t recvmsg(int __fd, /*@out@*/ struct msghdr *__message, 
+		int __flags)
+	/*@modifies __message->msg_iov->iov_base[], errno@*/;
+
+int getaddrinfo(const char *node, const char *service, 
+		const struct addrinfo *hints, /*@out@*/ struct addrinfo **res);
+
+const char *inet_ntop(int af, const void *src, /*@out@*/ char *dst, 
+		socklen_t cnt);
+
+int gettimeofday(/*@out@*/ struct timeval *restrict tp, 
+	/*@null@*/ void *restrict tzp);
+
+typedef /*@abstract@*/ fd_set;
+int select (int mfd, fd_set /*@null@*/ *r, fd_set /*@null@*/ *w,
+		            fd_set /*@null@*/ *e, /*@null@*/ struct timeval *t)
+  /*@modifies *r, *w, *e, *t, errno@*/;
+    /* evans - 2002-05-26: added null for t, bug reported by Enrico Scholz */
+#define CLOCK_REALTIME			0
+typedef /*@integraltype@*/ clockid_t; 
+int clock_gettime(clockid_t clk_id, struct timespec *tp);

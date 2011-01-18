@@ -1,5 +1,5 @@
-#ifndef _MSESS_H
-#define _MSESS_H 1
+#ifndef MSESS_H
+#define MSESS_H 1
 
 #include <sys/queue.h>
 

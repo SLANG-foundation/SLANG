@@ -8,77 +8,69 @@
 #include <string.h>
 #include "probed.h"
 
-int recv_w_ts(int sock, int flags, struct packet *pkt) {
-	char data[DATALEN];
-	struct sockaddr_in6 addr; /* message remote addr */
-	struct msghdr msg; /* message */
-	struct iovec entry; /* misc data, such as timestamp */
+int recv_w_ts(int sock, int flags, /*@out@*/ struct packet *pkt) {
+	socklen_t addrlen;
+	struct msghdr msg[1];
+	struct iovec iov[1];
 	struct {
 		struct cmsghdr cm;
 		char control[512];
 	} control;
 
 	/* prepare message structure */
-	memset(&data, 0, sizeof data);
-	memset(&msg, 0, sizeof msg);
-	msg.msg_iov = &entry;
-	msg.msg_iovlen = 1;
-	entry.iov_base = data;
-	entry.iov_len = sizeof data;
-	msg.msg_name = (caddr_t)&addr;
-	msg.msg_namelen = sizeof addr;
-	msg.msg_control = &control;
-	msg.msg_controllen = sizeof control;
+	memset(&(pkt->data), 0, DATALEN);
+	memset(msg, 0, sizeof (*msg));
+	addrlen = (socklen_t)sizeof pkt->addr;
+	iov[0].iov_base = pkt->data;
+	iov[0].iov_len = DATALEN;
+	msg[0].msg_iov = iov;
+	msg[0].msg_iovlen = 1;
+	msg[0].msg_name = (caddr_t)&pkt->addr;
+	msg[0].msg_namelen = addrlen;
+	msg[0].msg_control = &control;
+	msg[0].msg_controllen = sizeof control;
 
-	if (recvmsg(sock, &msg, flags) < 0) {
-		if (flags & MSG_ERRQUEUE)
-			syslog(LOG_INFO, "recvmsg: %s (ts)", strerror(errno));
+	if (recvmsg(sock, msg, flags) < 0) {
+		if ((flags & MSG_ERRQUEUE) != 0)
+		{}
+			//syslog(LOG_INFO, "recvmsg: %s (ts)", strerror(errno));
 		else
 			syslog(LOG_INFO, "recvmsg: %s", strerror(errno));
 		return -1;
 	} else {
-		if (flags & MSG_ERRQUEUE) {
+		if ((flags & MSG_ERRQUEUE) != 0) {
 			/* store kernel tx tstamp */
-			if (tstamp_extract(&msg, &(pkt->ts)) < 0) return -1;
+			if (tstamp_extract(msg, &(pkt->ts)) < 0) return -1;
 			/* tx timestamp packet, just save and bail */
 			return 0;
 		} else {
 			/* store rx tstamp */
-			if (tstamp_extract(&msg, &(pkt->ts)) < 0)
+			if (tstamp_extract(msg, &(pkt->ts)) < 0)
 				syslog(LOG_ERR, "RX timestamp error.");
-		
-			pkt->addr = addr; /* save peer address */
-			/* below is some debugging, delete? 
-			char tmp[INET6_ADDRSTRLEN];
-			inet_ntop(AF_INET6, &(them.sin6_addr), tmp, 
-					INET6_ADDRSTRLEN);
-			syslog(LOG_DEBUG, "* RX from: %s\n", tmp); 
-			syslog(LOG_DEBUG, "* RX data: %zu bytes\n", 
-						sizeof(p.data));
-			syslog(LOG_DEBUG, "* RX time: %010ld.%09ld\n", 
-						p.ts.tv_sec,
-						p.ts.tv_nsec);*/
 			return 0;
 		}
 	}
-	return -1;
 }
 
-int send_w_ts(int sock, struct packet_p *pkt_p) {
-	struct sockaddr *addr;
-	int bytes, sa_len;
+int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
+	socklen_t slen;
 
+	slen = (socklen_t)sizeof *(addr);
+	memset(ts, 0, sizeof (struct timespec));
 	/* get userland tx timestamp (before send, hehe) */
 	if (cfg.ts == 'u')   
-		clock_gettime(CLOCK_REALTIME, pkt_p->ts);
+		(void)clock_gettime(CLOCK_REALTIME, ts);
 	/* do the send */
-	bytes = strlen(pkt_p->data);
-	sa_len = sizeof *(pkt_p->addr);
-	addr = (struct sockaddr*)pkt_p->addr;
-	if (sendto(sock, pkt_p->data, bytes, 0, addr, sa_len) < 0)
+	if (sendto(sock, data, DATALEN, 0, (struct sockaddr*)addr, slen) < 0) {
 		syslog(LOG_INFO, "sendto: %s", strerror(errno));
+		return -1;
+	}
 	/* get kernel tx timestamp */
-	if (cfg.ts != 'u') 
-		tstamp_fetch_tx(sock, pkt_p->ts);
+	if (cfg.ts != 'u') { 
+		if (tstamp_fetch_tx(sock, ts) < 0) {
+			syslog(LOG_ERR, "TX timestamp error");
+			return -1;
+		}
+	}
 	return 0;
 }

@@ -21,10 +21,8 @@ int config_read(xmlDoc **doc, char *cfgpath) {
 
 	/* reload configuration file */
 	tmpdoc = xmlParseFile(cfgpath);
-	if (!tmpdoc) {
-		syslog(LOG_ERR, "Invalid configuration. (xmlParseFile)");
+	if (!tmpdoc) 
 		return -1;
-	}
 	xmlFreeDoc(*doc);
 	*doc = tmpdoc;
 	return 0;

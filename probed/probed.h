@@ -10,42 +10,38 @@
 #define SO_TIMESTAMPING 37
 #define SCM_TIMESTAMPING SO_TIMESTAMPING
 #endif
+
+#define APP_AND_VERSION "SLA-NG probed 0.1"
 #define TYPE_PING 'i'
 #define TYPE_PONG 'o'
 #define TYPE_TIME 't'
 #define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
-#define DATALEN 40
+#define DATALEN 48
 #define MSESS_NODE_NAME "probe"
 
 extern struct config cfg;
 
+typedef struct timespec ts_t;
+typedef struct sockaddr_in6 addr_t;
+typedef uint32_t num_t;
+
 struct config {
-	char debug; /* extra output */
+	int debug; /* extra output */
 	int port; /* server port */
 	char ts; /* timestamping type (u)ser (k)ern (h)w */
 };
 struct packet {
-	struct sockaddr_in6 addr; 
+	addr_t addr; 
 	char data[DATALEN];
-	struct timespec ts;
+	ts_t ts;
 };
-struct packet_p {
-	struct sockaddr_in6 *addr;
-	char *data;
-	struct timespec *ts;
-};
-struct packet_ping {
+struct packet_data {
 	char type;
-	int32_t seq;
-	msess_id id;
-	char data[32];
-};
-struct packet_time {
-	char type;
-	int32_t seq;
-	struct timespec rx;
-	struct timespec tx;
+	num_t seq;
+	num_t id;
+	ts_t t2;
+	ts_t t3;
 };
 struct packet_rpm {
 	int32_t t1_sec;
@@ -65,6 +61,7 @@ struct scm_timestamping {
 	struct timespec hwtimesys;
 	struct timespec hwtimeraw;
 };
+
 /*enum TS_TYPES {
 	T1,
 	T2,
@@ -73,27 +70,30 @@ struct scm_timestamping {
 };*/
 
 int main(int argc, char *argv[]);
-void help();
+void help_and_die(void);
 void reload(xmlDoc **cfgdoc, char *cfgpath);
-void debug(char enabled);
+void debug(int enabled);
+void p(char *str);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
 int cmp_ts(struct timespec *t1, struct timespec *t2);
 int cmp_tv(struct timeval *t1, struct timeval *t2);
 
-int udp_bind(int *sock, int port);
-int udp_client(int sock, char *addr, char *port);
+void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port);
+void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port);
 
 void tstamp_mode_hardware(int sock, char *iface);
 void tstamp_mode_kernel(int sock);
 void tstamp_mode_userland(int sock);
-int tstamp_extract(struct msghdr *msg, struct timespec *ts);
-int tstamp_fetch_tx(int sock, struct timespec *ts);
+int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts);
+int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts);
 
-int recv_w_ts(int sock, int flags, struct packet *pkt);
-//int send_w_ts(int sock, char *d, int size, struct sockaddr_in6 *addr, struct timespec *ts_p);
-int send_w_ts(int sock, struct packet_p *pkt_p);
+int recv_w_ts(int sock, int flags, /*@out@*/ struct packet *pkt);
+int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts);
 
 int config_read(xmlDoc **doc, char *cfgpath);
 int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
 int config_msess(xmlDoc *doc);
+
+void unix_fd_set(int sock, /*@out@*/ fd_set *fs);
+void unix_fd_zero(/*@out@*/ fd_set *fs);

@@ -4,6 +4,7 @@
 
 #include "probed.h"
 
+/*@ -type Disable fucked up 'Arrow access field of non-struct...' */
 /* calculate nsec precision diff for positive time */
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg) {
 	if ((end->tv_nsec - beg->tv_nsec) < 0) {
