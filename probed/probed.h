@@ -81,6 +81,8 @@ int cmp_tv(struct timeval *t1, struct timeval *t2);
 
 void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port);
 void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port);
+int tcp_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
+int addr2str(addr_t *a, /*@out@*/ char *s);
 
 void tstamp_mode_hardware(int sock, char *iface);
 void tstamp_mode_kernel(int sock);
@@ -97,3 +99,4 @@ int config_msess(xmlDoc *doc);
 
 void unix_fd_set(int sock, /*@out@*/ fd_set *fs);
 void unix_fd_zero(/*@out@*/ fd_set *fs);
+int unix_fd_isset(int sock, /*@out@*/ fd_set *fs);

@@ -22,7 +22,7 @@ clean:
 	rm $T $O 
 
 lint:
-	@splint main.c   $I $D -warnposix
+	@splint main.c   $I $D +posixlib -mts posixlint 
 	@splint data.c   $I $D +posixlib -mts posixlint
 	@splint udp.c    $I $D +posixlib -mts posixlint
 	@splint tstamp.c $I $D +posixlib -mts posixlint

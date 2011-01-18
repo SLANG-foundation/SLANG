@@ -1,7 +1,9 @@
 /*
  * UNIX wrapper functions
  * These are wrappers for UNIX functions that cannot be 
- * analysed with POSIX definitions only.
+ * analysed with POSIX definitions only. Optimally, everything
+ * should be checked with +unixlib, but because of SPlint bugs, 
+ * that simply doesn't work.
  * 
  * This file is checked with `splint unix.c +unixlib`
  */ 

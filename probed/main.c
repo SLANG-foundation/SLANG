@@ -1,5 +1,7 @@
 #include "probed.h"
+#ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
+#endif
 
 struct config cfg;
 
@@ -23,25 +25,26 @@ int main(int argc, char *argv[]) {
 
 	/* Command line arguments */
 	/*@ -branchstate OK that opcode. etc changes storage @*/
-	/*@ +charintliteral OK to compare 'arg' (int) int with char @*/
+	/*@ -unrecog OK that 'getopt' and 'optarg' is missing; SPlint bug */
+	/* +charintliteral OK to compare 'arg' (int) int with char @*/
 	while ((arg = getopt(argc, argv, "qdashc:i:p:ku")) != -1) {
-		if (arg == 'h') help_and_die();
-		if (arg == '?') exit(EXIT_FAILURE);
-		if (arg == 'q') log = 0;
-		if (arg == 'd') debug(1);
-		if (arg == 'f') cfgpath = optarg;
-		if (arg == 'i') iface = optarg;
-		if (arg == 'k') tstamp = 'k';
-		if (arg == 'u') tstamp = 'u';
-		if (arg == 'a') opmode = 'a';
-		if (arg == 's') opmode = 's';
-		if (arg == 'c') {
+		if (arg == (int)'h') help_and_die();
+		if (arg == (int)'?') exit(EXIT_FAILURE);
+		if (arg == (int)'q') log = 0;
+		if (arg == (int)'d') debug(1);
+		if (arg == (int)'f') cfgpath = optarg;
+		if (arg == (int)'i') iface = optarg;
+		if (arg == (int)'k') tstamp = 'k';
+		if (arg == (int)'u') tstamp = 'u';
+		if (arg == (int)'a') opmode = 'a';
+		if (arg == (int)'s') opmode = 's';
+		if (arg == (int)'c') {
 			opmode = 'c';
 			addr = optarg;
 		}
 	}
 	if (opmode == 'h') help_and_die();
-	/*@ +branchstate -charintliteral @*/
+	/*@ +branchstate -charintliteral +unrecog @*/
 
 	/* Startup config, logging and sockets */
 	openlog("probed", log, LOG_USER);
