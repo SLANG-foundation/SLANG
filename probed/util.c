@@ -2,7 +2,35 @@
  * Contains various utilities.
  */
 
+#include <errno.h>
+#include <string.h>
+#include <arpa/inet.h>
 #include "probed.h"
+
+/* 
+ * Place human-readable IPv6 or IPv6-mapped-IPv4 address into
+ * string 's' with size INET6_ADDRSTRLEN.
+ */
+int addr2str(addr_t *a, /*@out@*/ char *s) {
+	if (inet_ntop(AF_INET6, &(a->sin6_addr), s, INET6_ADDRSTRLEN) == NULL) {
+		syslog(LOG_ERR, "inet_ntop: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * Just print 'str' content, without respect to return value.
+ */
+void p(char *str) {
+	(void)puts(str);
+}
+
+void debug(int enabled) {
+	if (enabled == 1) (void)setlogmask(LOG_UPTO(LOG_DEBUG));
+	else (void)setlogmask(LOG_UPTO(LOG_INFO));
+	return;
+}
 
 /*@ -type Disable fucked up 'Arrow access field of non-struct...' */
 /* calculate nsec precision diff for positive time */

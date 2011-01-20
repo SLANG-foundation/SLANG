@@ -8,7 +8,7 @@
 #include <string.h>
 #include "probed.h"
 
-int recv_w_ts(int sock, int flags, /*@out@*/ struct packet *pkt) {
+int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	socklen_t addrlen;
 	struct msghdr msg[1];
 	struct iovec iov[1];

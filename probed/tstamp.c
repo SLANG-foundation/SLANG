@@ -148,7 +148,7 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
  * in the global variable ts.
  */
 int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
-	struct packet pkt;
+	pkt_t pkt;
 	fd_set fs;
 	struct timeval tv, now, last; /* Timeouts for select and while */
 

@@ -104,16 +104,3 @@ void reload(xmlDoc **cfgdoc, char *cfgpath) {
 	/*config_msess(*cfgdoc);*/
 }
 
-void debug(int enabled) {
-	cfg.debug = enabled;
-	if (enabled == 1) (void)setlogmask(LOG_UPTO(LOG_DEBUG));
-	else (void)setlogmask(LOG_UPTO(LOG_INFO));
-	return;
-}
-
-/*
- * Just print 'str' content, without respect to return value.
- */
-void p(char *str) {
-	(void)puts(str);
-}

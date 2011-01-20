@@ -4,7 +4,7 @@ H = probed.h
 I = -I/usr/include/libxml2
 L = -lrt -lxml2
 O = $(S:.c=.o)
-S = main.c tstamp.c udp.c data.c config.c util.c msess.c unix.c
+S = main.c tstamp.c udp.c data.c config.c util.c msess.c unix.c client.c
 T = probed 
 D = -D__gnuc_va_list=va_list
 

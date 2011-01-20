@@ -19,6 +19,12 @@
 #define TMPLEN 512
 #define DATALEN 48
 #define MSESS_NODE_NAME "probe"
+#define NUM_CLIENT_RES 2
+
+#define STATE_PING 'i'
+#define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
+#define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
+#define STATE_READY 'r'
 
 extern struct config cfg;
 
@@ -27,15 +33,25 @@ typedef struct sockaddr_in6 addr_t;
 typedef uint32_t num_t;
 
 struct config {
-	int debug; /* extra output */
-	int port; /* server port */
 	char ts; /* timestamping type (u)ser (k)ern (h)w */
 };
+
+LIST_HEAD(res_listhead, res) res_head;
+struct res {
+	char state;
+	struct in6_addr addr;
+	num_t id;
+	num_t seq;
+	ts_t ts[4];
+	LIST_ENTRY(res) res_list;
+};
+
 struct packet {
 	addr_t addr; 
 	char data[DATALEN];
 	ts_t ts;
 };
+typedef struct packet pkt_t;
 struct packet_data {
 	char type;
 	num_t seq;
@@ -43,6 +59,8 @@ struct packet_data {
 	ts_t t2;
 	ts_t t3;
 };
+typedef struct packet_data data_t;
+
 struct packet_rpm {
 	int32_t t1_sec;
 	int32_t t1_usec;
@@ -72,17 +90,19 @@ struct scm_timestamping {
 int main(int argc, char *argv[]);
 void help_and_die(void);
 void reload(xmlDoc **cfgdoc, char *cfgpath);
+
 void debug(int enabled);
 void p(char *str);
 void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
 int cmp_ts(struct timespec *t1, struct timespec *t2);
 int cmp_tv(struct timeval *t1, struct timeval *t2);
+int addr2str(addr_t *a, /*@out@*/ char *s);
 
 void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port);
 void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port);
-int tcp_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
-int addr2str(addr_t *a, /*@out@*/ char *s);
+int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
+int client_fork(int pipe, char *server, char *port);
 
 void tstamp_mode_hardware(int sock, char *iface);
 void tstamp_mode_kernel(int sock);
