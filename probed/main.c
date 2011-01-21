@@ -1,7 +1,7 @@
-#include "probed.h"
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
+#include "probed.h"
 
 struct config cfg;
 

@@ -56,6 +56,8 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+	/* PING results for clients */
+	client_res_init(); 
 	/* Address lookup */
 	if (addr == NULL) {
 		syslog(LOG_INFO, "Server mode: listening at %s\n", port);
@@ -63,6 +65,8 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 		ai = NULL;
 	} else {
 		(void)client_fork(fd_pipe[1], addr, port);
+		sleep(1);
+		signal(SIGINT, client_res_summary);
 		memset(&hints, 0, sizeof hints);
 		hints.ai_family = AF_INET6;
 		hints.ai_flags = AI_V4MAPPED;
@@ -97,7 +101,7 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	while (1 == 1) {
 		fs_tmp = fs;
 		tv.tv_sec = 0;
-		tv.tv_usec = 1000000;
+		tv.tv_usec = 10000;
 		if (select(fd_max + 1, &fs_tmp, NULL, NULL, &tv) > 0) {
 			if (unix_fd_isset(s_udp, &fs_tmp) == 1) {
 				/* UDP socket; PING and PONG */
@@ -113,10 +117,10 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 					tx.t2 = pkt.ts;
 					(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);
 					tx.t3 = ts;
-					syslog(LOG_INFO, "< PONG %d\n", tx.seq);
+					syslog(LOG_DEBUG, "< PONG %d\n", tx.seq);
 					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
 					if (fd < 0) continue;
-					syslog(LOG_INFO, "< TIME %d (%d)\n", rx->seq, fd);
+					syslog(LOG_DEBUG, "< TIME %d (%d)\n", rx->seq, fd);
 					if (send(fd, (char*)&tx, DATALEN, 0) == -1) {
 						if (addr2str(&(pkt.addr), addrstr) == 0)
 							syslog(LOG_ERR, "server: %s disconnected", addrstr);
@@ -125,10 +129,10 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 					}
 				} 
 				if (pkt.data[0] == TYPE_PONG) {
-					syslog(LOG_INFO, "> PONG %d\n", rx->seq);
+					syslog(LOG_DEBUG, "> PONG %d\n", rx->seq);
+					client_res_update(&pkt.addr.sin6_addr, rx, &pkt.ts);
 				} 
 			} else if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
-				printf("tcp\n");
 				/* TCP socket; Accept timestamp connection */
 				slen = (socklen_t)sizeof (struct sockaddr_in6);
 				memset(&addr_tmp, 0, sizeof addr_tmp);
@@ -148,8 +152,11 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 				/* PIPE; timestamp from TCP client */
 				if (read(fd_pipe[0], &pkt, sizeof pkt) < 0)
 					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
+				/* Security feature; make sure type is tstamp; ts is NULL */
 				rx = (data_t *)&pkt.data;
-				printf("PIPE HAHA seq %d\n", (int)rx->seq);
+				rx->type = 't';
+				syslog(LOG_DEBUG, "> TS   %d\n", rx->seq);
+				client_res_update(&pkt.addr.sin6_addr, rx, NULL);
 			}
 		} else {
 			/* Send PING */
@@ -161,9 +168,10 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 				tx.id = 1;
 				tx.seq = seq;
 				if (send_w_ts(s_udp, their, (char*)&tx, &ts) < 0)
-					syslog(LOG_ERR, "send_w_ts: error");
+					continue;
+				client_res_insert(&their->sin6_addr, &tx, &ts);
 				(void)gettimeofday(&last, 0);
-				syslog(LOG_INFO, "< PING %d\n", (int)seq);
+				syslog(LOG_DEBUG, "< PING %d\n", (int)seq);
 				seq++;
 			}
 		}

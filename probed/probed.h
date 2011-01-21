@@ -38,6 +38,7 @@ struct config {
 
 LIST_HEAD(res_listhead, res) res_head;
 struct res {
+	ts_t created;
 	char state;
 	struct in6_addr addr;
 	num_t id;
@@ -116,6 +117,11 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts);
 int config_read(xmlDoc **doc, char *cfgpath);
 int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
 int config_msess(xmlDoc *doc);
+
+void client_res_init(void);
+void client_res_insert(struct in6_addr *addr, data_t *data, ts_t *ts);
+void client_res_update(struct in6_addr *addr, data_t *data, ts_t *ts);
+void client_res_summary(int sig);
 
 void unix_fd_set(int sock, /*@out@*/ fd_set *fs);
 void unix_fd_zero(/*@out@*/ fd_set *fs);
