@@ -3,6 +3,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 
 #include "probed.h"
 #include "msess.h"
@@ -48,7 +49,6 @@ int main(int argc, char *argv[]) {
 	sess_id = malloc(sizeof (msess_id) * n_sess);
 
 	openlog("msess_t", LOG_PERROR, LOG_USER);
-	config_init();
 	msess_init();
 
 	/* create entries */

@@ -102,10 +102,10 @@ int config_msess(xmlDoc *doc) {
 		/* get ID */
 		c = xmlGetProp(n, (xmlChar *)"id");
 		if (c != NULL) {
-			printf("  id: %s\n", c);
+/*			printf("  id: %s\n", c); */
 			sess->id = atoi((char *)c);
 		} else {
-			syslog(LOG_ERR, "Found probe withour ID");
+			syslog(LOG_ERR, "Found probe without ID");
 			continue;
 		}
 		xmlFree(c);
@@ -118,30 +118,29 @@ int config_msess(xmlDoc *doc) {
 			}
 
 			c = xmlNodeGetContent(k);
-			printf("  Child name: %s content: %s\n", (char *)k->name, c);
 
 			/* interval */
 			if (strcmp((char *)k->name, "interval") == 0) {
 				sess->interval.tv_usec = atoi((char *)c);
-				printf("   Got interval %d\n", (int)sess->interval.tv_usec);
+/*				printf("   Got interval %d\n", (int)sess->interval.tv_usec); */
 			}
 			
 			/* address */
 			if (strcmp((char *)k->name, "address") == 0) {
 				inet_pton(AF_INET6, (char *)c, &addr.sin6_addr.s6_addr);
-				printf("   Got address %s\n", c);
+/*				printf("   Got address %s\n", c); */
 			}
 
 			/* dscp */
 			if (strcmp((char *)k->name, "dscp") == 0) {
 				sess->dscp = atoi((char *)c);
-				printf("   Got dscp %s\n", c);
+/*				printf("   Got dscp %s\n", c); */
 			}
 
 			/* port */
 			if (strcmp((char *)k->name, "port") == 0) {
 				addr.sin6_port = htons(atoi((char *)c));
-				printf("   Got port %d\n", (int)sess->interval.tv_usec);
+/*				printf("   Got port %d\n", (int)sess->interval.tv_usec); */
 			}
 
 			xmlFree(c);
@@ -151,7 +150,7 @@ int config_msess(xmlDoc *doc) {
 		memcpy(&sess->dst, &addr, sizeof addr);
 		msess_add_or_update(sess);
 		c = xmlNodeGetContent(n);
-		printf(" Content: %s\n", c);
+/*		printf(" Content: %s\n", c); */
 		xmlFree(c);
 	}
 	return 0;
