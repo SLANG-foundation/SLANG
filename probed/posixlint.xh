@@ -41,5 +41,5 @@ int select (int mfd, fd_set /*@null@*/ *r, fd_set /*@null@*/ *w,
     /* evans - 2002-05-26: added null for t, bug reported by Enrico Scholz */
 #define CLOCK_REALTIME			0
 typedef /*@integraltype@*/ clockid_t; 
-int clock_gettime(clockid_t clk_id, struct timespec *tp);
+int clock_gettime(clockid_t clk_id, /*@out@*/ struct timespec *tp);
 

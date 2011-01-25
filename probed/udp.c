@@ -98,6 +98,7 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	if (fd_pipe[1] > fd_max) fd_max = fd_pipe[1];
 	fd_first = fd_max;
 	memset(&addr_last, 0, sizeof addr_last);
+	memset(&tx_last, 0, sizeof tx_last);
 	/* Let's loop those sockets! */
 	while (1 == 1) {
 		fs_tmp = fs;
@@ -136,7 +137,7 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 					}
 					/* Save addr and data for later, in case next is error */ 
 					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
-					tx_last = tx;
+					//tx_last = tx;
 					/* Really send TCP */
 					syslog(LOG_DEBUG, "< PONG %d\n", tx.seq);
 					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
