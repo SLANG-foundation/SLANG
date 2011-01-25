@@ -119,8 +119,8 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
 int config_msess(xmlDoc *doc);
 
 void client_res_init(void);
-void client_res_insert(struct in6_addr *addr, data_t *data, ts_t *ts);
-void client_res_update(struct in6_addr *addr, data_t *data, ts_t *ts);
+void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts);
+void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts);
 void client_res_summary(int sig);
 
 void unix_fd_set(int sock, /*@out@*/ fd_set *fs);

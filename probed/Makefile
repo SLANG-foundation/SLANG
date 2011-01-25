@@ -27,4 +27,5 @@ lint:
 	@splint udp.c    $I $D +posixlib -mts posixlint
 	@splint tstamp.c $I $D +posixlib -mts posixlint
 	@splint util.c   $I $D +posixlib -mts posixlint
+	@splint client.c $I $D +posixlib -mts posixlint
 	@splint unix.c         +unixlib
