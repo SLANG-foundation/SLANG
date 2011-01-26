@@ -8,7 +8,7 @@ struct msess *sessions, *cur;
 struct msess_head sessions_head;
 struct timespec timeout;
 
-/*
+/**
  * Initialize measurement session list handler
  */
 void msess_init(void) {
@@ -17,7 +17,7 @@ void msess_init(void) {
 
 }
 
-/*
+/**
  * Add measurement session to list
  */
 struct msess *msess_add(msess_id id) {
@@ -36,7 +36,7 @@ struct msess *msess_add(msess_id id) {
 	
 }
 
-/*
+/**
  * Add to list or update already existing measurement session 
  */
 void msess_add_or_update(struct msess *nsess) {
@@ -63,7 +63,7 @@ void msess_add_or_update(struct msess *nsess) {
 
 }
 
-/*
+/**
  * Remove measurement session from list
  */
 void msess_remove(struct msess *sess) {
@@ -75,7 +75,7 @@ void msess_remove(struct msess *sess) {
 
 } 
 
-/*
+/**
  * Find a msess entry for the given address and ID
  */
 struct msess *msess_find(msess_id id) {
@@ -96,7 +96,7 @@ struct msess *msess_find(msess_id id) {
 
 }
 
-/*
+/**
  * Prints all sessions currently configured to console
  */
 void msess_print_all(void) {
@@ -109,7 +109,7 @@ void msess_print_all(void) {
 
 }
 
-/*
+/**
  * Print one session to console
  */
 void msess_print(struct msess *sess) {
@@ -129,8 +129,8 @@ void msess_print(struct msess *sess) {
 
 }
 
-/*
- * function to iterate over all msesses
+/**
+ * Function to iterate over all msesses.
  */
 struct msess *msess_next(void) {
 
@@ -148,8 +148,8 @@ struct msess *msess_next(void) {
 
 }
 
-/*
- * reset msess iterator variable
+/**
+ * Reset msess iterator variable.
  */
 void msess_reset(void) {
 
@@ -158,7 +158,10 @@ void msess_reset(void) {
 }
 
 /*
- * get sequence number (and increase counter)
+ * Get sequence number.
+ * Increases sequence number and returns next value.
+ * @param sess Pointer to msess structure.
+ * @return Next sequence number.
  */
 uint32_t msess_get_seq(struct msess *sess) {
 
