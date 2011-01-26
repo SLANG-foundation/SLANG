@@ -1,3 +1,12 @@
+/**
+ * \file   client.c
+ * \brief  Contains 'client' (PING) specific code, and result handling  
+ * \author Anders Berggren
+ * \author Lukas Garberg
+ * \date   2011-01-10
+ * \todo   Lots of LINT (splint) warnings that I don't understand
+ */
+
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
@@ -26,13 +35,19 @@ long long res_rtt_total = 0;
 ts_t res_rtt_min, res_rtt_max;
 /*@ +exportlocal */
 
-/*
+/**
+ * Forks a 'client' process that connects to a server to get timestamps
+ *
  * The client connects over TCP to the server, in order to
  * get reliable timestamps. The reason for forking is: being
  * able to use simple blocking connect() and read(), handling
  * state and timeouts in one context only, avoid conflicts with
  * the 'server' (parent) file descriptor set, for example when
  * doing bi-directional tests (both connecting to each other).
+ * \param pipe   The main loop pipe file descriptor to send timestamps to
+ * \param server The server address to connect to, and read timestamps from
+ * \return       The process ID of the forked process
+ * \bug          The read timeout of 60 sec before re-connect is bad!
  */
 
 pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
@@ -109,6 +124,15 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 	}
 	exit(EXIT_FAILURE);
 }
+
+/**
+ * Initializes global variables and a pipe used by client_res_* functions
+ *
+ * When running in deamon mode, open a pipe. Always init global variables
+ * such as the res_head linked list. Should be run once.
+ * 
+ * @todo Is the really good to wait for pipe open?
+ */
 void client_res_init(void) {
 	if (cfg.op == OPMODE_DAEMON) {
 		if (mknod(PIPE, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
@@ -129,6 +153,15 @@ void client_res_init(void) {
 }
 /*@ +nullstate */
 
+/**
+ * Insert a new 'ping' into the result list
+ *
+ * Should be run once for each 'ping', inserting timestamp T1.
+ *
+ * \param a  The server IP address that is being pinged
+ * \param d  The ping data, such as sequence number, session ID, etc.
+ * \param ts Pointer to the timestamp T1
+ */
 void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts) {
 	struct res *r;
 
@@ -149,6 +182,18 @@ void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts) {
 }
 /*@ +compmempass */
 
+/**
+ * Update and print results when new timestamp data arrives
+ *
+ * Can be running multiple times, updating the timestamps of a ping. If
+ * all timestamp info is present, also print the results or send them on
+ * the daemon pipe.
+ *
+ * \param a  The server IP address that is being pinged
+ * \param d  The ping data, such as sequence number, timestamp T2 and T3.. 
+ * \param ts Pointer to a timestamp, such as T4
+ * \warning  We wait until the next timestamp arrives, before printing
+ */
 void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 	struct res *r, *r_tmp;
 	ts_t now, diff, rtt;
@@ -179,7 +224,8 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				r->ts[2] = d->t3;
 			}
 		}
-		/* Because of Intel RX timestamp bug, wait until next TS to print */
+		/* Because of Intel RX timestamp bug, wait until next TS to print 
+		 * in order to have time to correct a previous timestamp */
 		if (old_state == STATE_READY && d->type == 't') {
 			/* Check that all timestamps are present */
 			for (i = 0; i < 4; i++) { 
@@ -194,24 +240,27 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
-			if (r->state == STATE_ERROR) {
-				res_error++;
-			} else {
-				diff_ts(&diff, &r->ts[3], &r->ts[0]);
-				diff_ts(&now, &r->ts[2], &r->ts[1]);
-				diff_ts(&rtt, &diff, &now);
-				if (rtt.tv_sec > 0)
-					printf("Response %03d from %d in %10ld.%09ld\n", 
-							(int)r->seq, (int)r->id, rtt.tv_sec, rtt.tv_nsec);
-				else 
-					printf("Response %03d from %d in %ld ns\n", 
-							(int)r->seq, (int)r->id, rtt.tv_nsec);
-				res_response++;
-				if (cmp_ts(&res_rtt_max, &rtt) == -1)
-					res_rtt_max = rtt;	
-				if (cmp_ts(&res_rtt_min, &rtt) == 1)
-					res_rtt_min = rtt;
-				res_rtt_total = res_rtt_total + rtt.tv_nsec;
+			if (cfg.op == OPMODE_CLIENT) { 
+				if (r->state == STATE_ERROR) {
+					res_error++;
+				} else {
+					diff_ts(&diff, &r->ts[3], &r->ts[0]);
+					diff_ts(&now, &r->ts[2], &r->ts[1]);
+					diff_ts(&rtt, &diff, &now);
+					if (rtt.tv_sec > 0)
+						printf("Response %03d from %d in %10ld.%09ld\n", 
+								(int)r->seq, (int)r->id, rtt.tv_sec, 
+								rtt.tv_nsec);
+					else 
+						printf("Response %03d from %d in %ld ns\n", 
+								(int)r->seq, (int)r->id, rtt.tv_nsec);
+					res_response++;
+					if (cmp_ts(&res_rtt_max, &rtt) == -1)
+						res_rtt_max = rtt;	
+					if (cmp_ts(&res_rtt_min, &rtt) == 1)
+						res_rtt_min = rtt;
+					res_rtt_total = res_rtt_total + rtt.tv_nsec;
+				}
 			}
 			/* Ready; safe removal */
 			r_tmp = r->res_list.le_next;
@@ -224,9 +273,15 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		}
 		diff_ts(&diff, &now, &(r->created)); 
 		if (diff.tv_sec > 10) {
-			printf("Timeout  %03d from %d in %d sec\n", (int)r->seq, 
-					(int)r->id, (int)diff.tv_sec);
-			res_timeout++;
+			r->state = STATE_TIMEOUT;
+			if (cfg.op == OPMODE_DAEMON) 
+				if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
+					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+			if (cfg.op == OPMODE_CLIENT) { 
+				printf("Timeout  %03d from %d in %d sec\n", (int)r->seq, 
+						(int)r->id, (int)diff.tv_sec);
+				res_timeout++;
+			}
 			/* Timeout; safe removal */
 			r_tmp = r->res_list.le_next;
 			/*@ -branchstate -onlytrans TODO wtf */

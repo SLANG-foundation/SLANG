@@ -1,7 +1,10 @@
-/*
- * UDP PING
- *
- * Protocol code for both client and server. 
+/**
+ * \file    mainloop.c
+ * \brief   The main loop for SLA-NG, handling client/server operations
+ * \author  Anders Berggren
+ * \author  Lukas Garberg
+ * \date    2011-01-20
+ * \bug     Only one 'probed' UDP timestmap socket can be used at a time
  */
 
 #include <errno.h>
@@ -14,26 +17,34 @@
 #include "probed.h"
 #include "msess.h"
 
-/*
+/**
+ * Main SLA-NG 'probed' state machine, handling all client/server stuff
+ *
  * The main loop, this is where the magic happens. One UDP (ping/pong)
  * and many TCP sockets (timestamp) is used, and those were created by
- * the function 'bind_or_die'. SLA-NG probed can operate in client and
+ * the function bind_or_die(). SLA-NG probed can operate in client and
  * server mode simultaneously. Client mode probes, sending PINGs, have
  * one forked TCP process each, connecting to the server, in order to
  * receive timestamps reliably. The server mode responder accepts TCP
  * connections, but doesn't fork. It simply keeps the TCP file
  * descriptor as long as the client is alive, sending timestamp packets
- * over it.
+ * over it. We use server_find_peer_fd() to map the address of incoming
+ * UDP pongs to a TCP timestamp client socket.
  *
- * CLIENT MODE
- *  loop: wait for time to send > send UDP ping > save tstamp
- *  loop: wait for UDP pong > save tstamp
- *  loop: wait for pipe tstamp > save tstamp
- *  fork: connect > wait for TCP tstamp > write to pipe > wait...
+ * CLIENT MODE                                                     \n
+ *  loop: wait for time to send > send ping > save tstamp          \n
+ *  loop: wait for pong > save tstamp                              \n
+ *  loop: wait for pipe tstamp > save tstamp                       \n
+ *  fork: connect > wait for TCP tstamp > write to pipe > wait...  \n
  * 
- * SERVER MODE
- *  loop: wait for UDP ping > send UDP pong > find fd > send TCP tstamp
- *  loop: wait for TCP connect > add to fd set > remove dead fds 
+ * SERVER MODE                                                     \n
+ *  loop: wait for ping > send pong > find fd > send TCP tstamp    \n
+ *  loop: wait for TCP connect > add to fd set > remove dead fds   \n
+ *
+ * \param s_udp A listening UDP socket to use for PING/PONG
+ * \param s_tcp A listening TCP socket for client accept and TSTAMP
+ * \return      Nothing
+ * \bug         The 'first', not 'correct' TCP client socket will be used
  */
 void loop_or_die(int s_udp, int s_tcp) {
 	char addrstr[INET6_ADDRSTRLEN];
@@ -68,7 +79,8 @@ void loop_or_die(int s_udp, int s_tcp) {
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
 			//(void)sleep(1); // connect, wait!
 		}
-		(void)signal(SIGINT, client_res_summary);
+		if (cfg.op == OPMODE_CLIENT)
+			(void)signal(SIGINT, client_res_summary);
 	}
 
 	/* Timers for sending data */
@@ -196,11 +208,17 @@ void loop_or_die(int s_udp, int s_tcp) {
 	}
 }
 
-/*
- * The function mapping an address 'peer' to a file descriptor.
+/**
+ * The function mapping an address 'peer' to a socket file descriptor
+ * 
  * It also removes dead peers, as that functionality comes for free
  * when doing 'getpeername'. Therefore, it needs to know the lowest
  * static (listening) fd, in order not to kill them as well.
+ *
+ * \param fd_first The lowest dynamic (client) file descriptor 
+ * \param fd_max   The highest file descriptor 
+ * \param peer     Pointer to IP address to find socket for 
+ * \return File descriptor to client socket  
  */
 int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer) {
 	int i;
