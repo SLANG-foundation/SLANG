@@ -157,8 +157,9 @@ void msess_reset(void) {
 
 }
 
-/*
+/**
  * Get sequence number.
+ *
  * Increases sequence number and returns next value.
  * @param sess Pointer to msess structure.
  * @return Next sequence number.
