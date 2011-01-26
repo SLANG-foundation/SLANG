@@ -1,15 +1,23 @@
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
+#include <string.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
 #include "probed.h"
+#include "msess.h"
 
 struct config cfg;
 
 int main(int argc, char *argv[]) {
-	int arg, s_udp, s_tcp, log;
+
+	int arg, s_udp, s_tcp, log, ret_val;
 	char opmode, tstamp;
 	char *addr, *iface, *port, *cfgpath;
 	xmlDoc *cfgdoc = 0;
+	struct msess *client_msess;
+	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
 
 	/* Default settings */
 	cfgpath = "settings.xml";
@@ -36,10 +44,10 @@ int main(int argc, char *argv[]) {
 		if (arg == (int)'i') iface = optarg;
 		if (arg == (int)'k') tstamp = 'k';
 		if (arg == (int)'u') tstamp = 'u';
-		if (arg == (int)'a') opmode = 'a';
-		if (arg == (int)'s') opmode = 's';
+		if (arg == (int)'a') opmode = OPMODE_DAEMON;
+		if (arg == (int)'s') opmode = OPMODE_SERVER;
 		if (arg == (int)'c') {
-			opmode = 'c';
+			opmode = OPMODE_CLIENT;
 			addr = optarg;
 		}
 	}
@@ -48,16 +56,48 @@ int main(int argc, char *argv[]) {
 
 	/* Startup config, logging and sockets */
 	openlog("probed", log, LOG_USER);
-	reload(&cfgdoc, cfgpath);
+	msess_init();
 	bind_or_die(&s_udp, &s_tcp, (uint16_t)strtoul(port, NULL, 0));
 	if (tstamp == 'h') tstamp_mode_hardware(s_udp, iface);
 	if (tstamp == 'k') tstamp_mode_kernel(s_udp);
 	if (tstamp == 'u') tstamp_mode_userland(s_udp);
 
 	/* Start server, client or api */
-	if (opmode == 's') loop_or_die(s_udp, s_tcp, NULL, port);
-	if (opmode == 'c') loop_or_die(s_udp, s_tcp, addr, port);
-	if (opmode == 'a') p("API mode; both server and client, accepting IPC commands");
+	if (opmode == OPMODE_SERVER) loop_or_die(s_udp, s_tcp, NULL, port);
+	if (opmode == OPMODE_CLIENT) {
+
+		client_msess = msess_add(0);
+		client_msess->interval.tv_sec = 0;
+		client_msess->interval.tv_usec = 500000;
+
+		/* prepare for getaddrinfo */
+		memset(&dst_hints, 0, sizeof dst_hints);
+		dst_hints.ai_family = AF_INET6;
+		dst_hints.ai_flags = AI_V4MAPPED;
+
+		/* get address */
+		ret_val = getaddrinfo(addr, port, &dst_hints, &dst_addr);
+		if (ret_val < 0) {
+			syslog(LOG_ERR, "Unable to look up hostname %s: %s", addr, gai_strerror(ret_val));
+		}
+		memcpy(&client_msess->dst, dst_addr->ai_addr, sizeof client_msess->dst);
+
+		loop_or_die(s_udp, s_tcp, addr, port);
+
+	}
+
+	if (opmode == OPMODE_DAEMON) {
+
+		p("API mode; both server and client, accepting IPC commands");
+
+		/* read config */
+		reload(&cfgdoc, cfgpath);
+		config_msess(cfgdoc);
+		msess_print_all();
+		loop_or_die(s_udp, s_tcp, "::1", port);
+
+	}
+
 	(void)close(s_udp);
 	(void)close(s_tcp);
 	closelog();
@@ -85,6 +125,7 @@ void help_and_die(void) {
  * Reload application
  */
 void reload(xmlDoc **cfgdoc, char *cfgpath) {
+
 	char tmp[TMPLEN] = "";
 
 	if (config_read(cfgdoc, cfgpath) < 0) {
@@ -97,10 +138,6 @@ void reload(xmlDoc **cfgdoc, char *cfgpath) {
 		if (tmp[0] == 't' || tmp[0] == '1') debug(1); 
 		 else debug(0);
 	}
-	/* server port */
-	/*if (config_getkey(*cfgdoc, "/config/port", tmp, TMPLEN) == 0)
-		proto_bind(atoi(tmp));*/
-	/* (re)load measurement sessions */
-	/*config_msess(*cfgdoc);*/
+
 }
 

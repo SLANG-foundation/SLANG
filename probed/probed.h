@@ -26,6 +26,11 @@
 #define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
 #define STATE_READY 'r'
 
+/* operation modes */
+#define OPMODE_SERVER 's'
+#define OPMODE_CLIENT 'c'
+#define OPMODE_DAEMON 'd'
+
 extern struct config cfg;
 
 typedef struct timespec ts_t;
@@ -103,7 +108,7 @@ int addr2str(addr_t *a, /*@out@*/ char *s);
 void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port);
 void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port);
 int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
-int client_fork(int pipe, char *server, char *port);
+pid_t client_fork(int pipe, struct sockaddr_in6 *server);
 
 void tstamp_mode_hardware(int sock, char *iface);
 void tstamp_mode_kernel(int sock);

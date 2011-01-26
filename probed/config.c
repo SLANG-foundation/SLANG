@@ -14,6 +14,7 @@
 #include "probed.h"
 #include <string.h>
 #include <errno.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 
 int config_read(xmlDoc **doc, char *cfgpath) {
@@ -70,11 +71,15 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
  * Sync measurement sessions from config to msess
  */
 int config_msess(xmlDoc *doc) {
+
 	xmlNode *n, *r, *k;
 	/*xmlAttr *a;*/
 	xmlChar *c;
-	struct sockaddr_in6 addr;
+	char port[TMPLEN];
+/*	struct sockaddr_in6 addr; */
 	struct msess *sess;
+	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
+	int ret_val = 0;
 
 	if (doc == 0) {
 		syslog(LOG_ERR, "No configuration.");
@@ -84,6 +89,13 @@ int config_msess(xmlDoc *doc) {
 		syslog(LOG_ERR, "Empty configuration.");
 		return -1;
 	}
+
+	/* get port */
+	if (config_getkey(doc, "/config/port", port, TMPLEN) != 0) {
+		syslog(LOG_CRIT, "Unable to get port from configuration");
+		return -1;
+	}
+
 	/* iterate config - look for <probe> */
 	r = doc->children;
 	for (n = r->children; n != NULL; n = n->next) {
@@ -93,11 +105,9 @@ int config_msess(xmlDoc *doc) {
 			( strncmp((char *)n->name, MSESS_NODE_NAME, strlen(MSESS_NODE_NAME)) == 0 ) 
 			) ) continue; 
 		
-		/* <probe> found - reset */
+		/* <probe> found - reset temporary varsiables and create new msess */
 		sess = malloc(sizeof (struct msess));
 		memset(sess, 0, sizeof (struct msess));
-		memset(&addr, 0, sizeof addr);
-		addr.sin6_family = AF_INET6;
 
 		/* get ID */
 		c = xmlGetProp(n, (xmlChar *)"id");
@@ -127,8 +137,18 @@ int config_msess(xmlDoc *doc) {
 			
 			/* address */
 			if (strcmp((char *)k->name, "address") == 0) {
-				inet_pton(AF_INET6, (char *)c, &addr.sin6_addr.s6_addr);
+				/* prepare for getaddrinfo */
+				memset(&dst_hints, 0, sizeof dst_hints);
+				dst_hints.ai_family = AF_INET6;
+				dst_hints.ai_flags = AI_V4MAPPED;
+
+				ret_val = getaddrinfo((char *)c, port, &dst_hints, &dst_addr);
+				if (ret_val < 0) {
+					syslog(LOG_ERR, "Unable to look up hostname %s: %s", (char *)c, gai_strerror(ret_val));
+				}
+
 /*				printf("   Got address %s\n", c); */
+
 			}
 
 			/* dscp */
@@ -137,22 +157,18 @@ int config_msess(xmlDoc *doc) {
 /*				printf("   Got dscp %s\n", c); */
 			}
 
-			/* port */
-			if (strcmp((char *)k->name, "port") == 0) {
-				addr.sin6_port = htons(atoi((char *)c));
-/*				printf("   Got port %d\n", (int)sess->interval.tv_usec); */
-			}
-
 			xmlFree(c);
 			
 		}
 
-		memcpy(&sess->dst, &addr, sizeof addr);
+		memcpy(&sess->dst, dst_addr->ai_addr, sizeof sess->dst);
+		freeaddrinfo(dst_addr);
+
 		msess_add_or_update(sess);
-		c = xmlNodeGetContent(n);
-/*		printf(" Content: %s\n", c); */
-		xmlFree(c);
+
 	}
+
 	return 0;
+
 }
 

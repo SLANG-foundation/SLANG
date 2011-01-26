@@ -5,7 +5,7 @@
  */
 
 #include <errno.h>
-#include <netdb.h>
+/*#include <netdb.h>*/
 #include <string.h>
 #include <signal.h>
 #include <arpa/inet.h>
@@ -14,6 +14,7 @@
 #include <unistd.h>
 #endif
 #include "probed.h"
+#include "msess.h"
 
 /*
  * The main loop, this is where the magic happens. One UDP (ping/pong)
@@ -37,49 +38,58 @@
  *  loop: wait for TCP connect > add to fd set > remove dead fds 
  */
 void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
-	struct addrinfo /*@dependent@*/ hints;
-	struct addrinfo *ai;
-	char addrstr[INET6_ADDRSTRLEN];
+
 	struct sockaddr_in6 *their, addr_tmp;
+	char addrstr[INET6_ADDRSTRLEN];
 	pkt_t pkt;
 	data_t tx, *rx;
 	struct timespec ts;
 	struct timeval tv, last, now, interval;
 	uint32_t seq;
 	fd_set fs, fs_tmp;
-	int fd, fd_max = 0, fd_first, r;
+	int fd, fd_max = 0, fd_first;
 	int fd_pipe[2];
 	socklen_t slen;
+	int i;
+
+	struct msess *sess;
 
 	/* IPC for children-to-parent (TCP client to UDP state machine) */
 	if (pipe(fd_pipe) < 0) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
 	/* PING results for clients */
 	client_res_init(); 
+
 	/* Address lookup */
 	if (addr == NULL) {
+
 		syslog(LOG_INFO, "Server mode: listening at %s\n", port);
 		their = NULL;
-		ai = NULL;
+
 	} else {
-		(void)client_fork(fd_pipe[1], addr, port);
-		sleep(1);
-		signal(SIGINT, client_res_summary);
-		memset(&hints, 0, sizeof hints);
-		hints.ai_family = AF_INET6;
-		hints.ai_flags = AI_V4MAPPED;
-		r = getaddrinfo(addr, port, &hints, &ai);
-		if (r < 0) {
-			syslog(LOG_ERR, "getaddrinfo: %s", gai_strerror(r));
-			exit(EXIT_FAILURE);
+
+		/* spawn client forks for all measurement sessions */
+		i = 0;
+		msess_print_all();
+		while ( (sess = msess_next()) ) {
+
+			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
+			sleep(1);
+			signal(SIGINT, client_res_summary);
+			their = &sess->dst;
+			if (addr2str(their, addrstr) < 0) 
+				exit(EXIT_FAILURE);
+			syslog(LOG_INFO, "Client mode: PING to %s:%s\n", addrstr, port);
+			printf("i: %d\n", i);
+			i++;
+
 		}
-		their = (struct sockaddr_in6*)ai->ai_addr;
-		if (addr2str(their, addrstr) < 0) 
-			exit(EXIT_FAILURE);
-		syslog(LOG_INFO, "Client mode: PING to %s:%s\n", addrstr, port);
+
 	}
+
 	/* Timers for sending data */
 	seq = 0;
 	interval.tv_sec = 0;
@@ -160,23 +170,32 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 			}
 		} else {
 			/* Send PING */
+
 			if (their == NULL) continue;
+
 			(void)gettimeofday(&now, 0);
-			diff_tv(&tv, &now, &last);
-			if (cmp_tv(&tv, &interval) == 1) {
-				tx.type = TYPE_PING;
-				tx.id = 1;
-				tx.seq = seq;
-				if (send_w_ts(s_udp, their, (char*)&tx, &ts) < 0)
-					continue;
-				client_res_insert(&their->sin6_addr, &tx, &ts);
-				(void)gettimeofday(&last, 0);
-				syslog(LOG_DEBUG, "< PING %d\n", (int)seq);
-				seq++;
+
+			while ( (sess = msess_next()) ) {
+
+				diff_tv(&tv, &now, &sess->last_sent);
+
+				/* time to send new packet? */
+				if (cmp_tv(&tv, &sess->interval) == 1) {
+
+					tx.type = TYPE_PING;
+					tx.id = sess->id;
+					tx.seq = msess_get_seq(sess);
+					if (send_w_ts(s_udp, &sess->dst, (char*)&tx, &ts) < 0)
+						continue;
+					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);
+	
+					memcpy(&sess->last_sent, &now, sizeof now);
+					syslog(LOG_DEBUG, "< PING %d\n", (int)seq);
+
+				}
 			}
 		}
 	}
-	if (ai != NULL) freeaddrinfo(ai);
 }
 
 /*
@@ -216,9 +235,9 @@ int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer) {
  * the 'server' (parent) file descriptor set, for example when
  * doing bi-directional tests (both connecting to each other).
  */
-int client_fork(int pipe, char *server, char *port) {
-	int sock, r;
-	struct addrinfo hints, *ai;
+int client_fork(int pipe, struct sockaddr_in6 *server) {
+
+	int sock, r, client_pid;
 	char addrstr[INET6_ADDRSTRLEN];
 	pkt_t pkt;
 	fd_set fs;
@@ -227,32 +246,29 @@ int client_fork(int pipe, char *server, char *port) {
 	ts_t zero;
 	socklen_t slen;
 
-	/* Create client fork */
-	(void)snprintf(log, 100, "client: %s:", server);
+	/* Create client fork - parent returns */
+	addr2str(server, addrstr);
+	(void)snprintf(log, 100, "client: %s:", addrstr);
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
-	if (fork() > 0) return 0;
+	client_pid = fork();
+	if (client_pid > 0) return client_pid;
+
+	/* 
+	 * We are child 
+	 */
+
 	/* We're going to send a struct packet over the pipe */
 	memset(&pkt.ts, 0, sizeof zero);
+
 	/* Try to stay connected to server; forever */
 	while (1 == 1) {
-		memset(&hints, 0, sizeof hints);
-		hints.ai_family = AF_INET6;
-		hints.ai_flags = AI_V4MAPPED;
-		hints.ai_socktype = SOCK_STREAM;
-		r = getaddrinfo(server, port, &hints, &ai);
-		if (r < 0) {
-			syslog(LOG_ERR, "%s getaddrinfo: %s", log, gai_strerror(r));
-			(void)sleep(10);
-			continue;
-		}
-		memcpy(&pkt.addr, ai->ai_addr, sizeof pkt.addr);
-		freeaddrinfo(ai);
+		memcpy(&pkt.addr, server, sizeof pkt.addr);
 		if (addr2str(&pkt.addr, addrstr) < 0) {
 			(void)sleep(10);
 			continue;
 		}
-		syslog(LOG_INFO, "%s Connecting to %s port %s\n", log, addrstr, port);
+		syslog(LOG_INFO, "%s Connecting to %s port %d\n", log, addrstr, ntohs(server->sin6_port));
 		sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);	
 		if (sock < 0) {
 			syslog(LOG_ERR, "%s socket: %s", log, strerror(errno));

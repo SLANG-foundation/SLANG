@@ -9,7 +9,7 @@
 	<probe id="123">
 		<name>lab-slang-3</name>
 		<port>60666</port>
-		<address>::ffff:10.10.10.3</address>
+		<address>10.10.10.3</address>
 		<dscp>8</dscp>
 		<interval>100000</interval>
 		<type>slang</type>

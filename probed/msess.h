@@ -13,9 +13,10 @@ typedef uint16_t msess_id;
 /* Struct for storing configuration for one measurement session */
 struct msess {
 	msess_id id;
-	struct sockaddr_storage dst;
+	struct sockaddr_in6 dst;
 	struct timeval interval;
 	uint8_t dscp;
+	pid_t child_pid;
 	uint32_t last_seq;
 	struct timeval last_sent;
 	LIST_ENTRY(msess) entries;
