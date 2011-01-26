@@ -1,7 +1,7 @@
 C = cc
 F = -O0 -c -Wall -I .. -I /usr/include/libxml2 -g
 #F = -pg -fprofile-arcs -ftest-coverage -c -Wall -I .. -I /usr/include/libxml2 -g
-S = config_t.c ../msess.c ../config.c
+S = config_t.c ../util.c ../msess.c ../config.c
 I = ../msess.h
 L = -lrt -lxml2
 #L = -pg -fprofile-arcs -ftest-coverage

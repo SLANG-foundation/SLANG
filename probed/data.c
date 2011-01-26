@@ -40,13 +40,14 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	} else {
 		if ((flags & MSG_ERRQUEUE) != 0) {
 			/* store kernel tx tstamp */
-			if (tstamp_extract(msg, &(pkt->ts)) < 0) return -1;
+			if (tstamp_extract(msg, &pkt->ts) < 0) 
+				return -1;
 			/* tx timestamp packet, just save and bail */
 			return 0;
 		} else {
 			/* store rx tstamp */
-			if (tstamp_extract(msg, &(pkt->ts)) < 0)
-				syslog(LOG_ERR, "RX timestamp error.");
+			if (tstamp_extract(msg, &pkt->ts) < 0)
+				syslog(LOG_ERR, "RX timestamp error");
 			return 0;
 		}
 	}

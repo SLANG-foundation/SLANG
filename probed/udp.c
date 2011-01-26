@@ -27,22 +27,22 @@
  * descriptor as long as the client is alive, sending timestamp packets
  * over it.
  *
- * CLIENT
+ * CLIENT MODE
  *  loop: wait for time to send > send UDP ping > save tstamp
  *  loop: wait for UDP pong > save tstamp
  *  loop: wait for pipe tstamp > save tstamp
  *  fork: connect > wait for TCP tstamp > write to pipe > wait...
  * 
- * SERVER
+ * SERVER MODE
  *  loop: wait for UDP ping > send UDP pong > find fd > send TCP tstamp
  *  loop: wait for TCP connect > add to fd set > remove dead fds 
  */
 void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 
-	struct sockaddr_in6 *their, addr_tmp;
 	char addrstr[INET6_ADDRSTRLEN];
+	struct sockaddr_in6 *their, addr_tmp, addr_last;
 	pkt_t pkt;
-	data_t tx, *rx;
+	data_t *rx, tx, tx_last;
 	struct timespec ts;
 	struct timeval tv, last, now, interval;
 	uint32_t seq;
@@ -77,8 +77,8 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 		while ( (sess = msess_next()) ) {
 
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
-			sleep(1);
-			signal(SIGINT, client_res_summary);
+			(void)sleep(1); // connect, wait!
+			(void)signal(SIGINT, client_res_summary);
 			their = &sess->dst;
 			if (addr2str(their, addrstr) < 0) 
 				exit(EXIT_FAILURE);
@@ -107,6 +107,8 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	if (fd_pipe[0] > fd_max) fd_max = fd_pipe[0];
 	if (fd_pipe[1] > fd_max) fd_max = fd_pipe[1];
 	fd_first = fd_max;
+	memset(&addr_last, 0, sizeof addr_last);
+	memset(&tx_last, 0, sizeof tx_last);
 	/* Let's loop those sockets! */
 	while (1 == 1) {
 		fs_tmp = fs;
@@ -120,13 +122,33 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 					continue;
 				rx = (data_t *)&pkt.data;
 				if (pkt.data[0] == TYPE_PING) {
-					syslog(LOG_INFO, "> PING %d\n", rx->seq);
+					syslog(LOG_DEBUG, "> PING %d\n", rx->seq);
+					/* Send UDP PONG */
 					tx.type = TYPE_PONG;
-					tx.seq = rx->seq;
 					tx.id = rx->id;
+					tx.seq = rx->seq;
 					tx.t2 = pkt.ts;
 					(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);
+					/* Send TCP timestamp */
 					tx.t3 = ts;
+					tx.type = TYPE_TIME;
+					/* In case of Intel RX timestamp error, kill last ts */
+					if (pkt.ts.tv_sec == 0 && pkt.ts.tv_nsec == 0) {
+						fd = server_find_peer_fd(fd_first, fd_max, &addr_last);
+						syslog(LOG_ERR, "RX tstamp error, killing %d on %d",
+								tx_last.seq, tx_last.id);
+						if (fd >= 0) {
+							tx_last.t2.tv_sec = 0;
+							tx_last.t2.tv_nsec = 0;
+							tx_last.t3.tv_sec = 0;
+							tx_last.t3.tv_nsec = 0;
+							(void)send(fd, (char*)&tx_last, DATALEN, 0);
+						} 
+					}
+					/* Save addr and data for later, in case next is error */ 
+					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
+					//tx_last = tx;
+					/* Really send TCP */
 					syslog(LOG_DEBUG, "< PONG %d\n", tx.seq);
 					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
 					if (fd < 0) continue;

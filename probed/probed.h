@@ -48,22 +48,22 @@ struct res {
 	struct in6_addr addr;
 	num_t id;
 	num_t seq;
-	ts_t ts[4];
+	/*@dependent@*/ ts_t ts[4];
 	LIST_ENTRY(res) res_list;
 };
 
 struct packet {
 	addr_t addr; 
 	char data[DATALEN];
-	ts_t ts;
+	/*@dependent@*/ ts_t ts;
 };
 typedef struct packet pkt_t;
 struct packet_data {
 	char type;
 	num_t seq;
 	num_t id;
-	ts_t t2;
-	ts_t t3;
+	/*@dependent@*/ ts_t t2;
+	/*@dependent@*/ ts_t t3;
 };
 typedef struct packet_data data_t;
 
@@ -86,21 +86,14 @@ struct scm_timestamping {
 	struct timespec hwtimeraw;
 };
 
-/*enum TS_TYPES {
-	T1,
-	T2,
-	T3,
-	T4
-};*/
-
 int main(int argc, char *argv[]);
 void help_and_die(void);
 void reload(xmlDoc **cfgdoc, char *cfgpath);
 
 void debug(int enabled);
 void p(char *str);
-void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg);
-void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg);
+void diff_ts(/*@out@*/ ts_t *r, ts_t *end, ts_t *beg);
+void diff_tv(struct timeval *r, struct timeval *end, struct timeval *beg);
 int cmp_ts(struct timespec *t1, struct timespec *t2);
 int cmp_tv(struct timeval *t1, struct timeval *t2);
 int addr2str(addr_t *a, /*@out@*/ char *s);
@@ -124,9 +117,9 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
 int config_msess(xmlDoc *doc);
 
 void client_res_init(void);
-void client_res_insert(struct in6_addr *addr, data_t *data, ts_t *ts);
-void client_res_update(struct in6_addr *addr, data_t *data, ts_t *ts);
-void client_res_summary(int sig);
+void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts);
+void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts);
+void client_res_summary(/*@unused@*/ int sig);
 
 void unix_fd_set(int sock, /*@out@*/ fd_set *fs);
 void unix_fd_zero(/*@out@*/ fd_set *fs);

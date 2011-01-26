@@ -34,7 +34,8 @@ void debug(int enabled) {
 
 /*@ -type Disable fucked up 'Arrow access field of non-struct...' */
 /* calculate nsec precision diff for positive time */
-void diff_ts (struct timespec *r, struct timespec *end, struct timespec *beg) {
+void diff_ts (/*@out@*/ ts_t *r, ts_t *end, ts_t *beg) {
+	memset(r, 0, sizeof *r);
 	if ((end->tv_nsec - beg->tv_nsec) < 0) {
 		r->tv_sec = end->tv_sec - beg->tv_sec - 1;
 		r->tv_nsec = 1000000000 + end->tv_nsec - beg->tv_nsec;

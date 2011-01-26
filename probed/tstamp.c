@@ -165,9 +165,9 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 		if (select(sock + 1, &fs, NULL, NULL, &tv) > 0) {
 			/* We have a normal packet OR a timestamp */
 			if (recv_w_ts(sock, MSG_ERRQUEUE, &pkt) == 0) {
-				/*@ -onlytrans Please, let me copy the timestamp */
+				/*@ -dependenttrans Please, let me copy the timestamp */
 				*ts = pkt.ts;
-				/*@ +onlytrans */
+				/*@ +dependenttrans */
 				return 0;
 			}
 		}
