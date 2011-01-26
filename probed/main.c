@@ -1,3 +1,11 @@
+/**
+ * \file   main.c
+ * \brief  main() that parses arguments and hands over to mainloop.c
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
+ * \date   2010-11-01
+ */ 
+
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
@@ -8,6 +16,10 @@
 
 struct config cfg;
 
+/**
+ * Sets default values, parses arguments, and start main loop. General
+ * SLA-NG documentation is found for loop_or_die() in mainloop.c
+ */
 int main(int argc, char *argv[]) {
 
 	int arg, s_udp, s_tcp, log, ret_val;
@@ -100,6 +112,9 @@ int main(int argc, char *argv[]) {
 	exit(EXIT_FAILURE);
 }
 
+/**
+ * Prints the CLI help message, when 'probed' is started without arguments
+ */
 void help_and_die(void) {
 	p("usage: probed [-saqd] [-c addr] [-t type] [-i iface] [-p port]");
 	p("");

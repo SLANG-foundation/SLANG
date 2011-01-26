@@ -1,8 +1,8 @@
 /**
  * \file   client.c
  * \brief  Contains 'client' (PING) specific code, and result handling  
- * \author Anders Berggren
- * \author Lukas Garberg
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
  * \date   2011-01-10
  * \todo   Lots of LINT (splint) warnings that I don't understand
  */
@@ -26,6 +26,7 @@
 #define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
 #define STATE_READY 'r'
 #define STATE_ERROR 'e' /* Missing timestamp (Intel...?) */
+#define STATE_TIMEOUT 't'
 
 /*@ -exportlocal TODO wtf */
 int res_response = 0;

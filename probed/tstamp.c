@@ -1,14 +1,15 @@
-/*
- * TIMESTAMPING API 
- * Author: Anders Berggren
+/**
+ * \file   tstamp.c
+ * \brief  Timestamp init (ioctl) and extraction (MSG_ERRQUEUE and CMSG)
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
+ * \date   2010-11-05
  *
  * - Hardware timestamps require SO_TIMESTAMPING on socket and ioctl on device.
- * - Kernel   timestamps require SO_TIMESTAMPING on socket.
+ * - Kernel   timestamps require SO_TIMESTAMPING on socket and cool drivers.
  * - Userland timestamps require SO_TIMESTAMPNS  on socket. 
  *
  * Function tstamp_hw()
- * Contains commands for activating hardware timestamping on both socket "s"
- * and on network interface "iface". Has to be run synchroniously.
  * 
  * Function tstamp_kernel()
  * Enable kernel timestamping, disable hardware timestamping.
@@ -29,10 +30,17 @@
 #include "external/sockios.h"
 #include "external/net_tstamp.h"
 
-/*
+/**
  * Try to enable hardware timestamping, otherwise fall back to kernel.
- * LINT 'unique' is added to iface, since strncpy has undefined behaviour
- * if sharing storage with dev. 
+ *
+ * Run ioctl() on 'iface' (supports Intel 82580 right now) and run
+ * setsockopt SO_TIMESTAMPING with RAW_HARDWARE on socket 'sock'. 
+ * 
+ * \param[in] sock  The socket to activate SO_TIMESTAMPING on (the UDP)
+ * \param[in] iface The interface name to ioctl SIOCSHWTSTAMP on
+ * \warning         Requires CONFIG_NETWORK_PHY_TIMESTAMPING Linux option
+ * \warning         Supports only Intel 82580 right now
+ * \bug             Intel 82580 has bugs such as IPv4 only, and RX issues
  */
 void tstamp_mode_hardware(int sock, char *iface) {
 	struct ifreq dev; /* request to ioctl */
@@ -78,6 +86,15 @@ void tstamp_mode_hardware(int sock, char *iface) {
 	cfg.ts = 'h';
 }
 
+/**
+ * Try to enable kernel timestamping, otherwise fall back to software.
+ *
+ * Run setsockopt SO_TIMESTAMPING with SOFTWARE on socket 'sock'. 
+ * 
+ * \param[in] sock  The socket to activate SO_TIMESTAMPING on (the UDP)
+ * \warning         Requires CONFIG_NETWORK_PHY_TIMESTAMPING Linux option
+ * \warning         Requires drivers fixed with skb_tx_timestamp() 
+ */
 void tstamp_mode_kernel(int sock) {
 	int f = 0; /* flags to setsockopt for socket request */
 	socklen_t slen;
@@ -96,6 +113,14 @@ void tstamp_mode_kernel(int sock) {
 	cfg.ts = 'k';
 }
 
+/**
+ * Enable software timestamping, usually as last resort.
+ *
+ * Run setsockopt SO_TIMESTAMPNS on socket 'sock'. 
+ * 
+ * \param[in] sock  The socket to activate SO_TIMESTAMPING on (the UDP)
+ * \warning         Really sucks in terms of accuracy! Use kernel/hardware
+ */
 void tstamp_mode_userland(sock) {
 	int yes = 1;
 	socklen_t slen;
@@ -107,8 +132,16 @@ void tstamp_mode_userland(sock) {
 	cfg.ts = 'u';
 }
 
-/* 
- * Extracts the timestamp from a packet 'msg'
+/**
+ * Extracts the timestamp from a packet 'msg's CMSG data
+ *
+ * Normally invoked only by recv_w_ts(), and indirectly by send_w_ts() via
+ * the function tstamp_fetch_tx(). Depending on timestamp method (defined
+ * in the global variable cfg's 'ts' field) fetch the correct CMSG field
+ * and store it's timestamp.
+ * 
+ * \param[in]  msg Pointer to the message's header data
+ * \param[out] ts  Pointer to timestamp where timestamp is saved
  */
 int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 	struct cmsghdr *cmsg;
@@ -139,13 +172,19 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 	return -1;
 }
 
-/*
+/**
+ * Fetch a TX timestamp, should be executed right after send()
+ *
  * Function that waits for a TX timestamp on the error queue, used for 
  * the kernel (and hardware) timestamping mode. It does so by select()ing 
  * reads, and checking for approx 1 second. Note that normal packets will
  * trigger the select() as well, therefore the while-loop is needed. 
  * As usual, the timestamp is stored by data_recv() calling tstamp_get()
  * in the global variable ts.
+ *
+ * \param[in]  sock Socket to read timestamp from
+ * \param[out] Pointer to timestamp, where the TX timestamp is saved
+ * \bug        Waits (selects) during 1-2 seconds, blocking, which is bad
  */
 int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 	pkt_t pkt;

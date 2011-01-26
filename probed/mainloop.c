@@ -1,10 +1,10 @@
 /**
- * \file    mainloop.c
- * \brief   The main loop for SLA-NG, handling client/server operations
- * \author  Anders Berggren
- * \author  Lukas Garberg
- * \date    2011-01-20
- * \bug     Only one 'probed' UDP timestmap socket can be used at a time
+ * \file   mainloop.c
+ * \brief  The main loop for SLA-NG, handling client/server operations
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
+ * \date   2011-01-20
+ * \bug    Only one 'probed' UDP timestmap socket can be used at a time
  */
 
 #include <errno.h>
@@ -41,10 +41,9 @@
  *  loop: wait for ping > send pong > find fd > send TCP tstamp    \n
  *  loop: wait for TCP connect > add to fd set > remove dead fds   \n
  *
- * \param s_udp A listening UDP socket to use for PING/PONG
- * \param s_tcp A listening TCP socket for client accept and TSTAMP
- * \return      Nothing
- * \bug         The 'first', not 'correct' TCP client socket will be used
+ * \param[in] s_udp A listening UDP socket to use for PING/PONG
+ * \param[in] s_tcp A listening TCP socket for client accept and TSTAMP
+ * \bug       The 'first', not 'correct' TCP client socket will be used
  */
 void loop_or_die(int s_udp, int s_tcp) {
 	char addrstr[INET6_ADDRSTRLEN];
@@ -215,10 +214,10 @@ void loop_or_die(int s_udp, int s_tcp) {
  * when doing 'getpeername'. Therefore, it needs to know the lowest
  * static (listening) fd, in order not to kill them as well.
  *
- * \param fd_first The lowest dynamic (client) file descriptor 
- * \param fd_max   The highest file descriptor 
- * \param peer     Pointer to IP address to find socket for 
- * \return File descriptor to client socket  
+ * \param[in] fd_first The lowest dynamic (client) file descriptor 
+ * \param[in] fd_max   The highest file descriptor 
+ * \param[in] peer     Pointer to IP address to find socket for 
+ * \return    File descriptor to client socket of address 'peer'
  */
 int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer) {
 	int i;

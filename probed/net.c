@@ -1,7 +1,27 @@
+/**
+ * \file   net.c
+ * \brief  Wrapped network functions, such as 'receive with timestamp'
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
+ * \date   2010-12-01
+ */
+
 #include <time.h>
 #include <errno.h>
 #include <string.h>
 #include "probed.h"
+
+/**
+ * Receive on socket 'sock' into struct pkt with timestamp
+ *
+ * Wraps the recv() function, but optimized for the struct pkt_t. The 
+ * function receives DATALEN bytes, and places both address, data and
+ * RX timestamp into the struct pkt.
+ * \param[in]  sock  The socket to read from
+ * \param[in]  flags Flags to recv(), usually for reading from error queue
+ * \param[out] pkt   Pointer to pkt, where addr, data and tstamp is placed
+ * \warning          This function only receices DATALEN bytes
+ */
 
 int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	socklen_t addrlen;
@@ -26,10 +46,8 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	msg[0].msg_controllen = sizeof control;
 
 	if (recvmsg(sock, msg, flags) < 0) {
-		if ((flags & MSG_ERRQUEUE) != 0)
-		{}
-			//syslog(LOG_INFO, "recvmsg: %s (ts)", strerror(errno));
-		else
+		/* Don't warn about err queue, send_w_ts will figure that out */
+		if ((flags & MSG_ERRQUEUE) == 0)
 			syslog(LOG_INFO, "recvmsg: %s", strerror(errno));
 		return -1;
 	} else {
@@ -47,6 +65,21 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 		}
 	}
 }
+
+/**
+ * Send 'data' to 'addr'  on socket 'sock' with timestamp
+ *
+ * Wraps the send() function, but optimized for SLA-NG. It sends DATALEN
+ * bytes ('data' has to be that large) onto 'sock' and places the TX 
+ * timestamp in 'ts'.
+ * \param[in]  sock  The socket to read from
+ * \param[in]  addr  Pointer to address where to send the data
+ * \param[in]  data  Pointer to the data to send
+ * \param[out] ts    Pointer to ts, where to put the TX timestamp
+ * \warning          This function only send DATALEN bytes
+ * \bug              Will report TX timestamp error if sending data to other 
+ *                   interface than the one SO_TIMESTAMPING is active on.
+ */
 
 int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	socklen_t slen;
@@ -70,6 +103,15 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	}
 	return 0;
 }
+
+/**
+ * Bind two listening sockets, one UDP (ping/pong) and one TCP (timestamps)
+ * 
+ * \param[out] s_udp Pointer to UDP socket to create and bind
+ * \param[out] s_tcp Pointer to TCP socket to create, bind and listen
+ * \param[in]  port  The port number to use for binding
+ * \warning          Should be run only once
+ */
 
 void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 	int f = 0;
