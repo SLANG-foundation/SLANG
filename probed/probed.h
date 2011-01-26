@@ -34,6 +34,7 @@ typedef uint32_t num_t;
 
 struct config {
 	char ts; /* timestamping type (u)ser (k)ern (h)w */
+	int pipe; /* file descriptor to named pipe for daemon mode */
 };
 
 LIST_HEAD(res_listhead, res) res_head;
