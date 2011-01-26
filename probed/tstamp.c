@@ -57,9 +57,9 @@ void tstamp_mode_hardware(int sock, char *iface) {
 	/* apply by sending to ioctl */
 	if (ioctl(sock, SIOCSHWTSTAMP, &dev) < 0) {
 		syslog(LOG_ERR, "ioctl: SIOCSHWTSTAMP: %s", strerror(errno));
-		syslog(LOG_ERR, "Check %s, and that you're root.\n", iface);
+		syslog(LOG_ERR, "Check %s, and that you're root\n", iface);
 		/* otherwise, try kernel timestamps (socket only) */ 
-		syslog(LOG_INFO, "Falling back to kernel timestamps.");
+		syslog(LOG_INFO, "Falling back to kernel timestamps");
 		tstamp_mode_kernel(sock);
 		return;
 	}
@@ -70,11 +70,11 @@ void tstamp_mode_hardware(int sock, char *iface) {
 	if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPING, &f, slen) < 0) {
 		/* bail to userland timestamps (socket only) */ 
 		syslog(LOG_ERR, "SO_TIMESTAMPING: %s", strerror(errno));
-		syslog(LOG_INFO, "Falling back to userland timestamps.");
+		syslog(LOG_INFO, "Falling back to userland timestamps");
 		tstamp_mode_userland(sock);
 		return;
 	}
-	syslog(LOG_INFO, "Using hardware timestamps.");
+	syslog(LOG_INFO, "Using hardware timestamps");
 	cfg.ts = 'h';
 }
 
@@ -88,11 +88,11 @@ void tstamp_mode_kernel(int sock) {
 	f |= SOF_TIMESTAMPING_SOFTWARE;
 	if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPING, &f, slen) < 0) {
 		syslog(LOG_ERR, "SO_TIMESTAMPING: %s", strerror(errno));
-		syslog(LOG_INFO, "Falling back to userland timestamps.");
+		syslog(LOG_INFO, "Falling back to userland timestamps");
 		tstamp_mode_userland(sock);
 		return;
 	}
-	syslog(LOG_INFO, "Using kernel timestamps.");
+	syslog(LOG_INFO, "Using kernel timestamps");
 	cfg.ts = 'k';
 }
 
@@ -103,7 +103,7 @@ void tstamp_mode_userland(sock) {
 	slen = (socklen_t)sizeof yes;
 	if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &yes, slen) < 0)
 		syslog(LOG_ERR, "SO_TIMESTAMP: %s", strerror(errno));
-	syslog(LOG_INFO, "Using userland timestamps.");
+	syslog(LOG_INFO, "Using userland timestamps");
 	cfg.ts = 'u';
 }
 

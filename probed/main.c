@@ -13,7 +13,7 @@ struct config cfg;
 int main(int argc, char *argv[]) {
 
 	int arg, s_udp, s_tcp, log, ret_val;
-	char opmode, tstamp;
+	char tstamp;
 	char *addr, *iface, *port, *cfgpath;
 	xmlDoc *cfgdoc = 0;
 	struct msess *client_msess;
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 	log = LOG_PERROR; /* Print to stdout */
 	iface = "eth0"; /* Why not hehe */
 	port = "60666"; /* Sexy port */
-	opmode = 'h'; /* Operation mode: help */
+	cfg.op = 'h'; /* Operation mode: help */
 	tstamp = 'h'; /* Timestamp mode: hardware */
 	addr = "";
 
@@ -35,23 +35,23 @@ int main(int argc, char *argv[]) {
 	/*@ -branchstate OK that opcode. etc changes storage @*/
 	/*@ -unrecog OK that 'getopt' and 'optarg' is missing; SPlint bug */
 	/* +charintliteral OK to compare 'arg' (int) int with char @*/
-	while ((arg = getopt(argc, argv, "qdashc:i:p:ku")) != -1) {
+	while ((arg = getopt(argc, argv, "qdvshc:i:p:ku")) != -1) {
 		if (arg == (int)'h') help_and_die();
 		if (arg == (int)'?') exit(EXIT_FAILURE);
 		if (arg == (int)'q') log = 0;
-		if (arg == (int)'d') debug(1);
+		if (arg == (int)'v') debug(1);
 		if (arg == (int)'f') cfgpath = optarg;
 		if (arg == (int)'i') iface = optarg;
 		if (arg == (int)'k') tstamp = 'k';
 		if (arg == (int)'u') tstamp = 'u';
-		if (arg == (int)'a') opmode = OPMODE_DAEMON;
-		if (arg == (int)'s') opmode = OPMODE_SERVER;
+		if (arg == (int)'d') cfg.op = OPMODE_DAEMON;
+		if (arg == (int)'s') cfg.op = OPMODE_SERVER;
 		if (arg == (int)'c') {
-			opmode = OPMODE_CLIENT;
+			cfg.op = OPMODE_CLIENT;
 			addr = optarg;
 		}
 	}
-	if (opmode == 'h') help_and_die();
+	if (cfg.op == 'h') help_and_die();
 	/*@ +branchstate -charintliteral +unrecog @*/
 
 	/* Startup config, logging and sockets */
@@ -62,10 +62,9 @@ int main(int argc, char *argv[]) {
 	if (tstamp == 'k') tstamp_mode_kernel(s_udp);
 	if (tstamp == 'u') tstamp_mode_userland(s_udp);
 
-	/* Start server, client or api */
-	if (opmode == OPMODE_SERVER) loop_or_die(s_udp, s_tcp, NULL, port);
-	if (opmode == OPMODE_CLIENT) {
-
+	/* Start server, client or daemon */
+	if (cfg.op == OPMODE_SERVER) loop_or_die(s_udp, s_tcp);
+	if (cfg.op == OPMODE_CLIENT) {
 		client_msess = msess_add(0);
 		client_msess->interval.tv_sec = 0;
 		client_msess->interval.tv_usec = 500000;
@@ -78,24 +77,19 @@ int main(int argc, char *argv[]) {
 		/* get address */
 		ret_val = getaddrinfo(addr, port, &dst_hints, &dst_addr);
 		if (ret_val < 0) {
-			syslog(LOG_ERR, "Unable to look up hostname %s: %s", addr, gai_strerror(ret_val));
+			syslog(LOG_ERR, "Unable to look up hostname %s: %s", addr, 
+					gai_strerror(ret_val));
 		}
 		memcpy(&client_msess->dst, dst_addr->ai_addr, sizeof client_msess->dst);
-
-		loop_or_die(s_udp, s_tcp, addr, port);
-
+		loop_or_die(s_udp, s_tcp);
 	}
 
-	if (opmode == OPMODE_DAEMON) {
-
-		p("API mode; both server and client, accepting IPC commands");
-
+	if (cfg.op == OPMODE_DAEMON) {
+		p("Daemon mode; both server and client, output to pipe");
 		/* read config */
 		reload(&cfgdoc, cfgpath);
 		config_msess(cfgdoc);
-		msess_print_all();
-		loop_or_die(s_udp, s_tcp, "::1", port);
-
+		loop_or_die(s_udp, s_tcp);
 	}
 
 	(void)close(s_udp);
@@ -108,16 +102,16 @@ void help_and_die(void) {
 	p("usage: probed [-saqd] [-c addr] [-t type] [-i iface] [-p port]");
 	p("");
 	p("\t          MODES OF OPERATION");
-	p("\t-s        Server mode: respond to PING, send UDP timestamps");
 	p("\t-c addr   Client mode: PING 'addr', fetch UDP timestamps");
-	p("\t-a        API mode: both server and client, accept IPC commands");
+	p("\t-s        Server mode: respond to PING, send UDP timestamps");
+	p("\t-d        Daemon mode: both server and client, output to pipe");
 	p("");
 	p("\t          OPTIONS");
 	p("\t-k        Create timestamps in kernel driver instead of hardware");
 	p("\t-u        Create timestamps in userland instead of hardware");
 	p("\t-i iface  Network interface used for hardware timestamping");
 	p("\t-p port   UDP port, both source and destination");
-	p("\t-d        Output more debugging");
+	p("\t-v        Output more debugging");
 	p("\t-q        Be quiet, log error to syslog only");
 	exit(EXIT_FAILURE);
 }

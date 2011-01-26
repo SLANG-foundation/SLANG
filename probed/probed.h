@@ -26,7 +26,6 @@
 #define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
 #define STATE_READY 'r'
 
-/* operation modes */
 #define OPMODE_SERVER 's'
 #define OPMODE_CLIENT 'c'
 #define OPMODE_DAEMON 'd'
@@ -39,6 +38,8 @@ typedef uint32_t num_t;
 
 struct config {
 	char ts; /* timestamping type (u)ser (k)ern (h)w */
+	char op; /* operation mode (s)erver (c)liet (d)daemon */
+	int pipe; /* file descriptor to named pipe for daemon mode */
 };
 
 LIST_HEAD(res_listhead, res) res_head;
@@ -99,7 +100,7 @@ int cmp_tv(struct timeval *t1, struct timeval *t2);
 int addr2str(addr_t *a, /*@out@*/ char *s);
 
 void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port);
-void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port);
+void loop_or_die(int s_udp, int s_tcp);
 int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
 pid_t client_fork(int pipe, struct sockaddr_in6 *server);
 
