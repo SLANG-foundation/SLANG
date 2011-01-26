@@ -64,13 +64,12 @@ void loop_or_die(int s_udp, int s_tcp) {
 	if (cfg.op == OPMODE_SERVER) {
 		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
 	} else {
-		(void)signal(SIGINT, client_res_summary);
 		/* spawn client forks for all measurement sessions */
 		while ((sess = msess_next()) != NULL) {
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
 			//(void)sleep(1); // connect, wait!
 		}
-
+		(void)signal(SIGINT, client_res_summary);
 	}
 
 	/* Timers for sending data */
