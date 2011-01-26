@@ -1,5 +1,9 @@
-/*
+/**
  * Contains various utilities.
+ * 
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
+ * \file util.c
  */
 
 #include <errno.h>
@@ -7,9 +11,15 @@
 #include <arpa/inet.h>
 #include "probed.h"
 
-/* 
+/** 
+ * Create string containing IP address.
+ *
  * Place human-readable IPv6 or IPv6-mapped-IPv4 address into
  * string 's' with size INET6_ADDRSTRLEN.
+ *
+ * \param[in] a sockaddr_in6 to fetch address from.
+ * \param[out] s Buffer where the string is written.
+ * \return Status; 0 on success, <0 on failure.
  */
 int addr2str(addr_t *a, /*@out@*/ char *s) {
 	if (inet_ntop(AF_INET6, &(a->sin6_addr), s, INET6_ADDRSTRLEN) == NULL) {
@@ -19,13 +29,24 @@ int addr2str(addr_t *a, /*@out@*/ char *s) {
 	return 0;
 }
 
-/*
+/**
+ * Prints a string.
+ *
  * Just print 'str' content, without respect to return value.
+ * \param[in] String to print.
  */
 void p(char *str) {
 	(void)puts(str);
 }
 
+/**
+ * Enable debug logging.
+ *
+ * Configures the syslog handler to enable/disable logging of debug
+ * messages.
+ *
+ * \param[in] enabled Boolean to determine to enable or disable.
+ */
 void debug(int enabled) {
 	if (enabled == 1) (void)setlogmask(LOG_UPTO(LOG_DEBUG));
 	else (void)setlogmask(LOG_UPTO(LOG_INFO));
@@ -33,7 +54,15 @@ void debug(int enabled) {
 }
 
 /*@ -type Disable fucked up 'Arrow access field of non-struct...' */
-/* calculate nsec precision diff for positive time */
+/**
+ * Calculates the difference between two timespec.
+ *
+ * Calculates the value \p end - \p beg.
+ * 
+ * \param[out] r Pointer to timespec where result will be written.
+ * \param[in] end Time #1.
+ * \param[in] beg Time #2.
+ */
 void diff_ts (/*@out@*/ ts_t *r, ts_t *end, ts_t *beg) {
 	memset(r, 0, sizeof *r);
 	if ((end->tv_nsec - beg->tv_nsec) < 0) {
@@ -45,7 +74,15 @@ void diff_ts (/*@out@*/ ts_t *r, ts_t *end, ts_t *beg) {
 	}
 }
 
-/* calculate usec precision diff for positive time */
+/**
+ * Calculates the difference between two timeval.
+ *
+ * Calculates the value \p end - \p beg.
+ * 
+ * \param[out] r Pointer to timeval where result will be written.
+ * \param[in] end Time #1.
+ * \param[in] beg Time #2.
+ */
 void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg) {
 	if ((end->tv_usec - beg->tv_usec) < 0) {
 		r->tv_sec = end->tv_sec - beg->tv_sec - 1;
@@ -56,10 +93,14 @@ void diff_tv (struct timeval *r, struct timeval *end, struct timeval *beg) {
 	}
 }
 
-/* 
- * compare two timespecs 
+/** 
+ * Compare two timespec.
  *
- * Returns -1 if t1 < t2, 1 if t1 > t2 and 0 if t1 == t2
+ * Returns -1 if \p t1 < \p t2, 1 if \p t1 > \p t2 and 0 if \p t1 == \p t2
+ *
+ * \param[in] t1 Time #1.
+ * \param[in] t2 Time #2.
+ * \return Comparison result.
  */
 int cmp_ts(struct timespec *t1, struct timespec *t2) {
 
