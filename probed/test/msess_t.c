@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 	msess_id *sess_id;
 
 	/* handle CLI arguments */
-	if (argc < 1) {
+	if (argc < 2) {
 		printf("%s num_sessions\n", argv[0]);
 		exit(1);
 	}
@@ -76,6 +76,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	msess_print_all();
+
+
+	/* Testing iteration */
+	printf("Looping through all msesses #1\n");
+	while ( (a = msess_next()) ) {
+		printf("Found msess %d\n", a->id);
+	}
+
+	printf("Looping through all msesses #2\n");
+	while ( (a = msess_next()) ) {
+		printf("Found msess %d\n", a->id);
+	}
 
 	diff_tv(&r, &t4, &t1);
 	printf("total %d.%0d s\n", (int)r.tv_sec, (int)r.tv_usec);

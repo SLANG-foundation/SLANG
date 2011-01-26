@@ -49,6 +49,7 @@ void msess_add_or_update(struct msess *nsess) {
 	if (ssess == NULL) {
 		/* add new */
 		LIST_INSERT_HEAD(&sessions_head, nsess, entries);
+		msess_reset();
 		return;
 	}
 
@@ -68,6 +69,7 @@ void msess_add_or_update(struct msess *nsess) {
 void msess_remove(struct msess *sess) {
 
 	/* remove msess */
+	(void)msess_next();
 	LIST_REMOVE(sess, entries);
 	free(sess);
 
@@ -115,7 +117,7 @@ void msess_print(struct msess *sess) {
 	char addr_str[INET6_ADDRSTRLEN];
 	struct sockaddr_in6 *addr;
 
-	addr = (struct sockaddr_in6 *)&(sess->dst);
+	addr = &(sess->dst);
 	inet_ntop(AF_INET6, addr->sin6_addr.s6_addr, addr_str, INET6_ADDRSTRLEN);
 	printf("Measurement session ID %d:\n", sess->id);
 	printf(" Destination address: %s\n", addr_str);
@@ -135,8 +137,10 @@ struct msess *msess_next(void) {
 	struct msess *ret;
 
 	ret = cur;
-	cur = ret->entries.le_next;
-	if (cur == NULL) {
+
+	if (ret != NULL) {
+		cur = ret->entries.le_next;
+	} else {
 		msess_reset();
 	}
 
