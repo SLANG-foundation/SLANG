@@ -19,9 +19,11 @@ ts_t res_rtt_min, res_rtt_max;
 /*@ +exportlocal */
 
 void client_res_init(void) {
-	mknod(PIPE, S_IFIFO | 0644, 0);
-	syslog(LOG_INFO, "Waiting for listeners on pipe %s", PIPE);
-	cfg.pipe = open(PIPE, O_WRONLY);
+	if (cfg.op == OPMODE_DAEMON) {
+		mknod(PIPE, S_IFIFO | 0644, 0);
+		syslog(LOG_INFO, "Waiting for listeners on pipe %s", PIPE);
+		cfg.pipe = open(PIPE, O_WRONLY);
+	}
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
 	LIST_INIT(&res_head);
 	/*@ +mustfreeonly +immediatetrans */
@@ -86,9 +88,9 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		/* Because of Intel RX timestamp bug, wait until next TS to print */
 		if (old_state == STATE_READY && d->type == 't') {
 			/* Pipe (daemon) output */
-			printf("SEND %ld\n", sizeof *r);
-			if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
-				syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+			if (cfg.op == OPMODE_DAEMON) 
+				if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
+					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
 			for (i = 0; i < 4; i++) 
 				if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) 

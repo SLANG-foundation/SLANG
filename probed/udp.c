@@ -5,7 +5,6 @@
  */
 
 #include <errno.h>
-/*#include <netdb.h>*/
 #include <string.h>
 #include <signal.h>
 #include <arpa/inet.h>
@@ -37,10 +36,9 @@
  *  loop: wait for UDP ping > send UDP pong > find fd > send TCP tstamp
  *  loop: wait for TCP connect > add to fd set > remove dead fds 
  */
-void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
-
+void loop_or_die(int s_udp, int s_tcp) {
 	char addrstr[INET6_ADDRSTRLEN];
-	struct sockaddr_in6 *their, addr_tmp, addr_last;
+	struct sockaddr_in6 addr_tmp, addr_last;
 	pkt_t pkt;
 	data_t *rx, tx, tx_last;
 	struct timespec ts;
@@ -50,7 +48,6 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	int fd, fd_max = 0, fd_first;
 	int fd_pipe[2];
 	socklen_t slen;
-	int i;
 
 	struct msess *sess;
 
@@ -64,28 +61,14 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	client_res_init(); 
 
 	/* Address lookup */
-	if (addr == NULL) {
-
-		syslog(LOG_INFO, "Server mode: listening at %s\n", port);
-		their = NULL;
-
+	if (cfg.op == OPMODE_SERVER) {
+		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
 	} else {
-
+		(void)signal(SIGINT, client_res_summary);
 		/* spawn client forks for all measurement sessions */
-		i = 0;
-		msess_print_all();
-		while ( (sess = msess_next()) ) {
-
+		while ((sess = msess_next()) != NULL) {
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
-			(void)sleep(1); // connect, wait!
-			(void)signal(SIGINT, client_res_summary);
-			their = &sess->dst;
-			if (addr2str(their, addrstr) < 0) 
-				exit(EXIT_FAILURE);
-			syslog(LOG_INFO, "Client mode: PING to %s:%s\n", addrstr, port);
-			printf("i: %d\n", i);
-			i++;
-
+			//(void)sleep(1); // connect, wait!
 		}
 
 	}
@@ -192,8 +175,6 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 			}
 		} else {
 			/* Send PING */
-
-			if (their == NULL) continue;
 
 			(void)gettimeofday(&now, 0);
 
