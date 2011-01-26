@@ -50,7 +50,6 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	int fd, fd_max = 0, fd_first;
 	int fd_pipe[2];
 	socklen_t slen;
-	int i;
 
 	struct msess *sess;
 
@@ -72,7 +71,6 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 	} else {
 
 		/* spawn client forks for all measurement sessions */
-		i = 0;
 		msess_print_all();
 		while ( (sess = msess_next()) ) {
 
@@ -83,8 +81,6 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 			if (addr2str(their, addrstr) < 0) 
 				exit(EXIT_FAILURE);
 			syslog(LOG_INFO, "Client mode: PING to %s:%s\n", addrstr, port);
-			printf("i: %d\n", i);
-			i++;
 
 		}
 
@@ -191,10 +187,9 @@ void loop_or_die(int s_udp, int s_tcp, /*@null@*/ char *addr, char *port) {
 				client_res_update(&pkt.addr.sin6_addr, rx, NULL);
 			}
 		} else {
+
 			/* Send PING */
-
 			if (their == NULL) continue;
-
 			(void)gettimeofday(&now, 0);
 
 			while ( (sess = msess_next()) ) {
