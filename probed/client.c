@@ -1,10 +1,11 @@
-#include <errno.h>
-#include <string.h>
-#include <time.h>
-#include <fcntl.h>
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
+#include <string.h>
+#include <errno.h>
+#include <time.h>
+#include <signal.h>
+#include <fcntl.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include "probed.h"
@@ -25,6 +26,89 @@ long long res_rtt_total = 0;
 ts_t res_rtt_min, res_rtt_max;
 /*@ +exportlocal */
 
+/*
+ * The client connects over TCP to the server, in order to
+ * get reliable timestamps. The reason for forking is: being
+ * able to use simple blocking connect() and read(), handling
+ * state and timeouts in one context only, avoid conflicts with
+ * the 'server' (parent) file descriptor set, for example when
+ * doing bi-directional tests (both connecting to each other).
+ */
+
+pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
+	int sock, r;
+	pid_t client_pid;
+	char addrstr[INET6_ADDRSTRLEN];
+	pkt_t pkt;
+	fd_set fs;
+	struct timeval tv;
+	char log[100];
+	ts_t zero;
+	socklen_t slen;
+
+	/* Create client fork - parent returns */
+	if (addr2str(server, addrstr) < 0)
+		return -1;
+	(void)snprintf(log, 100, "client: %s:", addrstr);
+	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
+	client_pid = fork();
+	if (client_pid > 0) return client_pid;
+
+	/* 
+	 * We are child 
+	 */
+
+	/* We're going to send a struct packet over the pipe */
+	memset(&pkt.ts, 0, sizeof zero);
+
+	/* Try to stay connected to server; forever */
+	while (1 == 1) {
+		memcpy(&pkt.addr, server, sizeof pkt.addr);
+		if (addr2str(&pkt.addr, addrstr) < 0) {
+			(void)sleep(10);
+			continue;
+		}
+		syslog(LOG_INFO, "%s Connecting to %s port %d\n", log, addrstr, ntohs(server->sin6_port));
+		sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);	
+		if (sock < 0) {
+			syslog(LOG_ERR, "%s socket: %s", log, strerror(errno));
+			(void)sleep(10);
+			continue;
+		}
+		slen = (socklen_t)sizeof pkt.addr;
+		if (connect(sock, (struct sockaddr *)&pkt.addr, slen) < 0) {
+			syslog(LOG_ERR, "%s connect: %s", log, strerror(errno));
+			(void)close(sock);
+			(void)sleep(10);
+			continue;
+		}
+		while (1 == 1) {
+			/* We use a 1 minute read timeout, otherwise reconnect */
+			unix_fd_zero(&fs);
+			unix_fd_set(sock, &fs);
+			tv.tv_sec = 60;
+			tv.tv_usec = 0;
+			if (select(sock + 1, &fs, NULL, NULL, &tv) < 0) {
+				syslog(LOG_ERR, "%s select: %s", log, strerror(errno));
+				break;
+			} 
+			if (unix_fd_isset(sock, &fs) == 0) break;
+			r = (int)recv(sock, &pkt.data, DATALEN, 0);
+			if (r == 0) break;
+			if (r < 0) {
+				syslog(LOG_ERR, "%s recv: %s", log, strerror(errno));
+				break;
+			}
+			if (write(pipe, (char *)&pkt, sizeof pkt) < 0) 
+				syslog(LOG_ERR, "%s write: %s", log, strerror(errno));
+		}
+		syslog(LOG_ERR, "%s Connection lost", log);
+		(void)close(sock);
+		(void)sleep(1);
+	}
+	exit(EXIT_FAILURE);
+}
 void client_res_init(void) {
 	if (cfg.op == OPMODE_DAEMON) {
 		if (mknod(PIPE, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {

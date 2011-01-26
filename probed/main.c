@@ -2,9 +2,7 @@
 #include <unistd.h>
 #endif
 #include <string.h>
-#include <arpa/inet.h>
 #include <netdb.h>
-
 #include "probed.h"
 #include "msess.h"
 
@@ -119,6 +117,7 @@ void help_and_die(void) {
 	p("\t-q        Be quiet, log error to syslog only");
 	exit(EXIT_FAILURE);
 }
+
 /*
  * Reload application
  */
@@ -138,4 +137,3 @@ void reload(xmlDoc **cfgdoc, char *cfgpath) {
 	}
 
 }
-
