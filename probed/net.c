@@ -60,7 +60,7 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 		} else {
 			/* store rx tstamp */
 			if (tstamp_extract(msg, &pkt->ts) < 0)
-				syslog(LOG_ERR, "RX timestamp error");
+				syslog(LOG_ERR, "recv_w_ts: RX timestamp error");
 			return 0;
 		}
 	}
@@ -97,7 +97,7 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	/* get kernel tx timestamp */
 	if (cfg.ts != 'u') { 
 		if (tstamp_fetch_tx(sock, ts) < 0) {
-			syslog(LOG_ERR, "TX timestamp error");
+			syslog(LOG_ERR, "send_w_ts: TX timestamp error");
 			return -1;
 		}
 	}

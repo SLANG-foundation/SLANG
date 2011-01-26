@@ -7,7 +7,7 @@ from probes import probes
 p2 = defaultdict(lambda: defaultdict(dict))
 i = 0
 
-fifo = open('/tmp/probed.pipe', 'r')
+fifo = open('/tmp/probed.fifo', 'r')
 p = probes()
 
 while True:
@@ -19,8 +19,6 @@ while True:
         p.insert(d)
         # probes[id][seq][value] = timestamp
         # p2[d[0]][d[1]][d[2]] = d[3]
-        i = i + 1
-        print "got "+str(i)
     except:
         print('lost ipc')
         raise
