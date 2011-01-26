@@ -32,8 +32,9 @@ int addr2str(addr_t *a, /*@out@*/ char *s) {
 /**
  * Prints a string.
  *
- * Just print 'str' content, without respect to return value.
- * \param[in] String to print.
+ * Just print string, without respect to return value.
+ *
+ * \param[in] str String to print.
  */
 void p(char *str) {
 	(void)puts(str);
@@ -118,10 +119,14 @@ int cmp_ts(struct timespec *t1, struct timespec *t2) {
 
 }
 
-/* 
- * compare two timevals 
+/** 
+ * Compare two timeval.
  *
- * Returns -1 if t1 < t2, 1 if t1 > t2 and 0 if t1 == t2
+ * Returns -1 if \p t1 < \p t2, 1 if \p t1 > \p t2 and 0 if \p t1 == \p t2
+ *
+ * \param[in] t1 Time #1.
+ * \param[in] t2 Time #2.
+ * \return Comparison result.
  */
 int cmp_tv(struct timeval *t1, struct timeval *t2) {
 

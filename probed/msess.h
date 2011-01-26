@@ -14,6 +14,9 @@
 /* define structs to hold first element of linked lists */
 LIST_HEAD(msess_head, msess);
 
+/**
+ * Measurement session ID.
+ */
 typedef uint16_t msess_id;
 
 /** 
@@ -35,7 +38,7 @@ void msess_print(struct msess *sess);
 void msess_print_all(void);
 struct msess *msess_add(msess_id id);
 void msess_remove(struct msess *sess);
-struct msess *msess_find(uint16_t id);
+struct msess *msess_find(msess_id id);
 uint32_t msess_get_seq(struct msess *sess);
 struct msess *msess_next(void);
 void msess_reset(void);

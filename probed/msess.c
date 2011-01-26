@@ -14,9 +14,8 @@
 #include "probed.h"
 #include "msess.h"
 
-struct msess *sessions, *cur;
-struct msess_head sessions_head;
-struct timespec timeout;
+struct msess *cur; /**< Used for iterating the sessions. */
+struct msess_head sessions_head; /**< Keeps a reference to the beginning of the list */
 
 /**
  * Initialize measurement session list.
@@ -92,7 +91,7 @@ void msess_add_or_update(struct msess *nsess) {
  * Removes a given measurement session from the list and frees its 
  * memory.
  *
- * \param[in] Pointer to msess to remove.
+ * \param[in] sess Pointer to msess to remove.
  */
 void msess_remove(struct msess *sess) {
 
@@ -177,6 +176,8 @@ void msess_print(struct msess *sess) {
  * } </tt> \n
  * To start over, run msess_reset() (automatically run when the end of
  * the list is reached).
+ *
+ * \return Pointer to next msess.
  */
 struct msess *msess_next(void) {
 
