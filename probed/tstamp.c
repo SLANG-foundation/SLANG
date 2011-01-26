@@ -8,17 +8,6 @@
  * - Hardware timestamps require SO_TIMESTAMPING on socket and ioctl on device.
  * - Kernel   timestamps require SO_TIMESTAMPING on socket and cool drivers.
  * - Userland timestamps require SO_TIMESTAMPNS  on socket. 
- *
- * Function tstamp_hw()
- * 
- * Function tstamp_kernel()
- * Enable kernel timestamping, disable hardware timestamping.
- * 
- * Function tstamp_userland()
- * Enable software timestamping, disable kernel and hardware timestamping.
- * 
- * Function tstamp_get(msg)
- * Extracts the timestamp from a message.
  */ 
 
 #include "probed.h"
