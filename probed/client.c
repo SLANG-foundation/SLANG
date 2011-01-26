@@ -8,12 +8,17 @@
 #include "probed.h"
 
 #define PIPE "/tmp/probed.pipe"
-#define STATUS_OK 'o'
-#define STATUS_TIMEOUT 't'
+
+#define STATE_PING 'i'
+#define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
+#define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
+#define STATE_READY 'r'
+#define STATE_ERROR 'e' /* Missing timestamp (Intel...?) */
 
 /*@ -exportlocal TODO wtf */
 int res_response = 0;
 int res_timeout = 0;
+int res_error = 0;
 long long res_rtt_total = 0;
 ts_t res_rtt_min, res_rtt_max;
 /*@ +exportlocal */
@@ -87,30 +92,38 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		}
 		/* Because of Intel RX timestamp bug, wait until next TS to print */
 		if (old_state == STATE_READY && d->type == 't') {
+			/* Check that all timestamps are present */
+			for (i = 0; i < 4; i++) { 
+				if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) {
+					printf("Error    %03d from %d missing T%d\n", 
+						   (int)r->seq, (int)r->id, i+1);
+					r->state = STATE_ERROR;
+				}
+			}
 			/* Pipe (daemon) output */
 			if (cfg.op == OPMODE_DAEMON) 
 				if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
-			for (i = 0; i < 4; i++) 
-				if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) 
-					printf("Tstamp   %03d error %d from %d\n", 
-						   i, (int)r->seq, (int)r->id);
-			diff_ts(&diff, &r->ts[3], &r->ts[0]);
-			diff_ts(&now, &r->ts[2], &r->ts[1]);
-			diff_ts(&rtt, &diff, &now);
-			if (rtt.tv_sec > 0)
-				printf("Response %03d from %d in %10ld.%09ld\n", 
-					(int)r->seq, (int)r->id, rtt.tv_sec, rtt.tv_nsec);
-			else 
-				printf("Response %03d from %d in %ld ns\n", 
-					(int)r->seq, (int)r->id, rtt.tv_nsec);
-			res_response++;
-			if (cmp_ts(&res_rtt_max, &rtt) == -1)
-			   res_rtt_max = rtt;	
-			if (cmp_ts(&res_rtt_min, &rtt) == 1)
-			   res_rtt_min = rtt;
-			res_rtt_total = res_rtt_total + rtt.tv_nsec;
+			if (r->state == STATE_ERROR) {
+				res_error++;
+			} else {
+				diff_ts(&diff, &r->ts[3], &r->ts[0]);
+				diff_ts(&now, &r->ts[2], &r->ts[1]);
+				diff_ts(&rtt, &diff, &now);
+				if (rtt.tv_sec > 0)
+					printf("Response %03d from %d in %10ld.%09ld\n", 
+							(int)r->seq, (int)r->id, rtt.tv_sec, rtt.tv_nsec);
+				else 
+					printf("Response %03d from %d in %ld ns\n", 
+							(int)r->seq, (int)r->id, rtt.tv_nsec);
+				res_response++;
+				if (cmp_ts(&res_rtt_max, &rtt) == -1)
+					res_rtt_max = rtt;	
+				if (cmp_ts(&res_rtt_min, &rtt) == 1)
+					res_rtt_min = rtt;
+				res_rtt_total = res_rtt_total + rtt.tv_nsec;
+			}
 			/* Ready; safe removal */
 			r_tmp = r->res_list.le_next;
 			/*@ -branchstate -onlytrans TODO wtf */
@@ -143,8 +156,8 @@ void client_res_summary(/*@unused@*/ int sig) {
 	float loss;
 
 	loss = (float)res_timeout / (float)res_response;
-	printf("\n%d responses, %d timeouts, %f%% packet loss\n", 
-			res_response, res_timeout, loss);
+	printf("\n%d pongs, %d timeouts, %d tstamp errors, %f%% loss\n", 
+			res_response, res_timeout, res_error, loss);
 	if (res_rtt_max.tv_sec > 0)
 		printf("max: %ld.%09ld", res_rtt_max.tv_sec, res_rtt_max.tv_nsec);
 	else 

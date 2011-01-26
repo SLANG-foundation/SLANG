@@ -21,11 +21,6 @@
 #define MSESS_NODE_NAME "probe"
 #define NUM_CLIENT_RES 2
 
-#define STATE_PING 'i'
-#define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
-#define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
-#define STATE_READY 'r'
-
 #define OPMODE_SERVER 's'
 #define OPMODE_CLIENT 'c'
 #define OPMODE_DAEMON 'd'
