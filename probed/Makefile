@@ -4,9 +4,9 @@ H = probed.h
 I = -I/usr/include/libxml2
 L = -lrt -lxml2
 O = $(S:.c=.o)
-S = main.c tstamp.c udp.c data.c config.c util.c msess.c unix.c client.c
+S = main.c tstamp.c mainloop.c net.c config.c util.c msess.c unix.c client.c
 T = probed 
-D = -D__gnuc_va_list=va_list
+D = -D__gnuc_va_list=va_list +posixlib -mts external/posixlint
 
 all: $T 
 
@@ -22,10 +22,10 @@ clean:
 	rm $T $O 
 
 lint:
-	@splint main.c   $I $D +posixlib -mts posixlint 
-	@splint data.c   $I $D +posixlib -mts posixlint
-	@splint udp.c    $I $D +posixlib -mts posixlint
-	@splint tstamp.c $I $D +posixlib -mts posixlint
-	@splint util.c   $I $D +posixlib -mts posixlint
-	@splint client.c $I $D +posixlib -mts posixlint
-	@splint unix.c         +unixlib
+	@splint main.c     $I $D 
+	@splint net.c      $I $D 
+	@splint mainloop.c $I $D
+	@splint tstamp.c   $I $D
+	@splint util.c     $I $D
+	@splint client.c   $I $D
+	@splint unix.c   +unixlib

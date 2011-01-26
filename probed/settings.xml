@@ -14,7 +14,7 @@
 		<type>slang</type>
 	</probe>
 	<probe id="999">
-		<address>::ffff:1.3.3.7</address>
+		<address>10.10.10.3</address>
 		<dscp>8</dscp>
 		<interval>200000</interval>
 		<type>slang</type>

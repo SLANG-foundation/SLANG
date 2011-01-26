@@ -2,9 +2,7 @@
 #include <unistd.h>
 #endif
 #include <string.h>
-#include <arpa/inet.h>
 #include <netdb.h>
-
 #include "probed.h"
 #include "msess.h"
 
@@ -88,14 +86,18 @@ int main(int argc, char *argv[]) {
 		p("Daemon mode; both server and client, output to pipe");
 		/* read config */
 		reload(&cfgdoc, cfgpath);
-		config_msess(cfgdoc);
+		if (cfgdoc == NULL) {
+			p("Invalid configuration file");
+			exit(EXIT_FAILURE);
+		}
+		(void)config_msess(cfgdoc);
 		loop_or_die(s_udp, s_tcp);
 	}
 
 	(void)close(s_udp);
 	(void)close(s_tcp);
 	closelog();
-	return EXIT_FAILURE;
+	exit(EXIT_FAILURE);
 }
 
 void help_and_die(void) {
@@ -115,6 +117,7 @@ void help_and_die(void) {
 	p("\t-q        Be quiet, log error to syslog only");
 	exit(EXIT_FAILURE);
 }
+
 /*
  * Reload application
  */
@@ -134,4 +137,3 @@ void reload(xmlDoc **cfgdoc, char *cfgpath) {
 	}
 
 }
-

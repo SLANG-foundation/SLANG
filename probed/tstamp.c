@@ -26,8 +26,8 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
-#include "sockios.h"
-#include "net_tstamp.h"
+#include "external/sockios.h"
+#include "external/net_tstamp.h"
 
 /*
  * Try to enable hardware timestamping, otherwise fall back to kernel.
