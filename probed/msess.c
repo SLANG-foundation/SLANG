@@ -162,7 +162,7 @@ void msess_reset(void) {
  */
 uint32_t msess_get_seq(struct msess *sess) {
 
-	sess->id++;
-	return sess->id;
+	sess->last_seq++;
+	return sess->last_seq;
 
 }
