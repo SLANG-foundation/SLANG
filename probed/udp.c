@@ -176,21 +176,18 @@ void loop_or_die(int s_udp, int s_tcp) {
 			/* Send PING */
 
 			(void)gettimeofday(&now, 0);
-
-			while ( (sess = msess_next()) ) {
+			while ((sess = msess_next()) != NULL) {
 
 				diff_tv(&tv, &now, &sess->last_sent);
-
 				/* time to send new packet? */
 				if (cmp_tv(&tv, &sess->interval) == 1) {
-
+					memset(&tx, 0, sizeof tx);
 					tx.type = TYPE_PING;
 					tx.id = sess->id;
 					tx.seq = msess_get_seq(sess);
 					if (send_w_ts(s_udp, &sess->dst, (char*)&tx, &ts) < 0)
 						continue;
 					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);
-	
 					memcpy(&sess->last_sent, &now, sizeof now);
 					syslog(LOG_DEBUG, "< PING %d\n", (int)seq);
 
@@ -237,9 +234,10 @@ int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer) {
  * the 'server' (parent) file descriptor set, for example when
  * doing bi-directional tests (both connecting to each other).
  */
-int client_fork(int pipe, struct sockaddr_in6 *server) {
+pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 
-	int sock, r, client_pid;
+	int sock, r;
+	pid_t client_pid;
 	char addrstr[INET6_ADDRSTRLEN];
 	pkt_t pkt;
 	fd_set fs;
@@ -249,7 +247,8 @@ int client_fork(int pipe, struct sockaddr_in6 *server) {
 	socklen_t slen;
 
 	/* Create client fork - parent returns */
-	addr2str(server, addrstr);
+	if (addr2str(server, addrstr) < 0)
+		return -1;
 	(void)snprintf(log, 100, "client: %s:", addrstr);
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);

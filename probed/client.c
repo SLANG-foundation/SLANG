@@ -2,7 +2,9 @@
 #include <string.h>
 #include <time.h>
 #include <fcntl.h>
+#ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
+#endif
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include "probed.h"
@@ -25,7 +27,10 @@ ts_t res_rtt_min, res_rtt_max;
 
 void client_res_init(void) {
 	if (cfg.op == OPMODE_DAEMON) {
-		mknod(PIPE, S_IFIFO | 0644, 0);
+		if (mknod(PIPE, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
+			syslog(LOG_ERR, "mknod: %s", strerror(errno));
+			exit(EXIT_FAILURE);
+		}
 		syslog(LOG_INFO, "Waiting for listeners on pipe %s", PIPE);
 		cfg.pipe = open(PIPE, O_WRONLY);
 	}

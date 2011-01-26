@@ -88,14 +88,18 @@ int main(int argc, char *argv[]) {
 		p("Daemon mode; both server and client, output to pipe");
 		/* read config */
 		reload(&cfgdoc, cfgpath);
-		config_msess(cfgdoc);
+		if (cfgdoc == NULL) {
+			p("Invalid configuration file");
+			exit(EXIT_FAILURE);
+		}
+		(void)config_msess(cfgdoc);
 		loop_or_die(s_udp, s_tcp);
 	}
 
 	(void)close(s_udp);
 	(void)close(s_tcp);
 	closelog();
-	return EXIT_FAILURE;
+	exit(EXIT_FAILURE);
 }
 
 void help_and_die(void) {
