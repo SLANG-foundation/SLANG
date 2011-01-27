@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include "probed.h"
 
-#define PIPE "/tmp/probed.pipe"
+#define FIFO "/tmp/probed.fifo"
 
 #define STATE_PING 'i'
 #define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
@@ -85,7 +85,8 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 			(void)sleep(10);
 			continue;
 		}
-		syslog(LOG_INFO, "%s Connecting to %s port %d\n", log, addrstr, ntohs(server->sin6_port));
+		syslog(LOG_INFO, "%s Connecting to %s port %d\n", log, 
+				addrstr, ntohs(server->sin6_port));
 		sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);	
 		if (sock < 0) {
 			syslog(LOG_ERR, "%s socket: %s", log, strerror(errno));
@@ -127,21 +128,22 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 }
 
 /**
- * Initializes global variables and a pipe used by client_res_* functions
+ * Initializes global variables and a FIFO used by client_res_* functions
  *
- * When running in deamon mode, open a pipe. Always init global variables
+ * When running in deamon mode, open a FIFO. Always init global variables
  * such as the res_head linked list. Should be run once.
  * 
- * @todo Is the really good to wait for pipe open?
+ * @todo Is the really good to wait for FIFO open?
  */
 void client_res_init(void) {
 	if (cfg.op == OPMODE_DAEMON) {
-		if (mknod(PIPE, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
-			syslog(LOG_ERR, "mknod: %s", strerror(errno));
+		(void)unlink(FIFO);
+		if (mknod(FIFO, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
+			syslog(LOG_ERR, "mknod: %s: %s", FIFO, strerror(errno));
 			exit(EXIT_FAILURE);
 		}
-		syslog(LOG_INFO, "Waiting for listeners on pipe %s", PIPE);
-		cfg.pipe = open(PIPE, O_WRONLY);
+		syslog(LOG_INFO, "Waiting for listeners on FIFO %s", FIFO);
+		cfg.fifo = open(FIFO, O_WRONLY);
 	}
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
 	LIST_INIT(&res_head);
@@ -151,8 +153,9 @@ void client_res_init(void) {
 	res_rtt_max.tv_sec = 0;
 	res_rtt_max.tv_nsec = 0;
 	/*@ -nullstate TODO wtf? */
+	return;
+	/*@ +nullstate */
 }
-/*@ +nullstate */
 
 /**
  * Insert a new 'ping' into the result list
@@ -180,15 +183,16 @@ void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts) {
 	/*@ +mustfreeonly +immediatetrans */
 	client_res_update(a, d, ts);
 	/*@ -compmempass TODO wtf? */
+	return;
+	/*@ +compmempass */
 }
-/*@ +compmempass */
 
 /**
  * Update and print results when new timestamp data arrives
  *
  * Can be running multiple times, updating the timestamps of a ping. If
  * all timestamp info is present, also print the results or send them on
- * the daemon pipe.
+ * the daemon FIFO.
  *
  * \param a  The server IP address that is being pinged
  * \param d  The ping data, such as sequence number, timestamp T2 and T3.. 
@@ -231,14 +235,14 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 			/* Check that all timestamps are present */
 			for (i = 0; i < 4; i++) { 
 				if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) {
-					printf("Error    %03d from %d missing T%d\n", 
-						   (int)r->seq, (int)r->id, i+1);
+					syslog(LOG_ERR, "client_res: Ping %d from %d missing T%d",
+							(int)r->seq, (int)r->id, i+1);
 					r->state = STATE_ERROR;
 				}
 			}
 			/* Pipe (daemon) output */
 			if (cfg.op == OPMODE_DAEMON) 
-				if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
+				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
 			if (cfg.op == OPMODE_CLIENT) { 
@@ -249,11 +253,11 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 					diff_ts(&now, &r->ts[2], &r->ts[1]);
 					diff_ts(&rtt, &diff, &now);
 					if (rtt.tv_sec > 0)
-						printf("Response %03d from %d in %10ld.%09ld\n", 
+						printf("Response %4d from %d in %10ld.%09ld\n", 
 								(int)r->seq, (int)r->id, rtt.tv_sec, 
 								rtt.tv_nsec);
 					else 
-						printf("Response %03d from %d in %ld ns\n", 
+						printf("Response %4d from %d in %ld ns\n", 
 								(int)r->seq, (int)r->id, rtt.tv_nsec);
 					res_response++;
 					if (cmp_ts(&res_rtt_max, &rtt) == -1)
@@ -276,10 +280,10 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		if (diff.tv_sec > 10) {
 			r->state = STATE_TIMEOUT;
 			if (cfg.op == OPMODE_DAEMON) 
-				if (write(cfg.pipe, (char*)r, sizeof *r) == -1)
+				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			if (cfg.op == OPMODE_CLIENT) { 
-				printf("Timeout  %03d from %d in %d sec\n", (int)r->seq, 
+				printf("Timeout  %4d from %d in %d sec\n", (int)r->seq, 
 						(int)r->id, (int)diff.tv_sec);
 				res_timeout++;
 			}
