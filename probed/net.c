@@ -142,28 +142,43 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 	my.sin6_family = (sa_family_t)AF_INET6;
 	my.sin6_port = htons(port);
 	my.sin6_addr = in6addr_any;
-	/* UDP socket */
+
+	
+  /* UDP socket */
 	*s_udp = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (*s_udp < 0) {
 		syslog(LOG_ERR, "socket: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	} 
+
 	/* Give us a dual-stack (ipv4/6) socket */
 	slen = (socklen_t)sizeof f;
 	if (setsockopt(*s_udp, IPPROTO_IPV6, IPV6_V6ONLY, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
+
+	/* enable reading of TOS & TTL on received packets */
+	f = 3;
+	if (setsockopt(*s_udp, IPPROTO_IPV6, IP_RECVTOS, &f, sizeof f) < 0)
+		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
+	f = 60;
+	if (setsockopt(*s_udp, IPPROTO_IPV6, IP_RECVTTL, &f, sizeof f) < 0)
+		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
+
 	/* Bind port */
 	slen = (socklen_t)sizeof (struct sockaddr_in6);
 	if (bind(*s_udp, (struct sockaddr *)&my, slen) < 0) {
 		syslog(LOG_ERR, "bind: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	/* TCP socket */
+
+	
+  /* TCP socket */
 	*s_tcp = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);
 	if (*s_tcp < 0) {
 		syslog(LOG_ERR, "socket: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	} 
+
 	/* Give us a dual-stack (ipv4/6) socket */
 	f = 0;
 	slen = (socklen_t)sizeof f;
