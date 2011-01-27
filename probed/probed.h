@@ -50,6 +50,7 @@ struct res {
 
 struct packet {
 	addr_t addr; 
+	uint8_t dscp;
 	char data[DATALEN];
 	/*@dependent@*/ ts_t ts;
 };
@@ -107,7 +108,8 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts);
 
 int recv_w_ts(int sock, int flags, /*@out@*/ struct packet *pkt);
 int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts);
-int set_dscp(int sock, uint8_t dscp);
+int dscp_set(int sock, uint8_t dscp);
+int dscp_extract(struct msghdr *msg, uint8_t *dscp_out);
 
 int config_read(xmlDoc **doc, char *cfgpath);
 int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);

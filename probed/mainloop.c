@@ -52,8 +52,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 	pkt_t pkt;
 	data_t *rx, tx, tx_last;
 	struct timespec ts;
-	struct timeval tv, last, now, interval;
-	uint32_t seq;
+	struct timeval tv, last, now;
 	fd_set fs, fs_tmp;
 	int fd, fd_max = 0, fd_first;
 	int fd_pipe[2];
@@ -74,19 +73,20 @@ void loop_or_die(int s_udp, int s_tcp) {
 	if (cfg.op == OPMODE_SERVER) {
 		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
 	} else {
+
 		/* spawn client forks for all measurement sessions */
 		while ((sess = msess_next()) != NULL) {
+
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
 			//(void)sleep(1); // connect, wait!
+
 		}
+
 		if (cfg.op == OPMODE_CLIENT)
 			(void)signal(SIGINT, client_res_summary);
 	}
 
 	/* Timers for sending data */
-	seq = 0;
-	interval.tv_sec = 0;
-	interval.tv_usec = 100000;
 	(void)gettimeofday(&last, 0);
 	/* Add both pipe, UDP and TCP to the FD set, note highest FD */
 	unix_fd_zero(&fs);
@@ -115,12 +115,13 @@ void loop_or_die(int s_udp, int s_tcp) {
 					continue;
 				rx = (data_t *)&pkt.data;
 				if (pkt.data[0] == TYPE_PING) {
-					syslog(LOG_DEBUG, "> PING %d\n", rx->seq);
+					syslog(LOG_DEBUG, "> PING %d dscp %d\n", rx->seq, pkt.dscp);
 					/* Send UDP PONG */
 					tx.type = TYPE_PONG;
 					tx.id = rx->id;
 					tx.seq = rx->seq;
 					tx.t2 = pkt.ts;
+          (void)dscp_set(s_udp, pkt.dscp);
 					(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);
 					/* Send TCP timestamp */
 					tx.t3 = ts;
@@ -196,12 +197,12 @@ void loop_or_die(int s_udp, int s_tcp) {
 					tx.type = TYPE_PING;
 					tx.id = sess->id;
 					tx.seq = msess_get_seq(sess);
-					(void)set_dscp(s_udp, sess->dscp);
+					(void)dscp_set(s_udp, sess->dscp);
 					if (send_w_ts(s_udp, &sess->dst, (char*)&tx, &ts) < 0)
 						continue;
 					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);
 					memcpy(&sess->last_sent, &now, sizeof now);
-					syslog(LOG_DEBUG, "< PING %d\n", (int)seq);
+					syslog(LOG_DEBUG, "< PING %d\n", tx.seq);
 
 				}
 			}

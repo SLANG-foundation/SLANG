@@ -53,14 +53,20 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	} else {
 		/* OK, we got a packet */
 		if ((flags & MSG_ERRQUEUE) != 0) {
+
 			/* THIS IS A TX TIMESTAMP: store tx tstamp */
 			if (tstamp_extract(msg, &pkt->ts) < 0) 
 				return -1;
 			return 0;
+
 		} else {
-			/* THIS IS NORMAL PACKET: store rx tstamp */
+
+			/* THIS IS NORMAL PACKET: store rx tstamp and DSCP */
 			if (tstamp_extract(msg, &pkt->ts) < 0)
 				syslog(LOG_ERR, "recv_w_ts: RX timestamp error");
+			if (dscp_extract(msg, &pkt->dscp) < 0)
+				syslog(LOG_ERR, "recv_w_ts: DSCP error");
+
 			return 0;
 		}
 	}
@@ -111,7 +117,7 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
  * \param[in] dscp DSCP value 
  * \return Status; 0 on successs, <0 on failure.
  */
-int set_dscp(int sock, uint8_t dscp) {
+int dscp_set(int sock, uint8_t dscp) {
 
 	dscp <<= 2;
 
@@ -144,7 +150,7 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 	my.sin6_addr = in6addr_any;
 
 	
-  /* UDP socket */
+	/* UDP socket */
 	*s_udp = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (*s_udp < 0) {
 		syslog(LOG_ERR, "socket: %s", strerror(errno));
@@ -157,11 +163,12 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
 
 	/* enable reading of TOS & TTL on received packets */
-	f = 3;
-	if (setsockopt(*s_udp, IPPROTO_IPV6, IP_RECVTOS, &f, sizeof f) < 0)
+	//f = 3;
+	f = 1;
+	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTOS, &f, sizeof f) < 0)
 		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
 	f = 60;
-	if (setsockopt(*s_udp, IPPROTO_IPV6, IP_RECVTTL, &f, sizeof f) < 0)
+	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTTL, &f, sizeof f) < 0)
 		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
 
 	/* Bind port */
@@ -197,4 +204,44 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 		syslog(LOG_ERR, "listen: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+}
+
+/**
+ * Extracts the DSCP value from a packet.
+ *
+ * \param[in] msg Pointer to the message's header data.
+ * \param[out] dscp_out Pointer to location where the DSCP will be written.
+ *
+ * \todo Find out if we need to check cmsg_len (as http://stackoverflow.com/questions/2881200/linux-can-recvmsg-be-used-to-receive-the-ip-tos-of-every-incoming-packet shows).
+ */
+int dscp_extract(struct msghdr *msg, uint8_t *dscp_out) {
+
+	struct cmsghdr *cmsg;
+	int *tos_ptr;
+	uint8_t dscp = 255;
+	
+	/* iterate cmsg headers, look for IP_TOS */
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_TOS) {
+
+			/* Fetch TOS value and extract DSCP by
+			 * discarding the two righmost bits (ECN)
+			 */
+
+			tos_ptr = (int *)CMSG_DATA(cmsg);
+			dscp = *tos_ptr;
+			*dscp_out = dscp >> 2;
+
+		}
+	}
+	
+	/* if no IP_TOS header was found, dscp still keeps its initial 
+	 * value of 255 (which is invalid since the DSCP field is six bits) 
+	 */
+	if (dscp == 255) {
+		return -1;
+	} else {
+		return 0;
+	}
+
 }
