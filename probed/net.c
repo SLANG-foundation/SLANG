@@ -122,7 +122,7 @@ int dscp_set(int sock, uint8_t dscp) {
 
 	dscp <<= 2;
 
-	if (setsockopt(sock, IPPROTO_IP, IP_TOS, &dscp, sizeof dscp) < 0) {
+	if (setsockopt(sock, IPPROTO_IP, IP_TOS, &dscp, (socklen_t)sizeof dscp) < 0) {
 		syslog(LOG_ERR, "Unable to set IP_TOS");
 		return -1;
 	} else {
@@ -166,10 +166,10 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 	/* enable reading of TOS & TTL on received packets */
 	//f = 3;
 	f = 1;
-	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTOS, &f, sizeof f) < 0)
+	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTOS, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
 	f = 60;
-	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTTL, &f, sizeof f) < 0)
+	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTTL, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
 
 	/* Bind port */
@@ -214,14 +214,18 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
  * \param[out] dscp_out Pointer to location where the DSCP will be written.
  *
  * \todo Find out if we need to check cmsg_len (as http://stackoverflow.com/questions/2881200/linux-can-recvmsg-be-used-to-receive-the-ip-tos-of-every-incoming-packet shows).
+ * \todo Fix splint branchstate ignore
  */
-int dscp_extract(struct msghdr *msg, uint8_t *dscp_out) {
+int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 
 	struct cmsghdr *cmsg;
 	int *tos_ptr;
 	uint8_t dscp = 255;
+
+	*dscp_out = 0;
 	
 	/* iterate cmsg headers, look for IP_TOS */
+	/*@ -branchstate Don't care about cmsg storage */
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_TOS) {
 
@@ -230,11 +234,12 @@ int dscp_extract(struct msghdr *msg, uint8_t *dscp_out) {
 			 */
 
 			tos_ptr = (int *)CMSG_DATA(cmsg);
-			dscp = *tos_ptr;
+			dscp = (uint8_t)*tos_ptr;
 			*dscp_out = dscp >> 2;
 
 		}
 	}
+	/*@ +branchstate */
 	
 	/* if no IP_TOS header was found, dscp still keeps its initial 
 	 * value of 255 (which is invalid since the DSCP field is six bits) 
