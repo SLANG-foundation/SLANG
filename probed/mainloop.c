@@ -121,7 +121,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					tx.id = rx->id;
 					tx.seq = rx->seq;
 					tx.t2 = pkt.ts;
-					(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);
+					//(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);
 					/* Send TCP timestamp */
 					tx.t3 = ts;
 					tx.type = TYPE_TIME;

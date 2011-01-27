@@ -25,13 +25,14 @@
 #define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
 #define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
 #define STATE_READY 'r'
-#define STATE_ERROR 'e' /* Missing timestamp (Intel...?) */
+#define STATE_TSERROR 'e' /* Missing timestamp (Intel...?) */
 #define STATE_TIMEOUT 't'
 
 /*@ -exportlocal TODO wtf */
 int res_response = 0;
 int res_timeout = 0;
-int res_error = 0;
+int res_pongloss = 0;
+int res_tserror = 0;
 long long res_rtt_total = 0;
 ts_t res_rtt_min, res_rtt_max;
 /*@ +exportlocal */
@@ -49,6 +50,7 @@ ts_t res_rtt_min, res_rtt_max;
  * \param server The server address to connect to, and read timestamps from
  * \return       The process ID of the forked process
  * \bug          The read timeout of 60 sec before re-connect is bad!
+ * \todo         Should we simply send a dummy packet, just for conn status?
  */
 
 pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
@@ -237,7 +239,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) {
 					syslog(LOG_ERR, "client_res: Ping %d from %d missing T%d",
 							(int)r->seq, (int)r->id, i+1);
-					r->state = STATE_ERROR;
+					r->state = STATE_TSERROR;
 				}
 			}
 			/* Pipe (daemon) output */
@@ -246,8 +248,8 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
 			if (cfg.op == OPMODE_CLIENT) { 
-				if (r->state == STATE_ERROR) {
-					res_error++;
+				if (r->state == STATE_TSERROR) {
+					res_tserror++;
 				} else {
 					diff_ts(&diff, &r->ts[3], &r->ts[0]);
 					diff_ts(&now, &r->ts[2], &r->ts[1]);
@@ -278,14 +280,29 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		}
 		diff_ts(&diff, &now, &(r->created)); 
 		if (diff.tv_sec > 10) {
-			r->state = STATE_TIMEOUT;
+			/* Define three states: TIMEOUT, TSERROR and GOT_TS */
+			if (r->state == STATE_GOT_PONG ||  r->state == STATE_READY) 
+				r->state = STATE_TSERROR;
+			else if (r->state == STATE_PING) 
+				r->state = STATE_TIMEOUT;
+			/* else: GOT_TS implicit */
 			if (cfg.op == OPMODE_DAEMON) 
 				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			if (cfg.op == OPMODE_CLIENT) { 
-				printf("Timeout  %4d from %d in %d sec\n", (int)r->seq, 
-						(int)r->id, (int)diff.tv_sec);
-				res_timeout++;
+				if (r->state == STATE_TSERROR) {
+					printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
+							(int)r->seq, (int)r->id, (int)diff.tv_sec);
+					res_tserror++;
+				} else if (r->state == STATE_GOT_TS) {
+					printf("Timeout  %4d from %d in %d sec (missing PONG)\n", 
+							(int)r->seq, (int)r->id, (int)diff.tv_sec);
+					res_pongloss++;
+				} else {
+					printf("Timeout  %4d from %d in %d sec (missing all)\n", 
+							(int)r->seq, (int)r->id, (int)diff.tv_sec);
+					res_timeout++;
+				}
 			}
 			/* Timeout; safe removal */
 			r_tmp = r->res_list.le_next;
@@ -304,9 +321,11 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 void client_res_summary(/*@unused@*/ int sig) {
 	float loss;
 
-	loss = (float)res_timeout / (float)res_response;
-	printf("\n%d pongs, %d timeouts, %d tstamp errors, %f%% loss\n", 
-			res_response, res_timeout, res_error, loss);
+	loss = (float)(res_timeout + res_pongloss) / 
+			(float)(res_response + res_tserror + res_timeout + res_pongloss);
+	loss = loss * 100;
+	printf("\n%d ok, %d ts errors, %d lost pongs, %d timeouts, %f%% loss\n", 
+			res_response, res_tserror, res_pongloss, res_timeout, loss);
 	if (res_rtt_max.tv_sec > 0)
 		printf("max: %ld.%09ld", res_rtt_max.tv_sec, res_rtt_max.tv_nsec);
 	else 
