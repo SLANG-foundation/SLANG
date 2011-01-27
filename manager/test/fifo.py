@@ -13,7 +13,6 @@ p = probes()
 while True:
     try:
         d = fifo.read(128)
-        print('got ipc: '+str(len(d))+' bytes')
         # it can hold 2500 probes in fifo buff before pause
         d = unpack('llc16siillllllll16s', d)
         p.insert(d)

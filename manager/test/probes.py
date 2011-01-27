@@ -19,7 +19,7 @@ class probes:
 
     def insert(self, d):
         self.buff.append(d)
-        print d[5]
+        print('got ' + str(d[5]) + ' from ' + str(d[4])) 
         #if int(time.time()) > self.last:
         #    self.store()
         #    print('clear')
