@@ -46,19 +46,19 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	msg[0].msg_controllen = sizeof control;
 
 	if (recvmsg(sock, msg, flags) < 0) {
-		/* Don't warn about err queue, send_w_ts will figure that out */
+		/* FAIL, recv error! Don't warn about err queue, it's non-block */
 		if ((flags & MSG_ERRQUEUE) == 0)
 			syslog(LOG_INFO, "recvmsg: %s", strerror(errno));
 		return -1;
 	} else {
+		/* OK, we got a packet */
 		if ((flags & MSG_ERRQUEUE) != 0) {
-			/* store kernel tx tstamp */
+			/* THIS IS A TX TIMESTAMP: store tx tstamp */
 			if (tstamp_extract(msg, &pkt->ts) < 0) 
 				return -1;
-			/* tx timestamp packet, just save and bail */
 			return 0;
 		} else {
-			/* store rx tstamp */
+			/* THIS IS NORMAL PACKET: store rx tstamp */
 			if (tstamp_extract(msg, &pkt->ts) < 0)
 				syslog(LOG_ERR, "recv_w_ts: RX timestamp error");
 			return 0;
