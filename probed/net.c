@@ -105,6 +105,26 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 }
 
 /**
+ * Set DSCP-value of socket.
+ *
+ * \param[in] sock Socket
+ * \param[in] dscp DSCP value 
+ * \return Status; 0 on successs, <0 on failure.
+ */
+int set_dscp(int sock, uint8_t dscp) {
+
+	dscp <<= 2;
+
+	if (setsockopt(sock, IPPROTO_IP, IP_TOS, &dscp, sizeof dscp) < 0) {
+		syslog(LOG_ERR, "Unable to set IP_TOS");
+		return -1;
+	} else {
+		return 0;
+	}
+
+}
+
+/**
  * Bind two listening sockets, one UDP (ping/pong) and one TCP (timestamps)
  * 
  * \param[out] s_udp Pointer to UDP socket to create and bind

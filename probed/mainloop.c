@@ -46,6 +46,7 @@
  * \bug       The 'first', not 'correct' TCP client socket will be used
  */
 void loop_or_die(int s_udp, int s_tcp) {
+
 	char addrstr[INET6_ADDRSTRLEN];
 	struct sockaddr_in6 addr_tmp, addr_last;
 	pkt_t pkt;
@@ -195,6 +196,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					tx.type = TYPE_PING;
 					tx.id = sess->id;
 					tx.seq = msess_get_seq(sess);
+					(void)set_dscp(s_udp, sess->dscp);
 					if (send_w_ts(s_udp, &sess->dst, (char*)&tx, &ts) < 0)
 						continue;
 					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);

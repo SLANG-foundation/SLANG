@@ -1,15 +1,18 @@
-/*
- * XML CONFIG
- * Author: Anders Berggren
+/**
+ * Handles XML config file.
  *
- * Function config_read()
  * Handles the XML "settings" config file. Things I've learnt about libxml2 that
  * might be good to know, is that everything returned by xml* functions have to
  * be free:ed, such as freeing the string returned from xmlNodeGetContent with
  * xmlFree. Also, the best way to just get something is by using XPath (getkey)
  * while the simplest way to read though the whole thing is to loop though the
  * document with for(n=doc->children;n!=0;n=n->next). 
+ *
+ * \file config.c
+ * \author Anders Berggren <anders@halon.se>
+ * \author Lukas Garberg <lukas@spritelink.net>
  */
+
 
 #include "probed.h"
 #include <string.h>
@@ -17,19 +20,39 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+/**
+ * Reads configuration from disk.
+ *
+ * \param[out] doc Reference to a location where the XML document data will be placed.
+ * \param[in] cfgpath Path to config file.
+ * \return Status; 0 on success, <0 on failure.
+ */
 int config_read(xmlDoc **doc, char *cfgpath) {
+
 	xmlDoc *tmpdoc;
 
-	/* reload configuration file */
+	/* read configuration file */
 	tmpdoc = xmlParseFile(cfgpath);
 	if (!tmpdoc) 
 		return -1;
+
 	xmlFreeDoc(*doc);
 	*doc = tmpdoc;
 	return 0;
+
 }
 
+/**
+ * Fetches configuration parameter from config.
+ *
+ * \param[in] doc Pointer to the XML document.
+ * \param[in] xpath XPath string for the config key.
+ * \param[out] str Pointer to a buffer where the result will be written.
+ * \param[in] bytes Size of buffer.
+ * \return Status of execution. 0 on success, <0 on failure.
+ */
 int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
+
 	xmlXPathContext *ctx; 
 	xmlXPathObject *o;
 	xmlNodeSet *set;	
@@ -45,18 +68,23 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
 		syslog(LOG_ERR, "xmlXPathNewContext: %s", strerror(errno));
 		return -1;
 	}
+
+	/* find key */
 	o = xmlXPathEvalExpression((xmlChar*)xpath, ctx);
 	if (!o) {
 		syslog(LOG_ERR, "xmlXPathEvalExpression: %s", strerror(errno));
 		xmlXPathFreeContext(ctx);
 		return -1;
 	}
+
 	set = o->nodesetval;
+
 	if (xmlXPathNodeSetIsEmpty(set)) {
 		xmlXPathFreeObject(o);
 		xmlXPathFreeContext(ctx);
 		return -1;
 	}
+
 	n = set->nodeTab[0];    
 	data = xmlNodeGetContent(n);
 	strncpy(str, (char *)data, bytes-1);
@@ -65,22 +93,30 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
 	xmlXPathFreeObject(o);
 	xmlXPathFreeContext(ctx);
 	return 0;
+
 }
 
-/*
- * Sync measurement sessions from config to msess
+/**
+ * Sync measurement sessions from config to msess.
+ *
+ * Syncs measurement session list to configuration file. New sessions
+ * are added, old sessions updated and removed sessions removed.
+ *
+ * \param[in] doc XML Document.
+ * \return Status; 0 on success, <0 on failure.
+ *
+ * \todo Does not yet remove sessions which does not exist.
  */
 int config_msess(xmlDoc *doc) {
 
 	xmlNode *n, *r, *k;
-	/*xmlAttr *a;*/
 	xmlChar *c;
 	char port[TMPLEN];
-/*	struct sockaddr_in6 addr; */
 	struct msess *sess;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
 	int ret_val = 0;
-
+	
+	/* configuration sanity checks */
 	if (doc == 0) {
 		syslog(LOG_ERR, "No configuration.");
 		return -1;
@@ -112,7 +148,6 @@ int config_msess(xmlDoc *doc) {
 		/* get ID */
 		c = xmlGetProp(n, (xmlChar *)"id");
 		if (c != NULL) {
-/*			printf("  id: %s\n", c); */
 			sess->id = atoi((char *)c);
 		} else {
 			syslog(LOG_ERR, "Found probe without ID");
@@ -132,11 +167,11 @@ int config_msess(xmlDoc *doc) {
 			/* interval */
 			if (strcmp((char *)k->name, "interval") == 0) {
 				sess->interval.tv_usec = atoi((char *)c);
-/*				printf("   Got interval %d\n", (int)sess->interval.tv_usec); */
 			}
 			
 			/* address */
 			if (strcmp((char *)k->name, "address") == 0) {
+
 				/* prepare for getaddrinfo */
 				memset(&dst_hints, 0, sizeof dst_hints);
 				dst_hints.ai_family = AF_INET6;
@@ -147,14 +182,11 @@ int config_msess(xmlDoc *doc) {
 					syslog(LOG_ERR, "Unable to look up hostname %s: %s", (char *)c, gai_strerror(ret_val));
 				}
 
-/*				printf("   Got address %s\n", c); */
-
 			}
 
 			/* dscp */
 			if (strcmp((char *)k->name, "dscp") == 0) {
 				sess->dscp = atoi((char *)c);
-/*				printf("   Got dscp %s\n", c); */
 			}
 
 			xmlFree(c);
@@ -171,4 +203,3 @@ int config_msess(xmlDoc *doc) {
 	return 0;
 
 }
-

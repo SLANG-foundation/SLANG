@@ -1,15 +1,24 @@
+/**
+ * Keeps track of measurement sessions.
+ *
+ * Maintains a list of current measurement sessions, each represented
+ * by an instance of the struct msess.
+ *
+ * \file	msess.c
+ * \author	Anders Berggren <anders@halon.se>
+ * \author	Lukas Garberg <lukas@spritelink.net>
+ */
 #include <string.h>
 #include <arpa/inet.h>
 
 #include "probed.h"
 #include "msess.h"
 
-struct msess *sessions, *cur;
-struct msess_head sessions_head;
-struct timespec timeout;
+struct msess *cur; /**< Used for iterating the sessions. */
+struct msess_head sessions_head; /**< Keeps a reference to the beginning of the list */
 
 /**
- * Initialize measurement session list handler
+ * Initialize measurement session list.
  */
 void msess_init(void) {
 
@@ -18,7 +27,10 @@ void msess_init(void) {
 }
 
 /**
- * Add measurement session to list
+ * Add measurement session to list.
+ *
+ * \param[in] id ID of the measurement session.
+ * \return Pointer to the created measurement session.
  */
 struct msess *msess_add(msess_id id) {
 
@@ -37,7 +49,17 @@ struct msess *msess_add(msess_id id) {
 }
 
 /**
- * Add to list or update already existing measurement session 
+ * Add new or update already existing measurement session.
+ *
+ * A function to help keeping the measurement session list in sync with
+ * the configuration. If a measurement session with the same ID as the 
+ * one we are trying to add already exists, modify it make it equal to
+ * the one supplied. If no session is found, the supplied one is added 
+ * to the list.
+ * \n\n
+ * If a copy was found, the supplied msess is free()-ed.
+ *
+ * \param[in] nsess Pointer to the msess to add.
  */
 void msess_add_or_update(struct msess *nsess) {
 
@@ -64,7 +86,12 @@ void msess_add_or_update(struct msess *nsess) {
 }
 
 /**
- * Remove measurement session from list
+ * Remove measurement session from list.
+ *
+ * Removes a given measurement session from the list and frees its 
+ * memory.
+ *
+ * \param[in] sess Pointer to msess to remove.
  */
 void msess_remove(struct msess *sess) {
 
@@ -76,7 +103,13 @@ void msess_remove(struct msess *sess) {
 } 
 
 /**
- * Find a msess entry for the given address and ID
+ * Find msess with a specific ID.
+ *
+ * Finds the measurement session with the specified ID. If no matching
+ * session is found, NULL is returned.
+ *
+ * \param[in] id ID of the measurement session.
+ * \return Pointer to matching measurement session. If none found, NULL is returned.
  */
 struct msess *msess_find(msess_id id) {
 
@@ -97,7 +130,7 @@ struct msess *msess_find(msess_id id) {
 }
 
 /**
- * Prints all sessions currently configured to console
+ * Prints all sessions currently configured to console.
  */
 void msess_print_all(void) {
 
@@ -110,7 +143,9 @@ void msess_print_all(void) {
 }
 
 /**
- * Print one session to console
+ * Print one session to console.
+ *
+ * \param[in] sess Pointer to measurement session to print.
  */
 void msess_print(struct msess *sess) {
 
@@ -130,7 +165,19 @@ void msess_print(struct msess *sess) {
 }
 
 /**
- * Function to iterate over all msesses.
+ * Get next msess.
+ *
+ * A function to iterate the measurement session list.
+ * For each time run, the function returns the next session in the list
+ * until it reaches the end, when NULL is returned.\n\n
+ * Example usage:
+ * <tt> while ( (sess = msess_next()) ) {
+ *   do something..
+ * } </tt> \n
+ * To start over, run msess_reset() (automatically run when the end of
+ * the list is reached).
+ *
+ * \return Pointer to next msess.
  */
 struct msess *msess_next(void) {
 
@@ -150,6 +197,9 @@ struct msess *msess_next(void) {
 
 /**
  * Reset msess iterator variable.
+ *
+ * Used to start over the iteration of measurement sessions made by
+ * msess_next().
  */
 void msess_reset(void) {
 
@@ -161,8 +211,8 @@ void msess_reset(void) {
  * Get sequence number.
  *
  * Increases sequence number and returns next value.
- * @param sess Pointer to msess structure.
- * @return Next sequence number.
+ * \param[in] sess Pointer to msess structure.
+ * \return Next sequence number.
  */
 uint32_t msess_get_seq(struct msess *sess) {
 

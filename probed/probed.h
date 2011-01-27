@@ -107,6 +107,7 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts);
 
 int recv_w_ts(int sock, int flags, /*@out@*/ struct packet *pkt);
 int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts);
+int set_dscp(int sock, uint8_t dscp);
 
 int config_read(xmlDoc **doc, char *cfgpath);
 int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
