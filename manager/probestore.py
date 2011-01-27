@@ -7,8 +7,11 @@ import logging
 import sqlite3
 
 import config
+from probe import Probe
+from timespec import Timespec
 
 class ProbeStore:
+    """ Probe storage """
 
     lock = None
     logger = None
@@ -19,6 +22,7 @@ class ProbeStore:
 
     def __init__(self):
         """Constructor
+
         """
 
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -52,6 +56,9 @@ class ProbeStore:
             raise ProbeStoreError("Unable to open database")
 
     def insert(self, probe):
+        """ Insert probe 
+        
+        """
 
         self.lock.acquire()
 
@@ -60,6 +67,11 @@ class ProbeStore:
         self.buff.append(probe)
 
         self.lock.release()
+
+    def flush(self):
+        """ Flush received probes to database
+        
+        """    
 
 
 class ProbeStoreError(Exception):
