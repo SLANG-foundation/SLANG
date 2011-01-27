@@ -1,67 +1,63 @@
 #! /usr/bin/python
 
-import subprocess
 import sys
 import os
 import logging
+import threading
 from signal import *
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 import config
-import msess
+import probestore
+import probed
 
 class Manager:
 
-  logger = None
-  config = None
-  msess = None
+    logger = None
+    config = None
+    pstore = None
 
-  def __init__(self):
-    """Constructor
-    """
+    def __init__(self):
+        """Constructor
+        """
 
-    self.config = config.Config()
-    self.logger = logging.getLogger('Manager')
-    self.msess = msess.Msess()
+        self.config = config.Config()
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.pstore = probestore.ProbeStore()
+        self.probed = probed.Probed(self.pstore)
 
-    # start probe application
-    try:
-      self.probe = subprocess.Popen(['../probed/probed', 'c'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
-      self.logger.debug('Probe application started')
-    except :
-      self.logger.critical("Unable to start probe application!")
-      sys.exit(1)
+        # define XML-RPC server
+        self.server = SimpleXMLRPCServer(("localhost", 8000),
+            requestHandler=RequestHandler,
+            logRequests=False)
+        self.server.register_introspection_functions()
 
-    # define XML-RPC server
-    self.server = SimpleXMLRPCServer(("localhost", 8000),
-                            requestHandler=RequestHandler,
-                            logRequests=False)
-    self.server.register_introspection_functions()
+        # export functions
+        self.server.register_function(self.reload_config)
+        
+    def reload_config(self):
+        """ Reload configuration
 
-    # export functions
-    self.server.register_function(self.reload_config)
-    
-  def reload_config(self):
-    """ Reload configuration
+           Fetches configuration from central node and saves to disk.
+           Then, send a SIGHUP to the probe application to make it reload
+           the configuration.
+        """
 
-        Fetches configuration from central node and saves to disk.
-        Then, send a SIGHUP to the probe application to make it reload
-        the configuration.
-    """
+        self.logger.info("Reloading configuration")
 
-    self.logger.info("Reloading configuration")
+        # fetch config
 
-    # fetch config
+        # write to disk
 
-    # write to disk
+        # send SIGHUP
+        self.probe.send_signal(SIGHUP)
 
-    # send SIGHUP
-    self.probe.send_signal(SIGHUP)
+        return 1;
 
-    return 1;
-
-  def run(self):
-    self.server.serve_forever()
+    def run(self):
+        
+        self.probed.start()
+        self.server.serve_forever()
 
 class RequestHandler(SimpleXMLRPCRequestHandler):
-  rpc_paths = ('/xmlrpc',)
+    rpc_paths = ('/xmlrpc',)
