@@ -21,6 +21,7 @@
  * \param[in]  flags Flags to recv(), usually for reading from error queue
  * \param[out] pkt   Pointer to pkt, where addr, data and tstamp is placed
  * \warning          This function only receices DATALEN bytes
+ * \bug              We don't really take care of endianness __at__all__
  */
 
 int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
