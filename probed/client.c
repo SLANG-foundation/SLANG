@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include "probed.h"
 
-#define FIFO "/tmp/probed.fifo"
+/* #define FIFO "/tmp/probed.fifo" */
 
 #define STATE_PING 'i'
 #define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
@@ -138,14 +138,23 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
  * @todo Is the really good to wait for FIFO open?
  */
 void client_res_init(void) {
+
+	char fifo_path[TMPLEN];
+
 	if (cfg.op == OPMODE_DAEMON) {
-		(void)unlink(FIFO);
-		if (mknod(FIFO, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
-			syslog(LOG_ERR, "mknod: %s: %s", FIFO, strerror(errno));
+		if (config_getkey("/config/fifopath", fifo_path, TMPLEN) < 0) {
+			syslog(LOG_CRIT, "client_res_init: Unable to find FIFO path in config!");
 			exit(EXIT_FAILURE);
 		}
-		syslog(LOG_INFO, "Waiting for listeners on FIFO %s", FIFO);
-		cfg.fifo = open(FIFO, O_WRONLY);
+		(void)unlink(fifo_path);
+
+		if (mknod(fifo_path, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
+			syslog(LOG_ERR, "mknod: %s: %s", fifo_path, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+
+		syslog(LOG_INFO, "Waiting for listeners on FIFO %s", fifo_path);
+		cfg.fifo = open(fifo_path, O_WRONLY);
 	}
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
 	LIST_INIT(&res_head);

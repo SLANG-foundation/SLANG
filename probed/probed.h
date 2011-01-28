@@ -85,7 +85,7 @@ struct scm_timestamping {
 
 int main(int argc, char *argv[]);
 void help_and_die(void);
-void reload(xmlDoc **cfgdoc, char *cfgpath);
+void reload(char *cfgpath);
 
 void debug(int enabled);
 void p(char *str);
@@ -111,9 +111,9 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts);
 int dscp_set(int sock, uint8_t dscp);
 int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out);
 
-int config_read(xmlDoc **doc, char *cfgpath);
-int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes);
-int config_msess(xmlDoc *doc);
+int config_read(char *cfgpath);
+int config_getkey(char *xpath, char *str, size_t bytes);
+int config_msess();
 
 void client_res_init(void);
 void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts);

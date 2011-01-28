@@ -25,7 +25,6 @@ int main(int argc, char *argv[]) {
 	int arg, s_udp, s_tcp, log, ret_val;
 	char tstamp;
 	char *addr, *iface, *port, *cfgpath;
-	xmlDoc *cfgdoc = 0;
 	struct msess *client_msess;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
 
@@ -97,12 +96,8 @@ int main(int argc, char *argv[]) {
 	if (cfg.op == OPMODE_DAEMON) {
 		p("Daemon mode; both server and client, output to pipe");
 		/* read config */
-		reload(&cfgdoc, cfgpath);
-		if (cfgdoc == NULL) {
-			p("Invalid configuration file");
-			exit(EXIT_FAILURE);
-		}
-		(void)config_msess(cfgdoc);
+		reload(cfgpath);
+		(void)config_msess();
 		loop_or_die(s_udp, s_tcp);
 	}
 
@@ -136,17 +131,17 @@ void help_and_die(void) {
 /*
  * Reload application
  */
-void reload(xmlDoc **cfgdoc, char *cfgpath) {
+void reload(char *cfgpath) {
 
 	char tmp[TMPLEN] = "";
 
-	if (config_read(cfgdoc, cfgpath) < 0) {
+	if (config_read(cfgpath) < 0) {
 		syslog(LOG_ERR, "Invalid configuration, using default values");
 	};
 	/* configure application */
 	syslog(LOG_INFO, "Reloading configuration...");
 	/* extra output */
-	if (config_getkey(*cfgdoc, "/config/debug", tmp, TMPLEN) == 0) {
+	if (config_getkey("/config/debug", tmp, TMPLEN) == 0) {
 		if (tmp[0] == 't' || tmp[0] == '1') debug(1); 
 		 else debug(0);
 	}

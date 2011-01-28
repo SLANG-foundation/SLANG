@@ -20,14 +20,15 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+xmlDoc *cfgdoc = 0;
+
 /**
  * Reads configuration from disk.
  *
- * \param[out] doc Reference to a location where the XML document data will be placed.
  * \param[in] cfgpath Path to config file.
  * \return Status; 0 on success, <0 on failure.
  */
-int config_read(xmlDoc **doc, char *cfgpath) {
+int config_read(char *cfgpath) {
 
 	xmlDoc *tmpdoc;
 
@@ -36,8 +37,8 @@ int config_read(xmlDoc **doc, char *cfgpath) {
 	if (!tmpdoc) 
 		return -1;
 
-	xmlFreeDoc(*doc);
-	*doc = tmpdoc;
+	xmlFreeDoc(cfgdoc);
+	cfgdoc = tmpdoc;
 	return 0;
 
 }
@@ -45,13 +46,12 @@ int config_read(xmlDoc **doc, char *cfgpath) {
 /**
  * Fetches configuration parameter from config.
  *
- * \param[in] doc Pointer to the XML document.
  * \param[in] xpath XPath string for the config key.
  * \param[out] str Pointer to a buffer where the result will be written.
  * \param[in] bytes Size of buffer.
  * \return Status of execution. 0 on success, <0 on failure.
  */
-int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
+int config_getkey( char *xpath, char *str, size_t bytes) {
 
 	xmlXPathContext *ctx; 
 	xmlXPathObject *o;
@@ -59,11 +59,11 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
 	xmlNode *n;
 	xmlChar *data;
 
-	if (doc == 0) {
+	if (cfgdoc == 0) {
 		syslog(LOG_ERR, "No configuration.");
 		return -1;
 	}
-	ctx = xmlXPathNewContext(doc);
+	ctx = xmlXPathNewContext(cfgdoc);
 	if (!ctx) {
 		syslog(LOG_ERR, "xmlXPathNewContext: %s", strerror(errno));
 		return -1;
@@ -102,12 +102,11 @@ int config_getkey(xmlDoc *doc, char *xpath, char *str, size_t bytes) {
  * Syncs measurement session list to configuration file. New sessions
  * are added, old sessions updated and removed sessions removed.
  *
- * \param[in] doc XML Document.
  * \return Status; 0 on success, <0 on failure.
  *
  * \todo Does not yet remove sessions which does not exist.
  */
-int config_msess(xmlDoc *doc) {
+int config_msess() {
 
 	xmlNode *n, *r, *k;
 	xmlChar *c;
@@ -117,23 +116,23 @@ int config_msess(xmlDoc *doc) {
 	int ret_val = 0;
 	
 	/* configuration sanity checks */
-	if (doc == 0) {
+	if (cfgdoc == 0) {
 		syslog(LOG_ERR, "No configuration.");
 		return -1;
 	}
-	if (!doc->children) {
+	if (!cfgdoc->children) {
 		syslog(LOG_ERR, "Empty configuration.");
 		return -1;
 	}
 
 	/* get port */
-	if (config_getkey(doc, "/config/port", port, TMPLEN) != 0) {
+	if (config_getkey("/config/port", port, TMPLEN) != 0) {
 		syslog(LOG_CRIT, "Unable to get port from configuration");
 		return -1;
 	}
 
 	/* iterate config - look for <probe> */
-	r = doc->children;
+	r = cfgdoc->children;
 	for (n = r->children; n != NULL; n = n->next) {
 
 		if ( !(
