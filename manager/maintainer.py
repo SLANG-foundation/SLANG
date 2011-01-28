@@ -13,13 +13,14 @@ class Maintainer(threading.Thread):
     
     logger = None
     pstore = None
+    thread_stop = False
 
     last_flush = None
     last_delete = None
 
     def __init__(self, pstore):
 
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, name=self.__class__.__name__)
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
@@ -36,6 +37,10 @@ class Maintainer(threading.Thread):
         """ Starts thread. """
 
         while True:
+
+            if self.thread_stop:
+                self.logger.info("Stopping thread...")
+                break
             
             if (time() - self.last_flush) >= self.flush_interval:
                 self.logger.debug("Starting flush...")
@@ -47,5 +52,9 @@ class Maintainer(threading.Thread):
                 self.pstore.delete(600)
                 self.last_delete = time()
 
-            sleep(5)
+            sleep(1)
             
+    def stop(self):
+        """ Stop thread """
+
+        self.thread_stop = True

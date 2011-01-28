@@ -2,6 +2,8 @@
 
 import logging
 import logging.handlers
+import signal
+
 from manager import Manager
 import manager
 from config import Config
@@ -29,4 +31,13 @@ c = Config("../probed/settings.xml")
 logger.debug("Starting up...")
 
 m = Manager()
+
+# set signal handlers
+signal.signal(signal.SIGINT, m.sighandler)
+#signal.signal(signal.SIGKILL, m.sighandler)
+#signal.signal(signal.SIGALRM, m.sighandler)
+#signal.signal(signal.SIGKILL, m.sighandler)
+
 m.run()
+
+logger.info("run() finished.")

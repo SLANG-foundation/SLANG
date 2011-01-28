@@ -19,8 +19,9 @@ class ProbeStore:
     lock_buf = None
     logger = None
     config = None
-    db_conn = None
-    db_curs = None
+    db = None
+#    db_conn = None
+#    db_curs = None
     buf = []
 
     def __init__(self):
@@ -56,6 +57,16 @@ class ProbeStore:
             self.logger.critical("Unable to open database: %s" % e)
             raise ProbeStoreError("Unable to open database: %s" % e)
 
+#    def stop(self):
+
+    def __del__(self):
+        """ Make sure database thread is closed """
+        self.logger.debug("Deleting probestore...")
+        self.db.close()
+        self.logger.debug("Waiting for db to die...")
+        self.db.join()
+        self.logger.debug("db dead.")
+
     def insert(self, probe):
         """ Insert probe """
 
@@ -88,7 +99,7 @@ class ProbeStore:
             "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         for p in tmpbuf:
             try:
-                self.db_curs.execute(sql, 
+                self.db.execute(sql, 
                     (p.msess_id, p.seq, p.state,
                     p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
@@ -111,7 +122,7 @@ class ProbeStore:
 #        self.lock_db.acquire()
         sql = "DELETE FROM probes WHERE t1_sec < ?"
         try:
-            self.db_curs.execute(sql, now - age)
+            self.db.execute(sql, now - age)
 #            self.db_conn.commit()
         except Exception, e:
             self.logger.error("Unable to delete old data: %s" % e)
@@ -127,6 +138,7 @@ class ProbeStoreDB(threading.Thread):
         threading.Thread.__init__(self)
         self.db = db
         self.reqs = Queue()
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.start()
 
     def run(self):
@@ -140,14 +152,22 @@ class ProbeStoreDB(threading.Thread):
         # occurs, perform commit.
         while True:
             req, arg, res = self.reqs.get()
-            if req=='--close--': break
-            curs.execute(req, arg)
-            conn.commit()
+            if req=='--close--': 
+                self.logger.info("Stopping thread...")
+                break
+
+            try:
+                curs.execute(req, arg)
+                conn.commit()
+            except Exception, e:
+                self.logger.error("Unable to execute SQL command: %s" % e)
+
             if res:
                 for rec in curs:
                     res.put(rec)
                 res.put('--no more--')
 
+        conn.commit()
         conn.close()
 
     def execute(self, req, arg=None, res=None):
@@ -164,4 +184,5 @@ class ProbeStoreDB(threading.Thread):
             yield rec
 
     def close(self):
+        self.logger.debug("Got close request, passing to thread.")
         self.execute('--close--')
