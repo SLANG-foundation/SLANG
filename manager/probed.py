@@ -4,7 +4,8 @@ import subprocess
 import sys
 import logging
 import threading
-from struct import unpack 
+#from struct import unpack 
+from probe import Probe
 
 import config
 
@@ -56,8 +57,9 @@ class Probed(threading.Thread):
                 data = self.fifo.read(128)
                 self.logger.debug("got ipc: %d bytes " % len(data))
                 # it can hold 2500 probes in fifo buff before pause
-                data = unpack('llc16siillllllll16s', data)
-                self.pstore.insert(data)
+                p = Probe(data)
+#                data = unpack('llc16siillllllll16s', data)
+                self.pstore.insert(p)
             except:
                 print('lost ipc')
                 raise

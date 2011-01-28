@@ -1,21 +1,53 @@
 class Timespec:
     """ A nanosecond resolution timestamp. """
 
-    self.sec = None
-    self.nsec = None
+    sec = None
+    nsec = None
 
     def __init__(self, sec, nsec):
         """ Create Timespec from seconds and nanoseconds. """
+
         self.sec = sec
         self.nsec = nsec
 
     def __add__(self, other):
         """ Performs addition of two Timespeces. """
-        return None
+
+        res_sec = self.sec + other.sec
+        res_nsec = self.nsec + other.nsec
+        if (res_nsec >= 1000000000):
+            res_sec += 1
+            res_nsec -= 1000000000
+        
+        return Timespec(res_sec, res_nsec)
 
     def __sub__(self, other):
         """ Performs subtraction of two Timespeces. """
+
+        res_sec = self.sec - other.sec
+        res_nsec = self.nsec - other.nsec
+        if res_nsec < 0:
+            res_sec -= 1
+            res_nsec += 1000000000
+
+        return Timespec(res_sec, res_nsec)
+
+    def __cmp__(self, other):
+        """ Performs comparisons 
+
+        "Should return a negative integer if self < other, zero if 
+        self == other, a positive integer if self > other."
+
+        """
         return None
+
+    def __nonzero__(self):
+        """ Checks if the Timespec is nonzero for truth value testing.
+
+        "Called to implement truth value testing and the built-in 
+        operation bool(); should return False or True, or their 
+        integer equivalents 0 or 1."
+        """
 
     def __str__(self):
         """ Returns a string representation of the Timespec. """

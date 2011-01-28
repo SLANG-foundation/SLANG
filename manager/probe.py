@@ -2,9 +2,7 @@ from struct import unpack
 from timespec import Timespec
 
 class Probe:
-    """ A probe.
-
-    """
+    """ A probe. """
 
     created = None
     t1 = None
@@ -12,9 +10,9 @@ class Probe:
     t3 = None
     t4 = None
 
-    self.addr = None
-    self.msess_id = None
-    self.seq = None
+    addr = None
+    msess_id = None
+    seq = None
 
     def __init__(self, data):
 
@@ -30,3 +28,21 @@ class Probe:
         self.t3 = Timespec(data[10], data[11])
         self.t4 = Timespec(data[12], data[13])
 
+    def rtt(self):
+        """ Calculates the rtt of the probe. """
+
+        return (self.t4 - self.t1) - (self.t3 - self.t2)
+
+class ProbeSet:
+    """ A set of probes. """
+
+    def __init__():
+        pass
+
+    def avg_rtt():
+        """ Find the average RTT """
+        pass
+
+    def mean_rtt():
+        """ Find the mean RTT """
+        pass

@@ -9,6 +9,7 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 import config
 import probestore
+import maintainer
 import probed
 
 class Manager:
@@ -16,15 +17,16 @@ class Manager:
     logger = None
     config = None
     pstore = None
+    maintainer = None
 
     def __init__(self):
-        """Constructor
-        """
+        """ Constructor """
 
         self.config = config.Config()
         self.logger = logging.getLogger(self.__class__.__name__)
         self.pstore = probestore.ProbeStore()
         self.probed = probed.Probed(self.pstore)
+        self.maintainer = maintainer.Maintainer(self.pstore)
 
         # define XML-RPC server
         self.server = SimpleXMLRPCServer(("localhost", 8000),
@@ -55,8 +57,12 @@ class Manager:
         return 1;
 
     def run(self):
+        """ Start the application """
         
+        # start threads
         self.probed.start()
+        self.maintainer.start()
+
         self.server.serve_forever()
 
 class RequestHandler(SimpleXMLRPCRequestHandler):
