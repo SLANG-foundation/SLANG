@@ -19,6 +19,8 @@ class Maintainer(threading.Thread):
 
     def __init__(self, pstore):
 
+        threading.Thread.__init__(self)
+
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
         
@@ -35,11 +37,15 @@ class Maintainer(threading.Thread):
 
         while True:
             
-            if time.now() - self.last_flush <= self.flush_interval:
+            if (time() - self.last_flush) >= self.flush_interval:
+                self.logger.debug("Starting flush...")
                 self.pstore.flush()
+                self.last_flush = time()
 
-            if time.now() - self.last_delete <= self.delete_interval:
+            if (time() - self.last_delete) >= self.delete_interval:
+                self.logger.debug("Starting delete...")
                 self.pstore.delete(600)
+                self.last_delete = time()
 
-            time.sleep(5)
+            sleep(5)
             

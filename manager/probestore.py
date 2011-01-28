@@ -87,7 +87,7 @@ class ProbeStore:
             "t2_sec, t2_nsec, t3_sec, t3_nsec, " +
             "t4_sec, t4_nsec) VALUES " +
             "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        for p in buf:
+        for p in tmpbuf:
             try:
                 self.db_curs.execute(sql, 
                     (p.msess_id, p.seq, p.state,
@@ -95,11 +95,11 @@ class ProbeStore:
                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
                 )
             except Exception, e:
-                self.logger.error("Unable to flush probe to database: %s", e)
+                self.logger.error("Unable to flush probe to database: %s" % e)
         try:
             self.db_conn.commit()
-        except:
-            self.logger.error("Unable to commit flushed probes to database: %s", e)
+        except Exception, e:
+            self.logger.error("Unable to commit flushed probes to database: %s" % e)
         self.lock_db.release()
 
     def delete(self, age):
