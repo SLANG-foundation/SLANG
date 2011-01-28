@@ -6,6 +6,7 @@ import threading
 import logging
 import sqlite3
 import time
+from Queue import Queue
 
 import config
 from probe import Probe
@@ -34,10 +35,8 @@ class ProbeStore:
 
         # open database connection
         try:
-            self.db_conn = sqlite3.connect(self.config.get_param("/config/dbpath"))
-            self.db_conn.row_factory = sqlite3.Row
-            self.db_curs = self.db_conn.cursor()
-            self.db_curs.execute("CREATE TABLE IF NOT EXISTS probes (" + 
+            self.db = ProbeStoreDB(self.config.get_param("/config/dbpath"))
+            self.db.execute("CREATE TABLE IF NOT EXISTS probes (" + 
                 "session_id INTEGER," +
                 "seq INTEGER," + 
                 "t1_sec INTEGER," + 
@@ -50,8 +49,8 @@ class ProbeStore:
                 "t4_nsec INTEGER," + 
                 "state TEXT" + 
                 ");")
-            self.db_curs.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
-            self.db_conn.commit()
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
+#            self.db_conn.commit()
             
         except Exception, e:
             self.logger.critical("Unable to open database: %s" % e)
@@ -80,7 +79,7 @@ class ProbeStore:
         self.lock_buf.release()
 
         # write copied probes to database
-        self.lock_db.acquire()
+#        self.lock_db.acquire()
         
         sql = str("INSERT INTO probes " +
             "(session_id, seq, state, t1_sec, t1_nsec, " +
@@ -96,11 +95,11 @@ class ProbeStore:
                 )
             except Exception, e:
                 self.logger.error("Unable to flush probe to database: %s" % e)
-        try:
-            self.db_conn.commit()
-        except Exception, e:
-            self.logger.error("Unable to commit flushed probes to database: %s" % e)
-        self.lock_db.release()
+#        try:
+#            self.db_conn.commit()
+#        except:
+#            self.logger.error("Unable to commit flushed probes to database: %s" % e)
+#        self.lock_db.release()
 
     def delete(self, age):
         """ Deletes saved data of age 'age' and older. """
@@ -109,14 +108,60 @@ class ProbeStore:
 
         now = int(time.time())
 
-        self.lock_db.acquire()
+#        self.lock_db.acquire()
         sql = "DELETE FROM probes WHERE t1_sec < ?"
         try:
             self.db_curs.execute(sql, now - age)
-            self.db_conn.commit()
+#            self.db_conn.commit()
         except Exception, e:
             self.logger.error("Unable to delete old data: %s" % e)
-        self.lock_db.release()
+#        self.lock_db.release()
 
 class ProbeStoreError(Exception):
     pass
+
+class ProbeStoreDB(threading.Thread):
+    """ Thread-safe wrapper to sqlite interface """
+
+    def __init__(self, db):
+        threading.Thread.__init__(self)
+        self.db = db
+        self.reqs = Queue()
+        self.start()
+
+    def run(self):
+
+        conn = sqlite3.connect(self.db) 
+        conn.row_factory = sqlite3.Row
+        curs = conn.cursor()
+
+        # Possible fix to get rid of commit for each line:
+        # Use self.reqs.get() with a timeout, and when a timeout 
+        # occurs, perform commit.
+        while True:
+            req, arg, res = self.reqs.get()
+            if req=='--close--': break
+            curs.execute(req, arg)
+            conn.commit()
+            if res:
+                for rec in curs:
+                    res.put(rec)
+                res.put('--no more--')
+
+        conn.close()
+
+    def execute(self, req, arg=None, res=None):
+        """ "Execute" by pushing query to queue """
+
+        self.reqs.put((req, arg or tuple(), res))
+
+    def select(self, req, arg=None):
+        res=Queue()
+        self.execute(req, arg, res)
+        while True:
+            rec=res.get()
+            if rec=='--no more--': break
+            yield rec
+
+    def close(self):
+        self.execute('--close--')
