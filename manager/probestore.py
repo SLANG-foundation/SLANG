@@ -57,11 +57,9 @@ class ProbeStore:
             self.logger.critical("Unable to open database: %s" % e)
             raise ProbeStoreError("Unable to open database: %s" % e)
 
-#    def stop(self):
-
-    def __del__(self):
-        """ Make sure database thread is closed """
-        self.logger.debug("Deleting probestore...")
+    def stop(self):
+        """ Close down ProbeStore """
+        self.logger.debug("Closing probestore...")
         self.db.close()
         self.logger.debug("Waiting for db to die...")
         self.db.join()
@@ -90,8 +88,6 @@ class ProbeStore:
         self.lock_buf.release()
 
         # write copied probes to database
-#        self.lock_db.acquire()
-        
         sql = str("INSERT INTO probes " +
             "(session_id, seq, state, t1_sec, t1_nsec, " +
             "t2_sec, t2_nsec, t3_sec, t3_nsec, " +
@@ -106,11 +102,8 @@ class ProbeStore:
                 )
             except Exception, e:
                 self.logger.error("Unable to flush probe to database: %s" % e)
-#        try:
-#            self.db_conn.commit()
-#        except:
-#            self.logger.error("Unable to commit flushed probes to database: %s" % e)
-#        self.lock_db.release()
+
+        self.logger.debug("Flush complete")
 
     def delete(self, age):
         """ Deletes saved data of age 'age' and older. """
@@ -119,14 +112,11 @@ class ProbeStore:
 
         now = int(time.time())
 
-#        self.lock_db.acquire()
         sql = "DELETE FROM probes WHERE t1_sec < ?"
         try:
             self.db.execute(sql, now - age)
-#            self.db_conn.commit()
         except Exception, e:
             self.logger.error("Unable to delete old data: %s" % e)
-#        self.lock_db.release()
 
 class ProbeStoreError(Exception):
     pass
@@ -139,13 +129,19 @@ class ProbeStoreDB(threading.Thread):
         self.db = db
         self.reqs = Queue()
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.debug("Created instance")
         self.start()
 
     def run(self):
 
-        conn = sqlite3.connect(self.db) 
-        conn.row_factory = sqlite3.Row
-        curs = conn.cursor()
+        self.logger.debug("Starting database thread...")
+
+        try:
+            conn = sqlite3.connect(self.db) 
+            conn.row_factory = sqlite3.Row
+            curs = conn.cursor()
+        except Exception, e:
+            self.logger.error("Unable to establish database connection: %s" % e)
 
         # Possible fix to get rid of commit for each line:
         # Use self.reqs.get() with a timeout, and when a timeout 

@@ -35,19 +35,20 @@ class Probed(threading.Thread):
             self.probe = subprocess.Popen(['../probed/probed', '-i', 'eth2', '-d'], 
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
             self.logger.debug('Probe application started')
-        except :
-            self.logger.critical("Unable to start probe application!")
-            raise ProbedError("Unable to start probed application!")
+        except Exception, e:
+            self.logger.critical("Unable to start probe application: %s" % e)
+            raise ProbedError("Unable to start probed application: %s" % e)
 
-        # make sure probed is started before we open the fifo.
-        time.sleep(1)
+        # Try to open fifo
+        while self.fifo is None:
+            time.sleep(1)
+            self.open_fifo()
 
-        # open fifo
+    def open_fifo(self):
         try:
             self.fifo = open(self.config.get_param("/config/fifopath"), 'r');
         except Exception, e:
             self.logger.critical("Unable to open fifo: %s" % e)
-            raise ProbedError("Unable to open fifo: %s" % e)
 
     def stop(self):
         """ Stop thread execution """
@@ -67,6 +68,12 @@ class Probed(threading.Thread):
                 self.logger.info("Stopping thread...")
                 break
 
+            if self.fifo.closed:
+                self.logger.warn("FIFO closed. Retrying...")
+                self.open_fifo()
+                time.sleep(1)
+                continue
+
             try:
                 # ~780 probes can be held in fifo buff before pause
                 data = self.fifo.read(128)
@@ -75,15 +82,13 @@ class Probed(threading.Thread):
                 # error condition - handle in nice way!
                 # \todo Handle read from dead fifo in a nice way.
                 if len(data) < 1:
-                    time.sleep(1) 
                     continue
                 p = Probe(data)
 #                data = unpack('llc16siillllllll16s', data)
                 self.pstore.insert(p)
 
-            except:
-                print('lost ipc')
-                raise
+            except Exception, e:
+                self.logger.error("Unable to read from FIFO: %s" % e)
                 time.sleep(1) 
 
     def __del__(self):

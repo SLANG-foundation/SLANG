@@ -3,6 +3,7 @@
 import logging
 import logging.handlers
 import signal
+import sys
 
 from manager import Manager
 import manager
@@ -39,5 +40,6 @@ signal.signal(signal.SIGINT, m.sighandler)
 #signal.signal(signal.SIGKILL, m.sighandler)
 
 m.run()
+logger.info("run() finished - exiting")
 
-logger.info("run() finished.")
+sys.exit(0)

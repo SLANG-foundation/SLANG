@@ -70,6 +70,7 @@ class Manager:
         # stop threads
         self.maintainer.stop()
         self.probed.stop()
+        self.pstore.stop()
         self.thread_stop = True
 
         reactor.stop()
