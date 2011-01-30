@@ -32,7 +32,7 @@ class Probed(threading.Thread):
         # start probe application
         try:
             # \todo - Redirect to /dev/null!
-            self.probe = subprocess.Popen(['../probed/probed', '-i', 'eth2', '-d'], 
+            self.probe = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d'], 
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
             self.logger.debug('Probe application started')
         except Exception, e:
