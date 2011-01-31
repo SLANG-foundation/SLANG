@@ -20,8 +20,6 @@ class ProbeStore:
     logger = None
     config = None
     db = None
-#    db_conn = None
-#    db_curs = None
     buf = []
 
     def __init__(self):
@@ -71,7 +69,7 @@ class ProbeStore:
         self.lock_buf.acquire()
 
         # insert stuff
-        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.msess_id, probe.seq, probe.rtt()))
+#        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.msess_id, probe.seq, probe.rtt()))
         self.buf.append(probe)
 
         self.lock_buf.release()
@@ -114,9 +112,54 @@ class ProbeStore:
 
         sql = "DELETE FROM probes WHERE t1_sec < ?"
         try:
-            self.db.execute(sql, now - age)
+            self.db.execute(sql, (now - age, ))
         except Exception, e:
             self.logger.error("Unable to delete old data: %s" % e)
+
+    ###################################################################
+    #
+    # Functions to fetch data from database
+    #
+
+    def get_raw(self, session_id, start, end=None):
+        """ Get raw data from database.
+
+        Returns raw measurement data from database.
+        Arguments:
+        session_id -- ID of the session data is requested for.
+        start -- Start time.
+        stop -- End time.
+
+        Data is returned as a list of dicts.
+
+        """
+
+        if end is None:
+            end = int(time.Time())
+
+        self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
+
+        sql = "SELECT * FROM probes WHERE session_id = ? AND t1_sec > ? AND t1_sec < ?"
+        res = self.db.select(sql, (session_id, start, end))
+
+        retlist = []
+        for row in res:
+            retlist.append(
+                { 
+                    'seq': row['seq'], 
+                    'state': row['state'], 
+                    't1_sec': row['t1_sec'], 
+                    't1_nsec': row['t1_nsec'], 
+                    't2_sec': row['t2_sec'], 
+                    't2_nsec': row['t2_nsec'], 
+                    't3_sec': row['t3_sec'], 
+                    't3_nsec': row['t3_nsec'], 
+                    't4_sec': row['t4_sec'], 
+                    't4_nsec': row['t4_nsec'], 
+                })
+
+        return retlist
+    
 
 class ProbeStoreError(Exception):
     pass
@@ -154,15 +197,16 @@ class ProbeStoreDB(threading.Thread):
         exec_c = 0
         while True:
 
-            self.logger.debug("Fetching query from queue. Approximative queue length: %d", self.reqs.qsize())
+            #self.logger.debug("Fetching query from queue. Approximative queue length: %d", self.reqs.qsize())
 
             # fetch query from queue with a timeout.
             try:
-                req, arg, res = self.reqs.get(True, 1)
+                req, arg, res = self.reqs.get(True, 3)
             except Empty, e:
                 self.logger.debug("Queue timeout occurred. Committing transaction of %d queries." % exec_c)
                 conn.commit()
                 exec_c = 0
+                continue
 
             # Close command?
             if req=='--close--': 
@@ -181,9 +225,9 @@ class ProbeStoreDB(threading.Thread):
                     res.put(rec)
                 res.put('--no more--')
 
-            # If we have 1000 outstanding executions, perform a commit.
-            if exec_c >= 1000:
-                self.logger.debug("Reached 1000 outstanding queries. Committing transaction.")
+            # If we have 10000 outstanding executions, perform a commit.
+            if exec_c >= 10000:
+                self.logger.debug("Reached 10000 outstanding queries. Committing transaction.")
                 conn.commit()
                 exec_c = 0
 

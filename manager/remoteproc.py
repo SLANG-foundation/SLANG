@@ -33,7 +33,7 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         return 1
 
-    def xmlrpc_get_raw(self, session_id, start, end):
+    def xmlrpc_get_raw(self, session_id, start, end=None):
         """ Get raw data.
 
         Get raw measurement data for a measurement session.
