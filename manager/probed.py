@@ -83,8 +83,8 @@ class Probed(threading.Thread):
                 # \todo Handle read from dead fifo in a nice way.
                 if len(data) < 1:
                     continue
+
                 p = Probe(data)
-#                data = unpack('llc16siillllllll16s', data)
                 self.pstore.insert(p)
 
             except Exception, e:

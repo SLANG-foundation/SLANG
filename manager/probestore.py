@@ -6,7 +6,7 @@ import threading
 import logging
 import sqlite3
 import time
-from Queue import Queue
+from Queue import Queue, Empty
 
 import config
 from probe import Probe
@@ -146,22 +146,46 @@ class ProbeStoreDB(threading.Thread):
         # Possible fix to get rid of commit for each line:
         # Use self.reqs.get() with a timeout, and when a timeout 
         # occurs, perform commit.
+        #
+        # Another way would be to keep count of how many execute()s we 
+        # have run and commit when we reach a certain value.
+        #
+        # Or, we can do both.
+        exec_c = 0
         while True:
-            req, arg, res = self.reqs.get()
+
+            self.logger.debug("Fetching query from queue. Approximative queue length: %d", self.reqs.qsize())
+
+            # fetch query from queue with a timeout.
+            try:
+                req, arg, res = self.reqs.get(True, 1)
+            except Empty, e:
+                self.logger.debug("Queue timeout occurred. Committing transaction of %d queries." % exec_c)
+                conn.commit()
+                exec_c = 0
+
+            # Close command?
             if req=='--close--': 
                 self.logger.info("Stopping thread...")
                 break
 
             try:
                 curs.execute(req, arg)
-                conn.commit()
+                exec_c += 1
             except Exception, e:
                 self.logger.error("Unable to execute SQL command: %s" % e)
 
+            # handle response from select queries
             if res:
                 for rec in curs:
                     res.put(rec)
                 res.put('--no more--')
+
+            # If we have 1000 outstanding executions, perform a commit.
+            if exec_c >= 1000:
+                self.logger.debug("Reached 1000 outstanding queries. Committing transaction.")
+                conn.commit()
+                exec_c = 0
 
         conn.commit()
         conn.close()
