@@ -77,7 +77,7 @@ class ProbeStore:
     def flush(self):
         """ Flush received probes to database """    
 
-        self.logger.debug("Flushing probes to database")
+        self.logger.debug("Flushing %d probes to database" % len(self.buf))
 
         # create copy of buffer to reduce time it is locked
         self.lock_buf.acquire()

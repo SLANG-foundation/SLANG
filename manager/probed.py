@@ -14,6 +14,7 @@ class Probed(threading.Thread):
     """ Manages probed
     """
 
+    probed = None
     fifo = None
     logger = None
     config = None
@@ -28,13 +29,14 @@ class Probed(threading.Thread):
         self.config = config.Config()
 
         self.pstore = pstore
+	self.null = open("/dev/null", 'w')
 
         # start probe application
         try:
             # \todo - Redirect to /dev/null!
-            self.probe = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d'], 
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
-            self.logger.debug('Probe application started')
+            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-v'], 
+                stdout=self.null, stderr=self.null, shell=False)
+            self.logger.debug('Probe application started, pid %d', self.probed.pid)
         except Exception, e:
             self.logger.critical("Unable to start probe application: %s" % e)
             raise ProbedError("Unable to start probed application: %s" % e)
@@ -91,9 +93,7 @@ class Probed(threading.Thread):
                 self.logger.error("Unable to read from FIFO: %s" % e)
                 time.sleep(1) 
 
-    def __del__(self):
-        self.thread_stop = True
-        self.fifo.close()
+	self.fifo.close()
 
 class ProbedError(Exception):
     pass
