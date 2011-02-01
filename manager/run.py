@@ -35,7 +35,6 @@ m = Manager()
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)
-#signal.signal(signal.SIGKILL, m.sighandler)
 #signal.signal(signal.SIGALRM, m.sighandler)
 #signal.signal(signal.SIGKILL, m.sighandler)
 

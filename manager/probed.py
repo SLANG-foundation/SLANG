@@ -29,7 +29,7 @@ class Probed(threading.Thread):
         self.config = config.Config()
 
         self.pstore = pstore
-	self.null = open("/dev/null", 'w')
+        self.null = open("/dev/null", 'w')
 
         # start probe application
         try:

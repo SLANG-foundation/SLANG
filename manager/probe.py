@@ -33,16 +33,21 @@ class Probe:
 
         return (self.t4 - self.t1) - (self.t3 - self.t2)
 
-class ProbeSet:
+class ProbeSet(list):
     """ A set of probes. """
 
-    def __init__():
-        pass
+    def agg(self, agg = None):
+        """ Return aggregated data as ... """
 
-    def avg_rtt():
+    def avg_rtt(self, agg = None):
         """ Find the average RTT """
+        
+        sum = Timespec(0, 0)
+        for p in self:
+            sum += p.rtt()
+
         pass
 
-    def mean_rtt():
+    def perc_rtt(self, agg = None):
         """ Find the mean RTT """
         pass

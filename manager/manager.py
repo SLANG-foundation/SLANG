@@ -29,6 +29,7 @@ class Manager:
 
         self.config = config.Config()
         self.logger = logging.getLogger(self.__class__.__name__)
+
         self.pstore = probestore.ProbeStore()
         self.probed = probed.Probed(self.pstore)
         self.maintainer = maintainer.Maintainer(self.pstore)
@@ -59,7 +60,7 @@ class Manager:
     def sighandler(self, signum, frame):
         """ Signal handler. """
 
-        if signum == signal.SIGINT or signum == signal.SIGKILL or signum == signal.SIGALRM or signum == signal.SIGTERM:
+        if signum == signal.SIGINT or signum == signal.SIGALRM or signum == signal.SIGTERM:
             self.stop()
 
     def stop(self):
@@ -71,7 +72,6 @@ class Manager:
         self.maintainer.stop()
         self.probed.stop()
         self.pstore.stop()
-        self.thread_stop = True
 
         reactor.stop()
 
@@ -81,8 +81,6 @@ class Manager:
         self.logger.debug("Maintainer done. Waiting for probed...")
         self.probed.join()
         self.logger.debug("Probed done.")
-#        del self.pstore
-#        self.logger.debug("pstore dead.")
 
     def run(self):
         """ Start the application """

@@ -49,7 +49,7 @@ class Maintainer(threading.Thread):
 
             if (time() - self.last_delete) >= self.delete_interval:
                 self.logger.debug("Starting delete...")
-                self.pstore.delete(600)
+                self.pstore.delete(300)
                 self.last_delete = time()
 
             sleep(1)

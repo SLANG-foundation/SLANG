@@ -27,7 +27,6 @@ class ProbeStore:
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
-        self.lock_db = threading.Lock()
         self.lock_buf = threading.Lock()
 
         self.logger.debug("Created instance")
@@ -49,7 +48,6 @@ class ProbeStore:
                 "state TEXT" + 
                 ");")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
-#            self.db_conn.commit()
             
         except Exception, e:
             self.logger.critical("Unable to open database: %s" % e)
@@ -179,12 +177,15 @@ class ProbeStoreDB(threading.Thread):
 
         self.logger.debug("Starting database thread...")
 
-        try:
-            conn = sqlite3.connect(self.db) 
-            conn.row_factory = sqlite3.Row
-            curs = conn.cursor()
-        except Exception, e:
-            self.logger.error("Unable to establish database connection: %s" % e)
+        while True:
+          try:
+              conn = sqlite3.connect(self.db) 
+              conn.row_factory = sqlite3.Row
+              curs = conn.cursor()
+              break
+          except Exception, e:
+              self.logger.error("Unable to establish database connection: %s. Retrying." % e)
+              time.sleep(1)
 
         # Possible fix to get rid of commit for each line:
         # Use self.reqs.get() with a timeout, and when a timeout 
