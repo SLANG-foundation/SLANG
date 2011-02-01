@@ -39,6 +39,7 @@ void msess_print_all(void);
 struct msess *msess_add(msess_id id);
 void msess_remove(struct msess *sess);
 struct msess *msess_find(msess_id id);
+struct msess *msess_find_running_addr(struct sockaddr_in6 *addr);
 uint32_t msess_get_seq(struct msess *sess);
 struct msess *msess_next(void);
 void msess_reset(void);
