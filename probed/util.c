@@ -49,8 +49,10 @@ void p(char *str) {
  * \param[in] enabled Boolean to determine to enable or disable.
  */
 void debug(int enabled) {
-	if (enabled == 1) (void)setlogmask(LOG_UPTO(LOG_DEBUG));
-	else (void)setlogmask(LOG_UPTO(LOG_INFO));
+	if (enabled == 1) 
+		(void)setlogmask(LOG_UPTO(LOG_DEBUG));
+	else 
+		(void)setlogmask(LOG_UPTO(LOG_INFO));
 	return;
 }
 

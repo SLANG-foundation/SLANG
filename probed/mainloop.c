@@ -122,7 +122,6 @@ void loop_or_die(int s_udp, int s_tcp) {
 					continue;
 				rx = (data_t *)&pkt.data;
 				if (pkt.data[0] == TYPE_PING) {
-/*					syslog(LOG_DEBUG, "> PING %d dscp %d\n", rx->seq, pkt.dscp); */
 					/* Send UDP PONG */
 					tx.type = TYPE_PONG;
 					tx.id = rx->id;
@@ -150,7 +149,6 @@ void loop_or_die(int s_udp, int s_tcp) {
 					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
 					//tx_last = tx;
 					/* Really send TCP */
-/*					syslog(LOG_DEBUG, "< PONG %d\n", tx.seq); */
 					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
 					if (fd < 0) continue;
 					syslog(LOG_DEBUG, "< TIME %d (%d)\n", rx->seq, fd);
@@ -162,7 +160,6 @@ void loop_or_die(int s_udp, int s_tcp) {
 					}
 				} 
 				if (pkt.data[0] == TYPE_PONG) {
-/*					syslog(LOG_DEBUG, "> PONG %d\n", rx->seq); */
 					client_res_update(&pkt.addr.sin6_addr, rx, &pkt.ts);
 				} 
 			} else if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
@@ -188,7 +185,6 @@ void loop_or_die(int s_udp, int s_tcp) {
 				/* Security feature; make sure type is tstamp; ts is NULL */
 				rx = (data_t *)&pkt.data;
 				rx->type = 't';
-/*				syslog(LOG_DEBUG, "> TS   %d\n", rx->seq); */
 				client_res_update(&pkt.addr.sin6_addr, rx, NULL);
 			}
 		} else {
@@ -209,7 +205,6 @@ void loop_or_die(int s_udp, int s_tcp) {
 						continue;
 					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);
 					memcpy(&sess->last_sent, &now, sizeof now);
-/*					syslog(LOG_DEBUG, "< PING %d\n", tx.seq); */
 
 				}
 			}

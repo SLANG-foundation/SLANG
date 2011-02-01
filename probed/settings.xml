@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <config>
-	<!--<debug>false</debug>-->
+	<debug>true</debug>
 	<timestamp>hw</timestamp>
 	<interface>eth2</interface>
 	<port>60666</port>
