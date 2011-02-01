@@ -1,6 +1,12 @@
 from struct import unpack
 from timespec import Timespec
 
+def from_struct(structdata):
+    """ Create a probe from the struct data """
+    
+    listdata = unpack('llc16siillllllll16s', structdata)
+    return Probe(listdata) 
+
 class Probe:
     """ A probe. """
 
@@ -15,8 +21,6 @@ class Probe:
     seq = None
 
     def __init__(self, data):
-
-        data = unpack('llc16siillllllll16s', data)
 
         self.created = Timespec(data[0], data[1])
         self.state = data[2]

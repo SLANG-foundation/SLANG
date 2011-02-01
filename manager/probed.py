@@ -7,7 +7,7 @@ import threading
 #from struct import unpack 
 import time
 
-from probe import Probe
+import probe
 import config
 
 class Probed(threading.Thread):
@@ -86,7 +86,7 @@ class Probed(threading.Thread):
                 if len(data) < 1:
                     continue
 
-                p = Probe(data)
+                p = probe.from_struct(data)
                 self.pstore.insert(p)
 
             except Exception, e:
