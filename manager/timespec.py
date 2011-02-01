@@ -52,3 +52,11 @@ class Timespec:
     def __str__(self):
         """ Returns a string representation of the Timespec. """
         return "%d.%09d" % (self.sec, self.nsec)
+    
+    def __div__(self, other):
+        """ Performs division """
+        if other.__class__.__name__ != 'int':
+            raise Exception('We have not implemented Timespec/Timespec, LOL!')
+        res_sec = self.sec / other
+        res_nsec = ((self.sec % other) * 1000000000 + self.nsec) / other
+        return Timespec(res_sec, res_nsec)
