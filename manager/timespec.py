@@ -39,8 +39,17 @@ class Timespec:
         self == other, a positive integer if self > other."
 
         """
-        return None
-
+        if self.sec < other.sec:
+            return -1
+        elif self.sec > other.sec:
+            return 1
+        elif self.nsec < other.nsec:
+            return -1
+        elif self.nsec > other.nsec:
+            return 1
+        else:
+            return 0
+        
     def __nonzero__(self):
         """ Checks if the Timespec is nonzero for truth value testing.
 
@@ -48,6 +57,11 @@ class Timespec:
         operation bool(); should return False or True, or their 
         integer equivalents 0 or 1."
         """
+        
+        if self.sec == 0 and self.nsec == 0:
+            return True
+        else:
+            return False
 
     def __str__(self):
         """ Returns a string representation of the Timespec. """
