@@ -130,6 +130,34 @@ struct msess *msess_find(msess_id id) {
 }
 
 /**
+ * Find msess with running child process bound to a certain address
+ *
+ */
+struct msess *msess_find_running_addr(struct sockaddr_in6 *addr) {
+
+	struct msess *sess;
+
+	for (sess = sessions_head.lh_first; sess != NULL; sess = sess->entries.le_next) {
+
+		/* check for PID */
+		if (sess->child_pid == 0) {
+			return NULL;
+		}
+
+		/* compare addresses */
+		if (memcmp(&addr->sin6_addr, &sess->dst.sin6_addr, sizeof sess->dst.sin6_addr) == 0) {
+			/* match! */
+			return sess;
+		}
+
+	}
+	
+	/* none found */
+	return NULL;
+
+}
+
+/**
  * Prints all sessions currently configured to console.
  */
 void msess_print_all(void) {

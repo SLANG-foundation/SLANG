@@ -35,19 +35,22 @@ class ProbeStore:
         try:
             self.db = ProbeStoreDB(self.config.get_param("/config/dbpath"))
             self.db.execute("CREATE TABLE IF NOT EXISTS probes (" + 
-                "session_id INTEGER," +
-                "seq INTEGER," + 
-                "t1_sec INTEGER," + 
-                "t1_nsec INTEGER," + 
-                "t2_sec INTEGER," + 
-                "t2_nsec INTEGER," + 
-                "t3_sec INTEGER," + 
-                "t3_nsec INTEGER," + 
-                "t4_sec INTEGER," + 
-                "t4_nsec INTEGER," + 
-                "state TEXT" + 
+                "session_id INTEGER, " +
+                "seq INTEGER, " + 
+                "created_sec INTEGER, " +
+                "created_nsec INTEGER, " +
+                "t1_sec INTEGER, " + 
+                "t1_nsec INTEGER, " + 
+                "t2_sec INTEGER, " + 
+                "t2_nsec INTEGER, " + 
+                "t3_sec INTEGER, " + 
+                "t3_nsec INTEGER, " + 
+                "t4_sec INTEGER, " + 
+                "t4_nsec INTEGER, " + 
+                "state TEXT " + 
                 ");")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_created_sec ON probes(created_sec)")
             
         except Exception, e:
             self.logger.critical("Unable to open database: %s" % e)
@@ -85,14 +88,17 @@ class ProbeStore:
 
         # write copied probes to database
         sql = str("INSERT INTO probes " +
-            "(session_id, seq, state, t1_sec, t1_nsec, " +
-            "t2_sec, t2_nsec, t3_sec, t3_nsec, " +
+            "(session_id, seq, state, " + 
+            "created_sec, created_nsec, " +
+            "t1_sec, t1_nsec, " +
+            "t2_sec, t2_nsec, " + 
+            "t3_sec, t3_nsec, " +
             "t4_sec, t4_nsec) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         for p in tmpbuf:
             try:
                 self.db.execute(sql, 
-                    (p.msess_id, p.seq, p.state,
+                    (p.msess_id, p.seq, p.state, p.created.sec, p.created.nsec,
                     p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
                 )

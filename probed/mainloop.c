@@ -58,7 +58,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 	int fd_pipe[2];
 	socklen_t slen;
 
-	struct msess *sess;
+	struct msess *sess, *findsess;
 
 	/* IPC for children-to-parent (TCP client to UDP state machine) */
 	if (pipe(fd_pipe) < 0) {
@@ -76,6 +76,13 @@ void loop_or_die(int s_udp, int s_tcp) {
 
 		/* spawn client forks for all measurement sessions */
 		while ((sess = msess_next()) != NULL) {
+
+			/* make sure there is no fork already running with the same destination address */
+			if ((findsess = msess_find_running_addr(&sess->dst)) != NULL) {
+				syslog(LOG_DEBUG, "Found running probed child with same destination; pid: %d", findsess->child_pid);
+				sess->child_pid = findsess->child_pid;
+				continue;
+			}
 
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
 			//(void)sleep(1); // connect, wait!
@@ -115,13 +122,13 @@ void loop_or_die(int s_udp, int s_tcp) {
 					continue;
 				rx = (data_t *)&pkt.data;
 				if (pkt.data[0] == TYPE_PING) {
-					syslog(LOG_DEBUG, "> PING %d dscp %d\n", rx->seq, pkt.dscp);
+/*					syslog(LOG_DEBUG, "> PING %d dscp %d\n", rx->seq, pkt.dscp); */
 					/* Send UDP PONG */
 					tx.type = TYPE_PONG;
 					tx.id = rx->id;
 					tx.seq = rx->seq;
 					tx.t2 = pkt.ts;
-          (void)dscp_set(s_udp, pkt.dscp);
+					(void)dscp_set(s_udp, pkt.dscp);
 					(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);
 					/* Send TCP timestamp */
 					tx.t3 = ts;
@@ -143,7 +150,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
 					//tx_last = tx;
 					/* Really send TCP */
-					syslog(LOG_DEBUG, "< PONG %d\n", tx.seq);
+/*					syslog(LOG_DEBUG, "< PONG %d\n", tx.seq); */
 					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
 					if (fd < 0) continue;
 					syslog(LOG_DEBUG, "< TIME %d (%d)\n", rx->seq, fd);
@@ -155,7 +162,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					}
 				} 
 				if (pkt.data[0] == TYPE_PONG) {
-					syslog(LOG_DEBUG, "> PONG %d\n", rx->seq);
+/*					syslog(LOG_DEBUG, "> PONG %d\n", rx->seq); */
 					client_res_update(&pkt.addr.sin6_addr, rx, &pkt.ts);
 				} 
 			} else if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
@@ -181,7 +188,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 				/* Security feature; make sure type is tstamp; ts is NULL */
 				rx = (data_t *)&pkt.data;
 				rx->type = 't';
-				syslog(LOG_DEBUG, "> TS   %d\n", rx->seq);
+/*				syslog(LOG_DEBUG, "> TS   %d\n", rx->seq); */
 				client_res_update(&pkt.addr.sin6_addr, rx, NULL);
 			}
 		} else {
@@ -202,7 +209,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 						continue;
 					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);
 					memcpy(&sess->last_sent, &now, sizeof now);
-					syslog(LOG_DEBUG, "< PING %d\n", tx.seq);
+/*					syslog(LOG_DEBUG, "< PING %d\n", tx.seq); */
 
 				}
 			}
