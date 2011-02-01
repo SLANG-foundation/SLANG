@@ -1,4 +1,5 @@
 from twisted.web import xmlrpc, server
+import time
 
 class RemoteProc(xmlrpc.XMLRPC):
     """ Remote procedures """
@@ -44,4 +45,19 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         """
 
+        return self.pstore.get_raw(session_id, start, end)
+    
+    def xmlrpc_get_raw_interval(self, session_id, start = 0, end = 300):
+        """ Get raw data within a time interval
+
+        Get raw measurement data for a measurement session.
+        Arguments:
+        session_id -- ID of the session data is requested for.
+        start -- The number of seconds from 'now'.
+        stop -- The length of the interval, in seconds.
+
+        """
+        start = time.time() - start;
+        end = time.time() - end;
+        
         return self.pstore.get_raw(session_id, start, end)
