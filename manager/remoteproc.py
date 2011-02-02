@@ -52,7 +52,8 @@ class RemoteProc(xmlrpc.XMLRPC):
                 'avg_rtt': pset.avg_rtt(),
                 'mean_rtt': pset.perc_rtt(50),
                 '95perc_rtt': pset.perc_rtt(95),
-                'perc_lost': pset.lost()/len(pset)
+                'perc_lost': pset.lost()/len(pset),
+                'perc_success': pset.successful()/len(pset)
             })
 
         self.logger.debug("Done computing aggregates")

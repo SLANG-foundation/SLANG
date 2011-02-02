@@ -70,6 +70,11 @@ class Probe:
         
         return not (self.state == STATE_READY or self.state == STATE_TSERROR)
 
+    def successful(self):
+        """ Do we have all timestamp? """
+
+        return self.state == STATE_READY
+
 class ProbeSet(list):
     """ A set of probes. """
 
@@ -105,19 +110,13 @@ class ProbeSet(list):
         return res
 
 
-    def get_aggr_indices(self, agg_interval):
-        """ Get indices for a certain aggregation interval """
-
-
-        return idx
-
-
     def avg_rtt(self):
         """ Find the average RTT """
         t = time.time()
         sum = Timespec(0, 0)
         for p in self:
-            sum += p.rtt()
+            if p.successful():
+                sum += p.rtt()
 
         print "avg_rtt: %f" % (time.time() - t)
         return sum/len(self)
@@ -128,7 +127,8 @@ class ProbeSet(list):
         t = time.time()
         r = []
         for p in self:
-            r.append(p.rtt())
+            if p.successful():
+              r.append(p.rtt())
         print "max_rtt: %f" % (time.time() - t)
         return max(r)
 
@@ -138,7 +138,8 @@ class ProbeSet(list):
         t = time.time()
         r = []
         for p in self:
-            r.append(p.rtt())
+            if p.successful():
+                r.append(p.rtt())
         print "min_rtt: %f" % (time.time() - t)
         return min(r)
 
@@ -155,7 +156,8 @@ class ProbeSet(list):
         # get rtt:s
         r = []
         for p in self:
-            r.append(p.rtt())
+            if p.successful():
+                r.append(p.rtt())
 
         r.sort()
 
@@ -181,5 +183,12 @@ class ProbeSet(list):
 
         return l
 
+    def successful(self):
+        """ Return number of successful probes """
 
+        s = 0
+        for p in self:
+            if p.successful(): 
+                s +=1
 
+        return s

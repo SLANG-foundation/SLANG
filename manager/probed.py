@@ -4,7 +4,6 @@ import subprocess
 import sys
 import logging
 import threading
-#from struct import unpack 
 import time
 
 import probe
@@ -84,13 +83,12 @@ class Probed(threading.Thread):
                 self.logger.warning("probed not running!")
                 self.fifo.close()
                 self.start_probed()
-                time.sleep(1)
                 continue
 
             if self.fifo.closed:
                 self.logger.warn("FIFO closed. Retrying...")
-                self.open_fifo()
                 time.sleep(1)
+                self.open_fifo()
                 continue
 
             try:
