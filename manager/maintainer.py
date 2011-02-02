@@ -42,10 +42,10 @@ class Maintainer(threading.Thread):
                 self.logger.info("Stopping thread...")
                 break
             
-            if (time() - self.last_flush) >= self.flush_interval:
-                self.logger.debug("Starting flush...")
-                self.pstore.flush()
-                self.last_flush = time()
+            #if (time() - self.last_flush) >= self.flush_interval:
+                #self.logger.debug("Starting flush...")
+                #self.pstore.flush()
+                #self.last_flush = time()
 
             if (time() - self.last_delete) >= self.delete_interval:
                 self.logger.debug("Starting delete...")

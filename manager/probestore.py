@@ -64,16 +64,37 @@ class ProbeStore:
         self.db.join()
         self.logger.debug("db dead.")
 
-    def insert(self, probe):
+    def insert(self, p):
         """ Insert probe """
+        sql = str("INSERT INTO probes " +
+            "(session_id, seq, state, " + 
+            "created_sec, created_nsec, " +
+            "t1_sec, t1_nsec, " +
+            "t2_sec, t2_nsec, " + 
+            "t3_sec, t3_nsec, " +
+            "t4_sec, t4_nsec) VALUES " +
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        try:
+            self.db.execute(sql, 
+                    (p.msess_id, p.seq, p.state, p.created.sec, p.created.nsec,
+                     p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
+                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
+                    )
+        except Exception, e:
+            self.logger.error("Unable to flush probe to database: %s" % e)
 
-        self.lock_buf.acquire()
+        #self.lock_buf.acquire()
 
         # insert stuff
+<<<<<<< HEAD:slang/manager/probestore.py
 #        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.session_id, probe.seq, probe.rtt()))
         self.buf.append(probe)
+=======
+#        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.msess_id, probe.seq, probe.rtt()))
+        #self.buf.append(probe)
+>>>>>>> d3f8500f18cbd31531c0eca4512ccff4bd886a46:slang/manager/probestore.py
 
-        self.lock_buf.release()
+        #self.lock_buf.release()
 
     def flush(self):
         """ Flush received probes to database """    
@@ -141,9 +162,13 @@ class ProbeStore:
         if end is None:
             end = int(time.Time())
 
-        self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
+        #self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
 
+<<<<<<< HEAD:slang/manager/probestore.py
         sql = "SELECT * FROM probes WHERE session_id = ? AND created_sec > ? AND created_sec < ?"
+=======
+        sql = "SELECT * FROM probes WHERE session_id = ? AND created_sec > ?  AND created_sec < ?"
+>>>>>>> d3f8500f18cbd31531c0eca4512ccff4bd886a46:slang/manager/probestore.py
         res = self.db.select(sql, (session_id, start, end))
 
         pset = ProbeSet()
@@ -207,7 +232,7 @@ class ProbeStoreDB(threading.Thread):
                 req, arg, res = self.reqs.get(True, 3)
             except Empty, e:
                 self.logger.debug("Queue timeout occurred. Committing transaction of %d queries." % exec_c)
-                conn.commit()
+                #conn.commit()
                 exec_c = 0
                 continue
 
@@ -231,9 +256,9 @@ class ProbeStoreDB(threading.Thread):
             # If we have 10000 outstanding executions, perform a commit.
             if exec_c >= 10000:
                 self.logger.debug("Reached 10000 outstanding queries. Committing transaction.")
-                conn.commit()
+                #conn.commit()
                 exec_c = 0
-
+            
         conn.commit()
         conn.close()
 
