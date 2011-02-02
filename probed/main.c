@@ -88,6 +88,7 @@ int main(int argc, char *argv[]) {
 		if (ret_val < 0) {
 			syslog(LOG_ERR, "Unable to look up hostname %s: %s", addr, 
 					gai_strerror(ret_val));
+			exit(EXIT_FAILURE);
 		}
 		memcpy(&client_msess->dst, dst_addr->ai_addr, sizeof client_msess->dst);
 		loop_or_die(s_udp, s_tcp);

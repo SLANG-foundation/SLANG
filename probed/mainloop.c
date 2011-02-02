@@ -113,7 +113,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 	while (1 == 1) {
 		fs_tmp = fs;
 		tv.tv_sec = 0;
-		tv.tv_usec = 10000;
+		tv.tv_usec = 100;
 		if (select(fd_max + 1, &fs_tmp, NULL, NULL, &tv) > 0) {
 			if (unix_fd_isset(s_udp, &fs_tmp) == 1) {
 				/* UDP socket; PING and PONG */
