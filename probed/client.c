@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
+#include <sys/prctl.h>
 #include "probed.h"
 
 /* #define FIFO "/tmp/probed.fifo" */
@@ -76,7 +77,8 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 	/* 
 	 * We are child 
 	 */
-
+	/* Please kill me, I hate myself */
+	prctl(PR_SET_PDEATHSIG, SIGKILL);
 	/* We're going to send a struct packet over the pipe */
 	memset(&pkt.ts, 0, sizeof zero);
 
