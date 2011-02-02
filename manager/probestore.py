@@ -70,7 +70,7 @@ class ProbeStore:
         self.lock_buf.acquire()
 
         # insert stuff
-#        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.msess_id, probe.seq, probe.rtt()))
+#        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.session_id, probe.seq, probe.rtt()))
         self.buf.append(probe)
 
         self.lock_buf.release()
@@ -98,7 +98,7 @@ class ProbeStore:
         for p in tmpbuf:
             try:
                 self.db.execute(sql, 
-                    (p.msess_id, p.seq, p.state, p.created.sec, p.created.nsec,
+                    (p.session_id, p.seq, p.state, p.created.sec, p.created.nsec,
                     p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
                 )
@@ -143,26 +143,22 @@ class ProbeStore:
 
         self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
 
-        sql = "SELECT * FROM probes WHERE session_id = ? AND t1_sec > ? AND t1_sec < ?"
+        sql = "SELECT * FROM probes WHERE session_id = ? AND created_sec > ? AND created_sec < ?"
         res = self.db.select(sql, (session_id, start, end))
 
-        retlist = []
+        pset = ProbeSet()
         for row in res:
-            retlist.append(
-                { 
-                    'seq': row['seq'], 
-                    'state': row['state'], 
-                    't1_sec': row['t1_sec'], 
-                    't1_nsec': row['t1_nsec'], 
-                    't2_sec': row['t2_sec'], 
-                    't2_nsec': row['t2_nsec'], 
-                    't3_sec': row['t3_sec'], 
-                    't3_nsec': row['t3_nsec'], 
-                    't4_sec': row['t4_sec'], 
-                    't4_nsec': row['t4_nsec'], 
-                })
+            pdlist = (
+                row['created_sec'], row['created_nsec'],
+                row['state'], '', row['session_id'], row['seq'],
+                row['t1_sec'], row['t1_nsec'],
+                row['t2_sec'], row['t2_nsec'],
+                row['t3_sec'], row['t3_nsec'],
+                row['t4_sec'], row['t4_nsec'],
+                )
+            pset.append(Probe(pdlist))
 
-        return retlist
+        return pset
     
 
 class ProbeStoreError(Exception):
