@@ -9,7 +9,7 @@ import time
 from Queue import Queue, Empty
 
 import config
-from probe import Probe
+from probe import Probe, ProbeSet
 from timespec import Timespec
 
 class ProbeStore:
