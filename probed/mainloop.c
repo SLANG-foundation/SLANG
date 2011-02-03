@@ -147,7 +147,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					}
 					/* Save addr and data for later, in case next is error */ 
 					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
-					//tx_last = tx;
+					tx_last = tx;
 					/* Really send TCP */
 					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
 					if (fd < 0) continue;

@@ -25,9 +25,11 @@
 #define STATE_PING 'i'
 #define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
 #define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
-#define STATE_READY 'r'
+#define STATE_TSWAIT 'w' /* Because of Intel RX timestamp bug */
 #define STATE_TSERROR 'e' /* Missing timestamp (Intel...?) */
 #define STATE_TIMEOUT 't'
+#define STATE_PONGLOSS 'l' /* We've got TS, but no pong */
+#define STATE_READY 'r'
 
 /*@ -exportlocal TODO wtf */
 int res_response = 0;
@@ -215,14 +217,20 @@ void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts) {
 void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 	struct res *r, *r_tmp;
 	ts_t now, diff, rtt;
-	char old_state;
 	int i;
 
 	(void)clock_gettime(CLOCK_REALTIME, &now);
 	r = res_head.lh_first;
 	while (r != NULL) {
+		/* 
+		 * Because of Intel RX timestamp bug, wait until next TS to print 
+	 	 * in order to have time to correct a previous timestamp.
+		 * If waiting for correcting TS, and TS arrives, set to ready. 
+		 */
+		if (r->state == STATE_TSWAIT && d->type == 't') {
+			r->state = STATE_READY;
+		}
 		/* If match; update */
-		old_state = r->state;
 		if (r->id == d->id &&
 			r->seq == d->seq &&
 			memcmp(&r->addr, a, sizeof r->addr) == 0) {
@@ -230,29 +238,56 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				if (r->state == STATE_PING)
 					r->state = STATE_GOT_PONG;
 				if (r->state == STATE_GOT_TS)
-					r->state = STATE_READY;
+					r->state = STATE_TSWAIT;
 				if (ts != NULL) r->ts[3] = *ts;
 				else syslog(LOG_ERR, "client_res: t4 missing");
 			} else if (d->type == 't') {
 				if (r->state == STATE_PING)
 					r->state = STATE_GOT_TS;
 				if (r->state == STATE_GOT_PONG)
-					r->state = STATE_READY;
+					r->state = STATE_TSWAIT;
 				r->ts[1] = d->t2;
 				r->ts[2] = d->t3;
 			}
 		}
-		/* Because of Intel RX timestamp bug, wait until next TS to print 
-		 * in order to have time to correct a previous timestamp */
-		if (old_state == STATE_READY && d->type == 't') {
+		/* Timestamp sanity check */
+		if (r->state == STATE_READY) {
 			/* Check that all timestamps are present */
 			for (i = 0; i < 4; i++) { 
 				if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) {
+					r->state = STATE_TSERROR;
 					syslog(LOG_ERR, "client_res: Ping %d from %d missing T%d",
 							(int)r->seq, (int)r->id, i+1);
-					r->state = STATE_TSERROR;
 				}
 			}
+			/* Check that RTT is positive */
+			diff_ts(&diff, &r->ts[3], &r->ts[0]);
+			diff_ts(&now, &r->ts[2], &r->ts[1]);
+			diff_ts(&rtt, &diff, &now);
+			now.tv_sec = 0;
+			now.tv_nsec = 0;
+			if (cmp_ts(&now, &rtt) == 1) {
+					r->state = STATE_TSERROR;
+					syslog(LOG_ERR, "client_res: Ping %d from %d has neg. RTT",
+							(int)r->seq, (int)r->id);
+			}
+		}
+		/* Timeout */
+		diff_ts(&diff, &now, &(r->created)); 
+		if (diff.tv_sec > 10) {
+			/* Define three states: TIMEOUT, TSERROR and GOT_TS */
+			if (r->state == STATE_GOT_PONG || r->state == STATE_READY) 
+				r->state = STATE_TSERROR;
+			else if (r->state == STATE_PING) 
+				r->state = STATE_TIMEOUT;
+			else /* STATE_GOT_TS implicit */
+				r->state = STATE_PONGLOSS;
+		}
+		/* Print */
+		if (	r->state == STATE_READY ||
+				r->state == STATE_TSERROR ||
+				r->state == STATE_TIMEOUT ||
+				r->state == STATE_PONGLOSS) {
 			/* Pipe (daemon) output */
 			if (cfg.op == OPMODE_DAEMON) 
 				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
@@ -261,10 +296,18 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 			if (cfg.op == OPMODE_CLIENT) { 
 				if (r->state == STATE_TSERROR) {
 					res_tserror++;
-				} else {
-					diff_ts(&diff, &r->ts[3], &r->ts[0]);
-					diff_ts(&now, &r->ts[2], &r->ts[1]);
-					diff_ts(&rtt, &diff, &now);
+					printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
+							(int)r->seq, (int)r->id, (int)diff.tv_sec);
+				} else if (r->state == STATE_PONGLOSS) {
+					res_pongloss++;
+					printf("Timeout  %4d from %d in %d sec (missing PONG)\n", 
+							(int)r->seq, (int)r->id, (int)diff.tv_sec);
+				} else if (r->state == STATE_TIMEOUT) {
+					res_timeout++;
+					printf("Timeout  %4d from %d in %d sec (missing all)\n", 
+							(int)r->seq, (int)r->id, (int)diff.tv_sec);
+				} else { /* STATE_READY implicit */
+					res_response++;
 					if (rtt.tv_sec > 0)
 						printf("Response %4d from %d in %10ld.%09ld\n", 
 								(int)r->seq, (int)r->id, rtt.tv_sec, 
@@ -272,7 +315,6 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 					else 
 						printf("Response %4d from %d in %ld ns\n", 
 								(int)r->seq, (int)r->id, rtt.tv_nsec);
-					res_response++;
 					if (cmp_ts(&res_rtt_max, &rtt) == -1)
 						res_rtt_max = rtt;	
 					if (cmp_ts(&res_rtt_min, &rtt) == 1)
@@ -280,42 +322,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 					res_rtt_total = res_rtt_total + rtt.tv_nsec;
 				}
 			}
-			/* Ready; safe removal */
-			r_tmp = r->res_list.le_next;
-			/*@ -branchstate -onlytrans TODO wtf */
-			LIST_REMOVE(r, res_list);
-			/*@ +branchstate +onlytrans */
-			free(r);
-			r = r_tmp;
-			continue;
-		}
-		diff_ts(&diff, &now, &(r->created)); 
-		if (diff.tv_sec > 10) {
-			/* Define three states: TIMEOUT, TSERROR and GOT_TS */
-			if (r->state == STATE_GOT_PONG ||  r->state == STATE_READY) 
-				r->state = STATE_TSERROR;
-			else if (r->state == STATE_PING) 
-				r->state = STATE_TIMEOUT;
-			/* else: GOT_TS implicit */
-			if (cfg.op == OPMODE_DAEMON) 
-				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
-					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
-			if (cfg.op == OPMODE_CLIENT) { 
-				if (r->state == STATE_TSERROR) {
-					printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
-							(int)r->seq, (int)r->id, (int)diff.tv_sec);
-					res_tserror++;
-				} else if (r->state == STATE_GOT_TS) {
-					printf("Timeout  %4d from %d in %d sec (missing PONG)\n", 
-							(int)r->seq, (int)r->id, (int)diff.tv_sec);
-					res_pongloss++;
-				} else {
-					printf("Timeout  %4d from %d in %d sec (missing all)\n", 
-							(int)r->seq, (int)r->id, (int)diff.tv_sec);
-					res_timeout++;
-				}
-			}
-			/* Timeout; safe removal */
+			/* Ready, timeout or error; safe removal */
 			r_tmp = r->res_list.le_next;
 			/*@ -branchstate -onlytrans TODO wtf */
 			LIST_REMOVE(r, res_list);

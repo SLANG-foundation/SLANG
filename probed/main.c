@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 
 	int arg, s_udp, s_tcp, log, ret_val;
 	char tstamp;
-	char *addr, *iface, *port, *cfgpath;
+	char *addr, *iface, *port, *cfgpath, *wait;
 	struct msess *client_msess;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
 
@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
 	cfg.op = 'h'; /* Operation mode: help */
 	tstamp = 'h'; /* Timestamp mode: hardware */
 	addr = "";
+	wait = "500000";
 
 	p(APP_AND_VERSION);
 	debug(0);
@@ -44,13 +45,15 @@ int main(int argc, char *argv[]) {
 	/*@ -branchstate OK that opcode. etc changes storage @*/
 	/*@ -unrecog OK that 'getopt' and 'optarg' is missing; SPlint bug */
 	/* +charintliteral OK to compare 'arg' (int) int with char @*/
-	while ((arg = getopt(argc, argv, "qdvshc:i:p:ku")) != -1) {
+	while ((arg = getopt(argc, argv, "qdvshc:i:p:w:ku")) != -1) {
 		if (arg == (int)'h') help_and_die();
 		if (arg == (int)'?') exit(EXIT_FAILURE);
 		if (arg == (int)'q') log = 0;
 		if (arg == (int)'v') debug(1);
 		if (arg == (int)'f') cfgpath = optarg;
 		if (arg == (int)'i') iface = optarg;
+		if (arg == (int)'p') port = optarg;
+		if (arg == (int)'r') wait = optarg;
 		if (arg == (int)'k') tstamp = 'k';
 		if (arg == (int)'u') tstamp = 'u';
 		if (arg == (int)'d') cfg.op = OPMODE_DAEMON;
@@ -76,7 +79,7 @@ int main(int argc, char *argv[]) {
 	if (cfg.op == OPMODE_CLIENT) {
 		client_msess = msess_add(0);
 		client_msess->interval.tv_sec = 0;
-		client_msess->interval.tv_usec = 500000;
+		client_msess->interval.tv_usec = atoi(wait);
 
 		/* prepare for getaddrinfo */
 		memset(&dst_hints, 0, sizeof dst_hints);
@@ -124,6 +127,7 @@ void help_and_die(void) {
 	p("\t-u        Create timestamps in userland instead of hardware");
 	p("\t-i iface  Network interface used for hardware timestamping");
 	p("\t-p port   UDP port, both source and destination");
+	p("\t-w usecs  Client mode wait time between PINGs, in microseconds");
 	p("\t-v        Output more debugging");
 	p("\t-q        Be quiet, log error to syslog only");
 	exit(EXIT_FAILURE);
