@@ -4,7 +4,6 @@ import subprocess
 import sys
 import logging
 import threading
-#from struct import unpack 
 import time
 
 import probe
@@ -32,19 +31,28 @@ class Probed(threading.Thread):
         self.null = open("/dev/null", 'w')
 
         # start probe application
+        self.start_probed()
+
+        # Try to open fifo
+        while self.fifo is None:
+            self.logger.debug("Waiting for FIFO...")
+            time.sleep(1)
+            self.open_fifo()
+
+    def start_probed(self):
+        """ Start probed application """
         try:
             # \todo - Redirect to /dev/null!
-            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-v'], 
+            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-v', '-k'], 
                 stdout=self.null, stderr=self.null, shell=False)
             self.logger.debug('Probe application started, pid %d', self.probed.pid)
         except Exception, e:
             self.logger.critical("Unable to start probe application: %s" % e)
             raise ProbedError("Unable to start probed application: %s" % e)
 
-        # Try to open fifo
-        while self.fifo is None:
-            time.sleep(1)
-            self.open_fifo()
+        time.sleep(1)
+        if self.probed.poll() != None:
+            raise ProbedError("Unable to start probed application")
 
     def open_fifo(self):
         try:
@@ -70,10 +78,17 @@ class Probed(threading.Thread):
                 self.logger.info("Stopping thread...")
                 break
 
+            # check if probed is alive
+            if self.probed.poll() != None:
+                self.logger.warning("probed not running!")
+                self.fifo.close()
+                self.start_probed()
+                continue
+
             if self.fifo.closed:
                 self.logger.warn("FIFO closed. Retrying...")
-                self.open_fifo()
                 time.sleep(1)
+                self.open_fifo()
                 continue
 
             try:
@@ -93,7 +108,7 @@ class Probed(threading.Thread):
                 self.logger.error("Unable to read from FIFO: %s" % e)
                 time.sleep(1) 
 
-	self.fifo.close()
+        self.fifo.close()
 
 class ProbedError(Exception):
     pass

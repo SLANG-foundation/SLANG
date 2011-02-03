@@ -66,6 +66,7 @@ class ProbeStore:
 
     def insert(self, p):
         """ Insert probe """
+
         sql = str("INSERT INTO probes " +
             "(session_id, seq, state, " + 
             "created_sec, created_nsec, " +
@@ -76,52 +77,19 @@ class ProbeStore:
             "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         try:
             self.db.execute(sql, 
-                    (p.msess_id, p.seq, p.state, p.created.sec, p.created.nsec,
+                    (p.session_id, p.seq, p.state, p.created.sec, p.created.nsec,
                      p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
                      p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
                     )
         except Exception, e:
             self.logger.error("Unable to flush probe to database: %s" % e)
 
-        #self.lock_buf.acquire()
-
-        # insert stuff
-#        self.logger.debug("Received probe; id: %d seq: %d rtt: %s" % (probe.msess_id, probe.seq, probe.rtt()))
-        #self.buf.append(probe)
-
-        #self.lock_buf.release()
-
     def flush(self):
-        """ Flush received probes to database """    
+        """ Requesting commit """    
 
-        self.logger.debug("Flushing %d probes to database" % len(self.buf))
+        self.logger.debug("Requesting commit")
 
-        # create copy of buffer to reduce time it is locked
-        self.lock_buf.acquire()
-        tmpbuf = self.buf[:]
-        self.buf = list()
-        self.lock_buf.release()
-
-        # write copied probes to database
-        sql = str("INSERT INTO probes " +
-            "(session_id, seq, state, " + 
-            "created_sec, created_nsec, " +
-            "t1_sec, t1_nsec, " +
-            "t2_sec, t2_nsec, " + 
-            "t3_sec, t3_nsec, " +
-            "t4_sec, t4_nsec) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        for p in tmpbuf:
-            try:
-                self.db.execute(sql, 
-                    (p.msess_id, p.seq, p.state, p.created.sec, p.created.nsec,
-                    p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
-                    p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec),
-                )
-            except Exception, e:
-                self.logger.error("Unable to flush probe to database: %s" % e)
-
-        self.logger.debug("Flush complete")
+        self.db.commit()
 
     def delete(self, age):
         """ Deletes saved data of age 'age' and older. """
@@ -159,26 +127,22 @@ class ProbeStore:
 
         #self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
 
-        sql = "SELECT * FROM probes WHERE session_id = ? AND created_sec > ?  AND created_sec < ?"
+        sql = "SELECT * FROM probes WHERE session_id = ? AND created_sec > ? AND created_sec < ?"
         res = self.db.select(sql, (session_id, start, end))
 
-        retlist = []
+        pset = ProbeSet()
         for row in res:
-            retlist.append(
-                { 
-                    'seq': row['seq'], 
-                    'state': row['state'], 
-                    't1_sec': row['t1_sec'], 
-                    't1_nsec': row['t1_nsec'], 
-                    't2_sec': row['t2_sec'], 
-                    't2_nsec': row['t2_nsec'], 
-                    't3_sec': row['t3_sec'], 
-                    't3_nsec': row['t3_nsec'], 
-                    't4_sec': row['t4_sec'], 
-                    't4_nsec': row['t4_nsec'], 
-                })
+            pdlist = (
+                row['created_sec'], row['created_nsec'],
+                row['state'], '', row['session_id'], row['seq'],
+                row['t1_sec'], row['t1_nsec'],
+                row['t2_sec'], row['t2_nsec'],
+                row['t3_sec'], row['t3_nsec'],
+                row['t4_sec'], row['t4_nsec'],
+                )
+            pset.append(Probe(pdlist))
 
-        return retlist
+        return pset
     
 
 class ProbeStoreError(Exception):
@@ -222,19 +186,20 @@ class ProbeStoreDB(threading.Thread):
 
             #self.logger.debug("Fetching query from queue. Approximative queue length: %d", self.reqs.qsize())
 
-            # fetch query from queue with a timeout.
-            try:
-                req, arg, res = self.reqs.get(True, 3)
-            except Empty, e:
-                self.logger.debug("Queue timeout occurred. Committing transaction of %d queries." % exec_c)
-                #conn.commit()
-                exec_c = 0
-                continue
+            # fetch query from queue.
+            req, arg, res = self.reqs.get()
 
             # Close command?
-            if req=='--close--': 
+            if req == '--close--': 
                 self.logger.info("Stopping thread...")
                 break
+
+            # commit?
+            if req == '--commit--':
+                conn.commit()
+                self.logger.debug("Committing %d queries." % exec_c)
+                exec_c = 0
+                continue
 
             try:
                 curs.execute(req, arg)
@@ -251,7 +216,7 @@ class ProbeStoreDB(threading.Thread):
             # If we have 10000 outstanding executions, perform a commit.
             if exec_c >= 10000:
                 self.logger.debug("Reached 10000 outstanding queries. Committing transaction.")
-                #conn.commit()
+                conn.commit()
                 exec_c = 0
             
         conn.commit()
@@ -273,3 +238,6 @@ class ProbeStoreDB(threading.Thread):
     def close(self):
         self.logger.debug("Got close request, passing to thread.")
         self.execute('--close--')
+
+    def commit(self):
+        self.execute('--commit--')

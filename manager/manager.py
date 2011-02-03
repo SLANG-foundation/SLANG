@@ -30,13 +30,18 @@ class Manager:
         self.config = config.Config()
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        self.pstore = probestore.ProbeStore()
-        self.probed = probed.Probed(self.pstore)
-        self.maintainer = maintainer.Maintainer(self.pstore)
+        try:
+            self.pstore = probestore.ProbeStore()
+            self.maintainer = maintainer.Maintainer(self.pstore)
+            self.probed = probed.Probed(self.pstore)
 
-        # Create XML-RPC server
-        self.xmlrpc = remoteproc.RemoteProc(self.pstore, self)
-        reactor.listenTCP(8000, server.Site(self.xmlrpc))
+            # Create XML-RPC server
+            self.xmlrpc = remoteproc.RemoteProc(self.pstore, self)
+            reactor.listenTCP(8000, server.Site(self.xmlrpc))
+
+        except Exception, e:
+            self.logger.critical("Cannot start: %s" % e)
+            self.stop()
 
     def reload(self):
         """ Reload 
@@ -69,17 +74,40 @@ class Manager:
         self.logger.info("Stopping all threads...")
 
         # stop threads
-        self.maintainer.stop()
-        self.probed.stop()
-        self.pstore.stop()
+        try:
+            self.maintainer.stop()
+        except:
+            pass
 
-        reactor.stop()
+        try:
+            self.probed.stop()
+        except:
+            pass
+
+        try:
+            self.pstore.stop()
+        except:
+            pass
+
+        try:
+            reactor.stop()
+        except:
+            pass
 
         # wait for threads to finish...
         self.logger.debug("Waiting for maintainer...")
-        self.maintainer.join()
+        try:
+            self.maintainer.join()
+        except:
+            pass
+
         self.logger.debug("Maintainer done. Waiting for probed...")
-        self.probed.join()
+
+        try:
+            self.probed.join()
+        except:
+            pass
+
         self.logger.debug("Probed done.")
 
     def run(self):
