@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
 		if (arg == (int)'f') cfgpath = optarg;
 		if (arg == (int)'i') iface = optarg;
 		if (arg == (int)'p') port = optarg;
-		if (arg == (int)'r') wait = optarg;
+		if (arg == (int)'w') wait = optarg;
 		if (arg == (int)'k') tstamp = 'k';
 		if (arg == (int)'u') tstamp = 'u';
 		if (arg == (int)'d') cfg.op = OPMODE_DAEMON;
