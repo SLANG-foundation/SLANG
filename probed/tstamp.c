@@ -182,12 +182,12 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 
 	memset(ts, 0, sizeof (struct timespec));
 	/* Wait for TX tstamp during at least 0.1 sec... */ 
-	tv.tv_sec = 0; 
-	tv.tv_usec = 100000;
 	(void)gettimeofday(&last, 0);
 	(void)gettimeofday(&now, 0);
-	/* ...and at most 0.2 sec */
-	while (now.tv_usec - last.tv_usec < 200000) {
+	/* ...and at most 2 sec */
+	while (now.tv_sec - last.tv_sec < 2) {
+		tv.tv_sec = 1; 
+		tv.tv_usec = 0;
 		unix_fd_zero(&fs);
 		unix_fd_set(sock, &fs);
 		if (select(sock + 1, &fs, NULL, NULL, &tv) > 0) {
