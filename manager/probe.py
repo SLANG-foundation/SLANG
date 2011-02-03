@@ -111,15 +111,23 @@ class ProbeSet(list):
 
 
     def avg_rtt(self):
-        """ Find the average RTT """
+        """ Find the average RTT 
+        
+        TODO: prevent overflow
+        """
         t = time.time()
         sum = Timespec(0, 0)
+        
+        successful = 0
         for p in self:
             if p.successful():
                 sum += p.rtt()
+                successful += 1
 
         print "avg_rtt: %f" % (time.time() - t)
-        return sum/len(self)
+        if successful < 1:
+            return Timespec(0, 0)
+        return sum/successful
 
 
     def max_rtt(self):
@@ -130,6 +138,9 @@ class ProbeSet(list):
             if p.successful():
               r.append(p.rtt())
         print "max_rtt: %f" % (time.time() - t)
+
+        if len(r) < 1:
+            return Timespec(0, 0)
         return max(r)
 
 
@@ -141,6 +152,8 @@ class ProbeSet(list):
             if p.successful():
                 r.append(p.rtt())
         print "min_rtt: %f" % (time.time() - t)
+        if len(r) < 1:
+            return Timespec(0, 0)
         return min(r)
 
 
@@ -158,6 +171,9 @@ class ProbeSet(list):
         for p in self:
             if p.successful():
                 r.append(p.rtt())
+
+        if len(r) < 1:
+            return Timespec(0, 0)
 
         r.sort()
 
@@ -189,6 +205,6 @@ class ProbeSet(list):
         s = 0
         for p in self:
             if p.successful(): 
-                s +=1
+                s += 1
 
         return s

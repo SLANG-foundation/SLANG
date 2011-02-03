@@ -45,6 +45,7 @@ class RemoteProc(xmlrpc.XMLRPC):
         res = []
         for pset in s_pset:
             self.logger.debug("Subset of %d probes." % len(pset))
+            self.logger.debug("Success: %d" % pset.successful())
             res.append({
                 'created': pset[0].created,
                 'max_rtt': pset.max_rtt(),
@@ -52,9 +53,9 @@ class RemoteProc(xmlrpc.XMLRPC):
                 'avg_rtt': pset.avg_rtt(),
                 'mean_rtt': pset.perc_rtt(50),
                 '95perc_rtt': pset.perc_rtt(95),
-                'perc_lost': pset.lost()/len(pset),
-                'perc_success': pset.successful()/len(pset)
-            })
+                'perc_lost': float(pset.lost()) / float(len(pset)),
+                'perc_success': float(pset.successful()) / float(len(pset)),
+           })
 
         self.logger.debug("Done computing aggregates")
 
