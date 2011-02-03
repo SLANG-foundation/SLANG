@@ -46,7 +46,10 @@ class Probe:
     def rtt(self):
         """ Calculates the rtt of the probe. """
 
-        return (self.t4 - self.t1) - (self.t3 - self.t2)
+        if self.successful():
+            return (self.t4 - self.t1) - (self.t3 - self.t2)
+        else:
+            return Timespec(None, None)
 
     def toDict(self):
         """ Returns data as a dict.
@@ -68,7 +71,7 @@ class Probe:
     def lost(self):
         """ Was the packet lost? """
         
-        return not (self.state == STATE_READY or self.state == STATE_TSERROR)
+        return self.state == STATE_TIMEOUT
 
     def successful(self):
         """ Do we have all timestamp? """

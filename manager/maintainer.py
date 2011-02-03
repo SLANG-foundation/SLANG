@@ -43,7 +43,7 @@ class Maintainer(threading.Thread):
                 break
             
             if (time() - self.last_flush) >= self.flush_interval:
-                self.logger.debug("Starting flush...")
+                #self.logger.debug("Starting flush...")
                 self.pstore.flush()
                 self.last_flush = time()
 

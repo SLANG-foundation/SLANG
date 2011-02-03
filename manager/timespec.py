@@ -58,10 +58,10 @@ class Timespec:
         integer equivalents 0 or 1."
         """
         
-        if self.sec == 0 and self.nsec == 0:
-            return True
-        else:
+        if self.sec == None or self.nsec == None:
             return False
+        else:
+            return True
 
     def __str__(self):
         """ Returns a string representation of the Timespec. """
@@ -74,3 +74,12 @@ class Timespec:
         res_sec = self.sec / other
         res_nsec = ((self.sec % other) * 1000000000 + self.nsec) / other
         return Timespec(res_sec, res_nsec)
+
+    def to_nanoseconds(self):
+        """ Returns timespec as nanoseconds. """
+
+        # make sure we return None if we lack values.
+        if self:
+            return self.sec * 1000000000 + self.nsec
+        else:
+            return None

@@ -116,8 +116,11 @@ class Manager:
         self.logger.info("Starting execution")
         
         # start threads
-        self.probed.start()
-        self.maintainer.start()
+        try:
+            self.probed.start()
+            self.maintainer.start()
+        except:
+            self.logger.error("Unable to start threads.")
 
         reactor.run()
 

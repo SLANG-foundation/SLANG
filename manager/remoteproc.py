@@ -36,30 +36,38 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         """
 
-        self.logger.debug("Getting full ProbeSet")
-        full_pset = self.pstore.get_raw(session_id, start, end)
-        self.logger.debug("Done. Splitting ProbeSet")
-        s_pset = full_pset.split(Timespec(aggr_interval, 0))
-        self.logger.debug("Done. Computing aggregates")
-        
-        res = []
-        for pset in s_pset:
-            self.logger.debug("Subset of %d probes." % len(pset))
-            self.logger.debug("Success: %d" % pset.successful())
-            res.append({
-                'created': pset[0].created,
-                'max_rtt': pset.max_rtt(),
-                'min_rtt': pset.min_rtt(),
-                'avg_rtt': pset.avg_rtt(),
-                'mean_rtt': pset.perc_rtt(50),
-                '95perc_rtt': pset.perc_rtt(95),
-                'perc_lost': float(pset.lost()) / float(len(pset)),
-                'perc_success': float(pset.successful()) / float(len(pset)),
-           })
+        result = list()
 
-        self.logger.debug("Done computing aggregates")
+        # get times
+        ctime = start
+        aggr_times = list()
+        while ctime < end:
+            aggr_times.append(ctime)
+            ctime += aggr_interval
+        #aggr_times.append(end)
 
-        return res
+        for a in aggr_times:
+            self.logger.debug("Aggregation time %d", (a))
+
+        for i in range(0, len(aggr_times) - 2):
+            t = time.time()
+            r = self.pstore.get_aggregate(session_id, Timespec(aggr_times[i], 0), Timespec(aggr_times[i+1], 0))
+            r['start'] = aggr_times[i]
+
+            # set null values to zero before we send them over XML-RPC
+            for k, v in r.items():
+                if v == None:
+                    r[k] = 0
+
+            result.append(r)
+            print "iteration %d finished in %f seconds" % (i, time.time() - t)
+
+        for a in result:
+            self.logger.debug("Aggregated data:")
+            for k, v in a.items():
+                self.logger.debug("%s: %s" % (k, v))
+
+        return result
 
     def xmlrpc_get_raw(self, session_id, start, end):
         """ Get raw data.

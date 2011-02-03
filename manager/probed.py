@@ -43,7 +43,7 @@ class Probed(threading.Thread):
         """ Start probed application """
         try:
             # \todo - Redirect to /dev/null!
-            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-v', '-k'], 
+            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-q'], 
                 stdout=self.null, stderr=self.null, shell=False)
             self.logger.debug('Probe application started, pid %d', self.probed.pid)
         except Exception, e:
