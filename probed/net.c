@@ -6,10 +6,14 @@
  * \date   2010-12-01
  */
 
+#include <stdlib.h>
 #include <time.h>
 #include <errno.h>
 #include <string.h>
+#include <syslog.h>
 #include "probed.h"
+#include "tstamp.h"
+#include "net.h"
 
 /**
  * Receive on socket 'sock' into struct pkt with timestamp
@@ -94,7 +98,7 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	slen = (socklen_t)sizeof *(addr);
 	memset(ts, 0, sizeof (struct timespec));
 	/* get userland tx timestamp (before send, hehe) */
-	if (cfg.ts == 'u')   
+	if (cfg.ts == USERLAND)   
 		(void)clock_gettime(CLOCK_REALTIME, ts);
 	/* do the send */
 	if (sendto(sock, data, DATALEN, 0, (struct sockaddr*)addr, slen) < 0) {
@@ -102,7 +106,7 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 		return -1;
 	}
 	/* get kernel tx timestamp */
-	if (cfg.ts != 'u') { 
+	if (cfg.ts != USERLAND) { 
 		if (tstamp_fetch_tx(sock, ts) < 0) {
 			syslog(LOG_ERR, "send_w_ts: TX timestamp error");
 			return -1;

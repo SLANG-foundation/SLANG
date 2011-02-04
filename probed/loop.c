@@ -7,15 +7,22 @@
  * \bug    Only one 'probed' UDP timestmap socket can be used at a time
  */
 
-#include <errno.h>
-#include <string.h>
-#include <signal.h>
-#include <sys/time.h>
+#include <stdlib.h>
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
+#include <errno.h>
+#include <string.h>
+#include <signal.h>
+#include <syslog.h>
+#include <sys/time.h>
 #include "probed.h"
+#include "loop.h"
 #include "msess.h"
+#include "unix.h"
+#include "util.h"
+#include "client.h"
+#include "net.h"
 
 /**
  * Main SLA-NG 'probed' state machine, handling all client/server stuff
@@ -70,7 +77,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 	client_res_init(); 
 
 	/* Address lookup */
-	if (cfg.op == OPMODE_SERVER) {
+	if (cfg.op == SERVER) {
 		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
 	} else {
 
@@ -89,7 +96,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 
 		}
 
-		if (cfg.op == OPMODE_CLIENT)
+		if (cfg.op == CLIENT)
 			(void)signal(SIGINT, client_res_summary);
 	}
 

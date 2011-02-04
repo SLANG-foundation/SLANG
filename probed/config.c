@@ -14,11 +14,17 @@
  */
 
 
-#include "probed.h"
 #include <string.h>
 #include <errno.h>
 #include <netdb.h>
+#include <syslog.h>
 #include <arpa/inet.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
+#include "probed.h"
+#include "config.h"
+#include "msess.h"
 
 xmlDoc *cfgdoc = 0;
 

@@ -6,15 +6,24 @@
  * \date   2010-11-01
  */ 
 
+#include <stdlib.h>
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
 #include <string.h>
 #include <netdb.h>
+#include <syslog.h>
 #include "probed.h"
 #include "msess.h"
+#include "util.h"
+#include "tstamp.h"
+#include "config.h"
+#include "loop.h"
 
 struct config cfg;
+int main(int argc, char *argv[]);
+void help_and_die(void);
+void reload(char *cfgpath);
 
 /**
  * Sets default values, parses arguments, and start main loop. General
@@ -23,7 +32,7 @@ struct config cfg;
 int main(int argc, char *argv[]) {
 
 	int arg, s_udp, s_tcp, log, ret_val;
-	char tstamp;
+	enum tsmode tstamp;
 	char *addr, *iface, *port, *cfgpath, *wait;
 	struct msess *client_msess;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
@@ -33,8 +42,8 @@ int main(int argc, char *argv[]) {
 	log = LOG_PERROR; /* Print to stdout */
 	iface = "eth0"; /* Why not hehe */
 	port = "60666"; /* Sexy port */
-	cfg.op = 'h'; /* Operation mode: help */
-	tstamp = 'h'; /* Timestamp mode: hardware */
+	cfg.op = HELP; /* Operation mode */
+	tstamp = HARDWARE; /* Timestamp mode */
 	addr = "";
 	wait = "500000";
 
@@ -54,29 +63,29 @@ int main(int argc, char *argv[]) {
 		if (arg == (int)'i') iface = optarg;
 		if (arg == (int)'p') port = optarg;
 		if (arg == (int)'w') wait = optarg;
-		if (arg == (int)'k') tstamp = 'k';
-		if (arg == (int)'u') tstamp = 'u';
-		if (arg == (int)'d') cfg.op = OPMODE_DAEMON;
-		if (arg == (int)'s') cfg.op = OPMODE_SERVER;
+		if (arg == (int)'k') tstamp = KERNEL;
+		if (arg == (int)'u') tstamp = USERLAND;
+		if (arg == (int)'d') cfg.op = DAEMON;
+		if (arg == (int)'s') cfg.op = SERVER;
 		if (arg == (int)'c') {
-			cfg.op = OPMODE_CLIENT;
+			cfg.op = CLIENT;
 			addr = optarg;
 		}
 	}
-	if (cfg.op == 'h') help_and_die();
+	if (cfg.op == HELP) help_and_die();
 	/*@ +branchstate -charintliteral +unrecog @*/
 
 	/* Startup config, logging and sockets */
 	openlog("probed", log, LOG_USER);
 	msess_init();
 	bind_or_die(&s_udp, &s_tcp, (uint16_t)strtoul(port, NULL, 0));
-	if (tstamp == 'h') tstamp_mode_hardware(s_udp, iface);
-	if (tstamp == 'k') tstamp_mode_kernel(s_udp);
-	if (tstamp == 'u') tstamp_mode_userland(s_udp);
+	if (tstamp == HARDWARE) tstamp_mode_hardware(s_udp, iface);
+	if (tstamp == KERNEL) tstamp_mode_kernel(s_udp);
+	if (tstamp == USERLAND) tstamp_mode_userland(s_udp);
 
 	/* Start server, client or daemon */
-	if (cfg.op == OPMODE_SERVER) loop_or_die(s_udp, s_tcp);
-	if (cfg.op == OPMODE_CLIENT) {
+	if (cfg.op == SERVER) loop_or_die(s_udp, s_tcp);
+	if (cfg.op == CLIENT) {
 		client_msess = msess_add(0);
 		client_msess->interval.tv_sec = 0;
 		client_msess->interval.tv_usec = atoi(wait);
@@ -97,7 +106,7 @@ int main(int argc, char *argv[]) {
 		loop_or_die(s_udp, s_tcp);
 	}
 
-	if (cfg.op == OPMODE_DAEMON) {
+	if (cfg.op == DAEMON) {
 		p("Daemon mode; both server and client, output to pipe");
 		/* read config */
 		reload(cfgpath);

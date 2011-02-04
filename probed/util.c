@@ -6,6 +6,9 @@
  * \file util.c
  */
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <syslog.h>
 #include <errno.h>
 #include <string.h>
 #include <arpa/inet.h>

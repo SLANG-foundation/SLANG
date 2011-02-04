@@ -7,20 +7,25 @@
  * \todo   Lots of LINT (splint) warnings that I don't understand
  */
 
+#include <stdlib.h>
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
 #include <string.h>
+#include <stdio.h>
 #include <errno.h>
 #include <time.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <syslog.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include <sys/prctl.h>
 #include "probed.h"
-
-/* #define FIFO "/tmp/probed.fifo" */
+#include "client.h"
+#include "util.h"
+#include "unix.h"
+#include "config.h"
 
 #define STATE_PING 'i'
 #define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
@@ -31,6 +36,18 @@
 #define STATE_PONGLOSS 'l' /* We've got TS, but no pong */
 #define STATE_READY 'r'
 
+/* List of probe results */
+LIST_HEAD(res_listhead, res) res_head;
+struct res {
+	ts_t created;
+	char state;
+	struct in6_addr addr;
+	num_t id;
+	num_t seq;
+	/*@dependent@*/ ts_t ts[4];
+	LIST_ENTRY(res) res_list;
+};
+/* Client mode statistics */
 /*@ -exportlocal TODO wtf */
 int res_response = 0;
 int res_timeout = 0;
@@ -80,7 +97,7 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 	 * We are child 
 	 */
 	/* Please kill me, I hate myself */
-	prctl(PR_SET_PDEATHSIG, SIGKILL);
+	(void)prctl(PR_SET_PDEATHSIG, SIGKILL);
 	/* We're going to send a struct packet over the pipe */
 	memset(&pkt.ts, 0, sizeof zero);
 
@@ -145,7 +162,7 @@ void client_res_init(void) {
 
 	char fifo_path[TMPLEN];
 
-	if (cfg.op == OPMODE_DAEMON) {
+	if (cfg.op == DAEMON) {
 		if (config_getkey("/config/fifopath", fifo_path, TMPLEN) < 0) {
 			syslog(LOG_CRIT, "client_res_init: Unable to find FIFO path in config!");
 			exit(EXIT_FAILURE);
@@ -218,6 +235,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 	struct res *r, *r_tmp;
 	ts_t now, diff, rtt;
 	int i;
+	int found = 0;
 
 	(void)clock_gettime(CLOCK_REALTIME, &now);
 	r = res_head.lh_first;
@@ -234,6 +252,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		if (r->id == d->id &&
 			r->seq == d->seq &&
 			memcmp(&r->addr, a, sizeof r->addr) == 0) {
+			found = 1;
 			if (d->type == 'o') {
 				if (r->state == STATE_PING)
 					r->state = STATE_GOT_PONG;
@@ -289,11 +308,11 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				r->state == STATE_TIMEOUT ||
 				r->state == STATE_PONGLOSS) {
 			/* Pipe (daemon) output */
-			if (cfg.op == OPMODE_DAEMON) 
+			if (cfg.op == DAEMON) 
 				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
-			if (cfg.op == OPMODE_CLIENT) { 
+			if (cfg.op == CLIENT) { 
 				if (r->state == STATE_TSERROR) {
 					res_tserror++;
 					printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
@@ -308,6 +327,9 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 							(int)r->seq, (int)r->id, (int)diff.tv_sec);
 				} else { /* STATE_READY implicit */
 					res_response++;
+					diff_ts(&diff, &r->ts[3], &r->ts[0]);
+					diff_ts(&now, &r->ts[2], &r->ts[1]);
+					diff_ts(&rtt, &diff, &now);
 					if (rtt.tv_sec > 0)
 						printf("Response %4d from %d in %10ld.%09ld\n", 
 								(int)r->seq, (int)r->id, rtt.tv_sec, 
@@ -333,6 +355,29 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		}
 		/* Alright, next entry */
 		r = r->res_list.le_next;
+	}
+	/* Didn't find PING, probably removed. DUP! */
+	if (found == 0) {
+		if (cfg.op == DAEMON) 
+			if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
+				syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+		/* Client output */
+		if (cfg.op == CLIENT) { 
+			if (r->state == STATE_TSERROR) {
+				res_tserror++;
+				printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
+						(int)r->seq, (int)r->id, (int)diff.tv_sec);
+			} else if (r->state == STATE_PONGLOSS) {
+				res_pongloss++;
+				printf("Timeout  %4d from %d in %d sec (missing PONG)\n", 
+						(int)r->seq, (int)r->id, (int)diff.tv_sec);
+			} else if (r->state == STATE_TIMEOUT) {
+				res_timeout++;
+				printf("Timeout  %4d from %d in %d sec (missing all)\n", 
+						(int)r->seq, (int)r->id, (int)diff.tv_sec);
+
+			}
+		}
 	}
 }
 

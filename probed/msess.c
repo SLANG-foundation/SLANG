@@ -8,9 +8,10 @@
  * \author	Anders Berggren <anders@halon.se>
  * \author	Lukas Garberg <lukas@spritelink.net>
  */
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
-
 #include "probed.h"
 #include "msess.h"
 

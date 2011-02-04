@@ -10,14 +10,29 @@
  * - Userland timestamps require SO_TIMESTAMPNS  on socket. 
  */ 
 
-#include "probed.h"
 #include <string.h>
 #include <errno.h>
+#include <syslog.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include "external/sockios.h"
 #include "external/net_tstamp.h"
+#include "probed.h"
+#include "tstamp.h"
+#include "unix.h"
+#include "net.h"
+
+#ifndef SO_TIMESTAMPING
+#define SO_TIMESTAMPING 37
+#define SCM_TIMESTAMPING SO_TIMESTAMPING
+#endif
+
+struct scm_timestamping {
+        struct timespec systime;
+        struct timespec hwtimesys;
+        struct timespec hwtimeraw;
+};
 
 /**
  * Try to enable hardware timestamping, otherwise fall back to kernel.
@@ -72,7 +87,7 @@ void tstamp_mode_hardware(int sock, char *iface) {
 		return;
 	}
 	syslog(LOG_INFO, "Using hardware timestamps");
-	cfg.ts = 'h';
+	cfg.ts = HARDWARE;
 }
 
 /**
@@ -99,7 +114,7 @@ void tstamp_mode_kernel(int sock) {
 		return;
 	}
 	syslog(LOG_INFO, "Using kernel timestamps");
-	cfg.ts = 'k';
+	cfg.ts = KERNEL;
 }
 
 /**
@@ -118,7 +133,7 @@ void tstamp_mode_userland(sock) {
 	if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &yes, slen) < 0)
 		syslog(LOG_ERR, "SO_TIMESTAMP: %s", strerror(errno));
 	syslog(LOG_INFO, "Using userland timestamps");
-	cfg.ts = 'u';
+	cfg.ts = USERLAND;
 }
 
 /**
@@ -141,16 +156,16 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		if (cmsg->cmsg_level == SOL_SOCKET) {
 			/* if hw/kernel timestamps, check SO_TIMESTAMPING */
-			if (cfg.ts != 'u' && cmsg->cmsg_type == SO_TIMESTAMPING) {
+			if (cfg.ts != USERLAND && cmsg->cmsg_type == SO_TIMESTAMPING) {
 				t = (struct scm_timestamping *)CMSG_DATA(cmsg);
 				/*@ -onlytrans Please, let me copy the timestamp */
-				if (cfg.ts == 'h') *ts = t->hwtimeraw;
-				if (cfg.ts == 'k') *ts = t->systime;
+				if (cfg.ts == HARDWARE) *ts = t->hwtimeraw;
+				if (cfg.ts == KERNEL) *ts = t->systime;
 				/*@ +onlytrans */
 				return 0;
 			}
 			/* if software timestamps, check SO_TIMESTAMPNS */
-			if (cfg.ts == 'u' && cmsg->cmsg_type == SO_TIMESTAMPNS) {
+			if (cfg.ts == USERLAND && cmsg->cmsg_type == SO_TIMESTAMPNS) {
 				ts_p = (struct timespec *)CMSG_DATA(cmsg);
 				*ts = *ts_p;
 				return 0;
