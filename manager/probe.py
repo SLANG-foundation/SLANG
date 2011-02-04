@@ -16,7 +16,7 @@ def from_struct(structdata):
     """ Create a probe from the struct data """
     
     listdata = unpack('llc16siillllllll16s', structdata)
-    return Probe(listdata) 
+    return Probe(listdata + (True, )) 
 
 class Probe:
     """ A probe. """
@@ -26,10 +26,16 @@ class Probe:
     t2 = None
     t3 = None
     t4 = None
+    rtt = None
+    delay_variation = None
+    in_order = None
 
     addr = None
     session_id = None
     seq = None
+
+    has_given = None
+    has_gotten = None
 
     def __init__(self, data):
 
@@ -42,8 +48,15 @@ class Probe:
         self.t2 = Timespec(data[8], data[9])
         self.t3 = Timespec(data[10], data[11])
         self.t4 = Timespec(data[12], data[13])
+        self.in_order = data[14]
+        self.rtt = Timespec(None, None)
+        self.delay_variation = Timespec(None, None)
+        self.has_given = False
+        self.has_gotten = False
 
-    def rtt(self):
+        self.rtt = self.getRtt()
+
+    def getRtt(self):
         """ Calculates the rtt of the probe. """
 
         if self.successful():
@@ -61,6 +74,7 @@ class Probe:
             'session_id': self.session_id,
             'seq': self.seq,
             'state': self.state,
+            'in_order': self.in_order,
             'created': (self.created.sec, self.created.nsec),
             't1': (self.t1.sec, self.t1.nsec),
             't2': (self.t2.sec, self.t2.nsec),
@@ -77,6 +91,18 @@ class Probe:
         """ Do we have all timestamp? """
 
         return self.state == STATE_READY
+
+    def set_prev_probe(self, prev_probe):
+        """ Perform calculations which require previous probe.
+        """
+        try:
+            self.delay_variation = self.rtt - prev_probe.rtt
+        except TypeError:
+            # catch error when RTT is None
+            pass
+
+        self.has_gotten = True
+        prev_probe.has_given = True
 
 class ProbeSet(list):
     """ A set of probes. """
@@ -124,7 +150,7 @@ class ProbeSet(list):
         successful = 0
         for p in self:
             if p.successful():
-                sum += p.rtt()
+                sum += p.rtt
                 successful += 1
 
         print "avg_rtt: %f" % (time.time() - t)
@@ -139,7 +165,7 @@ class ProbeSet(list):
         r = []
         for p in self:
             if p.successful():
-              r.append(p.rtt())
+              r.append(p.rtt)
         print "max_rtt: %f" % (time.time() - t)
 
         if len(r) < 1:
@@ -153,7 +179,7 @@ class ProbeSet(list):
         r = []
         for p in self:
             if p.successful():
-                r.append(p.rtt())
+                r.append(p.rtt)
         print "min_rtt: %f" % (time.time() - t)
         if len(r) < 1:
             return Timespec(0, 0)
@@ -173,7 +199,7 @@ class ProbeSet(list):
         r = []
         for p in self:
             if p.successful():
-                r.append(p.rtt())
+                r.append(p.rtt)
 
         if len(r) < 1:
             return Timespec(0, 0)

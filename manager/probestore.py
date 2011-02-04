@@ -21,7 +21,8 @@ class ProbeStore:
     logger = None
     config = None
     db = None
-    buf = []
+    probes = None
+    max_seq = None
 
     def __init__(self):
         """Constructor """
@@ -29,6 +30,9 @@ class ProbeStore:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
         self.lock_buf = threading.Lock()
+
+        self.probes = dict()
+        self.max_seq = dict()
 
         self.logger.debug("Created instance")
 
@@ -48,14 +52,17 @@ class ProbeStore:
                 "t3_nsec INTEGER, " + 
                 "t4_sec INTEGER, " + 
                 "t4_nsec INTEGER, " + 
-                "rtt_as_nsec INTEGER, " +
+                "rtt_nsec INTEGER, " +
+                "delayvar_nsec INTEGER, " +
+                "duplicates INTEGER, " +
+                "in_order INTEGER, " +
                 "state TEXT " + 
                 ");")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
 #            self.db.execute("CREATE INDEX IF NOT EXISTS idx_state ON probes(state)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id__created_sec__state ON probes(session_id, created_sec, state)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id__created_sec__rtt_as_nsec ON probes(session_id, created_sec, rtt_as_nsec)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_rtt_as_nsec ON probes(rtt_as_nsec)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id__created_sec__rtt_nsec ON probes(session_id, created_sec, rtt_nsec)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_rtt_nsec ON probes(rtt_nsec)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_created_sec ON probes(created_sec)")
             
         except Exception, e:
@@ -70,25 +77,113 @@ class ProbeStore:
         self.db.join()
         self.logger.debug("db dead.")
 
-    def insert(self, p):
-        """ Insert probe """
+    def add(self, p):
+        """ Add probe to ProbeStore 
 
-        sql = str("INSERT INTO probes " +
+            TODO:
+            Handle duplicate packets!
+        
+            Logic when new probe arrives:
+            V2:
+            if p.seq > max_seq:
+                in order
+            else:
+                not in order
+
+            if we have seq - 1:
+                Calculate delay var for current packet
+                set has_given on seq - 1
+
+            if we have seq + 1:
+                Calculate delay var for seq + 1
+                set has_given on seq
+
+            for i in range(seq-1 seq+2):
+                try:
+                    if self.probes[p.session_id][i].has_given and self.probes[p.session_id][i].has_delayvar
+                        self.insert(self.probes[p.session_id][i])
+                        del self.probes[p.session_id][i]
+                except KeyError:
+                    continue
+                        
+
+            save current to list
+            set last seq to current
+
+        """
+
+        if not p.session_id in self.max_seq:
+            # No max sequence number for current measurement session.
+            # Probably new session. Add packet and mark as has gotten delay variation.
+            self.max_seq[p.session_id] = p.seq
+            p.has_gotten = True
+            if p.session_id not in self.probes:
+                self.probes[p.session_id] = dict()
+            self.probes[p.session_id][p.seq] = p
+            return
+
+        # Reordered?
+        if  p.seq > self.max_seq[p.session_id]:
+            p.in_order = True
+            self.max_seq[p.session_id] = p.seq
+        else:
+            p.in_order = False
+        
+        # check for previous packet
+        try:
+            p.set_prev_probe(self.probes[p.session_id][p.seq - 1])
+        except KeyError:
+            pass
+        
+        # check for next packet
+        try:
+            self.probes[p.session_id][p.seq + 1].set_prev_probe(p)
+        except KeyError:
+            pass
+
+        # save probe and update last_seq
+        if p.session_id not in self.probes: # Can this occur, given that we check it when we add new element to self.last_seq?
+            self.probes[p.session_id] = dict()
+        self.probes[p.session_id][p.seq] = p
+            
+        # see if packets are ready to save
+        for i in range(p.seq-1, p.seq+2):
+            try:
+                if self.probes[p.session_id][i].has_given and self.probes[p.session_id][i].has_gotten:
+                    self.insert(self.probes[p.session_id][i])
+                    del self.probes[p.session_id][i]
+            except KeyError:
+                continue
+
+
+    def insert(self, p):
+        """ Insert probe into database """
+
+        sql = ("INSERT INTO probes " +
             "(session_id, seq, state, " + 
             "created_sec, created_nsec, " +
             "t1_sec, t1_nsec, " +
             "t2_sec, t2_nsec, " + 
             "t3_sec, t3_nsec, " +
-            "t4_sec, t4_nsec, rtt_as_nsec) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            "t4_sec, t4_nsec, " +
+            "rtt_nsec, delayvar_nsec, "+
+            "in_order, duplicates)" +
+            " VALUES " +
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
         try:
             self.db.execute(sql, 
                     (p.session_id, p.seq, p.state, p.created.sec, p.created.nsec,
                      p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
-                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec, p.rtt().to_nanoseconds()),
-                    )
+                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec, 
+                     p.rtt.to_nanoseconds(), p.delay_variation.to_nanoseconds(),
+                     p.in_order, 0
+                    ),
+            )
+                      
+        
         except Exception, e:
-            self.logger.error("Unable to flush probe to database: %s" % e)
+            self.logger.error("Unable to flush probe to database: %s: " % e)
 
     def flush(self):
         """ Requesting commit """    
@@ -182,7 +277,7 @@ class ProbeStore:
             else:
                 retdata['total'] = row['count']
 
-        self.logger.debug("Aggregating session %d from %d to %d, %d rows" % (session_id, start.sec, end.sec, retdata['total'], ))
+#        self.logger.debug("Aggregating session %d from %d to %d, %d rows" % (session_id, start.sec, end.sec, retdata['total'], ))
 
         # get percentages
         sql = "SELECT CAST( COUNT(*) AS REAL) AS lost FROM PROBES WHERE state = ? AND " + where
@@ -197,12 +292,12 @@ class ProbeStore:
 
 
         # get max, min and average
-        sql = ("SELECT MAX(rtt_as_nsec) AS max, MIN(rtt_as_nsec) AS min, " + 
-            "AVG(rtt_as_nsec) AS avg FROM probes " + 
-            "WHERE rtt_as_nsec IS NOT NULL AND " + where)
+        sql = ("SELECT MAX(rtt_nsec) AS max, MIN(rtt_nsec) AS min, " + 
+            "AVG(rtt_nsec) AS avg FROM probes " + 
+            "WHERE rtt_nsec IS NOT NULL AND " + where)
         res = self.db.select(sql, whereargs)
         for row in res:
-            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
+#            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
             retdata['rtt_max'] = row['max']
             retdata['rtt_min'] = row['min']
             retdata['rtt_avg'] = row['avg']
@@ -227,8 +322,8 @@ class ProbeStore:
         if nrows < 1:
             return None
 
-        sql = ("SELECT rtt_as_nsec AS percentile FROM probes WHERE " + where +
-            " ORDER BY rtt_as_nsec ASC LIMIT 1 OFFSET CAST(? * ? / 100 AS INTEGER)")
+        sql = ("SELECT rtt_nsec AS percentile FROM probes WHERE " + where +
+            " ORDER BY rtt_nsec ASC LIMIT 1 OFFSET CAST(? * ? / 100 AS INTEGER)")
 
         res = self.db.select(sql, whereargs + (nrows, percentile))
 
