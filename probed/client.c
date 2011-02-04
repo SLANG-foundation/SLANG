@@ -91,7 +91,7 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
 	client_pid = fork();
-	if (client_pid > 0) return client_pid;
+	if (client_pid != 0) return client_pid;
 
 	/* 
 	 * We are child 

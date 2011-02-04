@@ -109,10 +109,10 @@ void loop_or_die(int s_udp, int s_tcp) {
 	unix_fd_set(s_tcp, &fs);
 	unix_fd_set(s_tcp, &fs);
 	unix_fd_set(fd_pipe[0], &fs);
-	if (s_udp > fd_max) fd_max = s_udp;
-	if (s_tcp > fd_max) fd_max = s_tcp;
-	if (fd_pipe[0] > fd_max) fd_max = fd_pipe[0];
-	if (fd_pipe[1] > fd_max) fd_max = fd_pipe[1];
+	fd_max = MAX(fd_max, s_udp);
+	fd_max = MAX(fd_max, s_tcp);
+	fd_max = MAX(fd_max, fd_pipe[0]);
+	fd_max = MAX(fd_max, fd_pipe[1]);
 	fd_first = fd_max;
 	memset(&addr_last, 0, sizeof addr_last);
 	memset(&tx_last, 0, sizeof tx_last);

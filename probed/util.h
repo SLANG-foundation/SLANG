@@ -1,3 +1,5 @@
+#define MAX(x, y) ((x)>(y)?(x):(y))
+
 void debug(int enabled);
 void p(char *str);
 void diff_ts(/*@out@*/ ts_t *r, ts_t *end, ts_t *beg);
