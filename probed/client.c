@@ -35,6 +35,7 @@
 #define STATE_TIMEOUT 't'
 #define STATE_PONGLOSS 'l' /* We've got TS, but no pong */
 #define STATE_READY 'r'
+#define STATE_DUP 'd' /* We've got a PONG we didn't recognize, DUP? */
 
 /* List of probe results */
 LIST_HEAD(res_listhead, res) res_head;
@@ -49,10 +50,11 @@ struct res {
 };
 /* Client mode statistics */
 /*@ -exportlocal TODO wtf */
-int res_response = 0;
+int res_ok = 0;
 int res_timeout = 0;
 int res_pongloss = 0;
 int res_tserror = 0;
+int res_dup = 0;
 long long res_rtt_total = 0;
 ts_t res_rtt_min, res_rtt_max;
 /*@ +exportlocal */
@@ -232,7 +234,7 @@ void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts) {
  * \warning  We wait until the next timestamp arrives, before printing
  */
 void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
-	struct res *r, *r_tmp;
+	struct res *r, *r_tmp, r_stat;
 	ts_t now, diff, rtt;
 	int i;
 	int found = 0;
@@ -326,7 +328,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 					printf("Timeout  %4d from %d in %d sec (missing all)\n", 
 							(int)r->seq, (int)r->id, (int)diff.tv_sec);
 				} else { /* STATE_READY implicit */
-					res_response++;
+					res_ok++;
 					diff_ts(&diff, &r->ts[3], &r->ts[0]);
 					diff_ts(&now, &r->ts[2], &r->ts[1]);
 					diff_ts(&rtt, &diff, &now);
@@ -358,25 +360,20 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 	}
 	/* Didn't find PING, probably removed. DUP! */
 	if (found == 0) {
+		memset(&r_stat, 0, sizeof r_stat);
+		(void)clock_gettime(CLOCK_REALTIME, &r_stat.created);
+		r_stat.state = STATE_DUP;
+		memcpy(&r_stat.addr, a, sizeof r->addr);
+		r_stat.id = d->id;
+		r_stat.seq = d->seq;
 		if (cfg.op == DAEMON) 
-			if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
+			if (write(cfg.fifo, (char*)&r_stat, sizeof r_stat) == -1)
 				syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 		/* Client output */
 		if (cfg.op == CLIENT) { 
-			if (r->state == STATE_TSERROR) {
-				res_tserror++;
-				printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
-						(int)r->seq, (int)r->id, (int)diff.tv_sec);
-			} else if (r->state == STATE_PONGLOSS) {
-				res_pongloss++;
-				printf("Timeout  %4d from %d in %d sec (missing PONG)\n", 
-						(int)r->seq, (int)r->id, (int)diff.tv_sec);
-			} else if (r->state == STATE_TIMEOUT) {
-				res_timeout++;
-				printf("Timeout  %4d from %d in %d sec (missing all)\n", 
-						(int)r->seq, (int)r->id, (int)diff.tv_sec);
-
-			}
+			res_dup++;
+			printf("Unknown  %4d from %d (probably DUP)\n", 
+					(int)d->seq, (int)d->id);
 		}
 	}
 }
@@ -385,15 +382,16 @@ void client_res_summary(/*@unused@*/ int sig) {
 	float loss;
 
 	loss = (float)(res_timeout + res_pongloss) / 
-			(float)(res_response + res_tserror + res_timeout + res_pongloss);
+			(float)(res_ok + res_tserror + res_timeout + res_pongloss);
 	loss = loss * 100;
-	printf("\n%d ok, %d ts errors, %d lost pongs, %d timeouts, %f%% loss\n", 
-			res_response, res_tserror, res_pongloss, res_timeout, loss);
+	printf("\n");
+	printf("%d ok, %d ts err, %d lost pong, %d timeout, %d dup, %f%% loss\n", 
+			res_ok, res_tserror, res_pongloss, res_timeout, res_dup, loss);
 	if (res_rtt_max.tv_sec > 0)
 		printf("max: %ld.%09ld", res_rtt_max.tv_sec, res_rtt_max.tv_nsec);
 	else 
 		printf("max: %ld ns", res_rtt_max.tv_nsec);
-	loss = (float)res_rtt_total / (float)res_response;
+	loss = (float)res_rtt_total / (float)res_ok;
 	printf(", avg: %.0f ns", loss);
 	if (res_rtt_min.tv_sec > 0)
 		printf(", min: %ld.%09ld\n", res_rtt_min.tv_sec, res_rtt_min.tv_nsec);
