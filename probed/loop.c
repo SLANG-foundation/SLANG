@@ -24,6 +24,8 @@
 #include "client.h"
 #include "net.h"
 
+static int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
+
 /**
  * Main SLA-NG 'probed' state machine, handling all client/server stuff
  *

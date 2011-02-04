@@ -22,8 +22,8 @@
 
 struct config cfg;
 int main(int argc, char *argv[]);
-void help_and_die(void);
-void reload(char *cfgpath);
+static void help_and_die(void);
+static void reload(char *cfgpath);
 
 /**
  * Sets default values, parses arguments, and start main loop. General
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
 /**
  * Prints the CLI help message, when 'probed' is started without arguments
  */
-void help_and_die(void) {
+static void help_and_die(void) {
 	p("usage: probed [-saqd] [-c addr] [-t type] [-i iface] [-p port]");
 	p("");
 	p("\t          MODES OF OPERATION");
@@ -145,7 +145,7 @@ void help_and_die(void) {
 /*
  * Reload application
  */
-void reload(char *cfgpath) {
+static void reload(char *cfgpath) {
 
 	char tmp[TMPLEN] = "";
 

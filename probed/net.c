@@ -15,6 +15,8 @@
 #include "tstamp.h"
 #include "net.h"
 
+static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out);
+
 /**
  * Receive on socket 'sock' into struct pkt with timestamp
  *
@@ -220,7 +222,7 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
  * \todo Find out if we need to check cmsg_len (as http://stackoverflow.com/questions/2881200/linux-can-recvmsg-be-used-to-receive-the-ip-tos-of-every-incoming-packet shows).
  * \todo Fix splint branchstate ignore
  */
-int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
+static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 
 	struct cmsghdr *cmsg;
 	int *tos_ptr;

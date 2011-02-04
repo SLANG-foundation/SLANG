@@ -38,9 +38,9 @@
 #define STATE_DUP 'd' /* We've got a PONG we didn't recognize, DUP? */
 
 /* List of probe results */
-LIST_HEAD(res_listhead, res) res_head;
+static LIST_HEAD(res_listhead, res) res_head;
 struct res {
-	ts_t created;
+	/*@dependent@*/ ts_t created;
 	char state;
 	struct in6_addr addr;
 	num_t id;
