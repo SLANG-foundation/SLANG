@@ -359,7 +359,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 		r = r->res_list.le_next;
 	}
 	/* Didn't find PING, probably removed. DUP! */
-	if (found == 0) {
+	if (found == 0 && d->type == 'o') {
 		memset(&r_stat, 0, sizeof r_stat);
 		(void)clock_gettime(CLOCK_REALTIME, &r_stat.created);
 		r_stat.state = STATE_DUP;

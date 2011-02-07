@@ -26,6 +26,7 @@ struct msess {
 	msess_id id; /**< Measurement session ID. */
 	struct sockaddr_in6 dst; /**< Destination address and port. */
 	struct timeval interval; /**< Probe interval */
+	int got_hello; /**<Are we connected with server? */ 
 	uint8_t dscp; /**< DiffServ Code Point value of measurement session */
 	pid_t child_pid; /**< PID of child process maintaining the TCP connection. */
 	uint32_t last_seq; /**< Last sequence number sent */
