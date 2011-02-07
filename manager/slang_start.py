@@ -5,9 +5,8 @@ import logging.handlers
 import signal
 import sys
 
-from manager import Manager
-import manager
-from config import Config
+import slang.manager
+import slang.config
 
 # set up logging
 logger = logging.getLogger()
@@ -26,12 +25,12 @@ lc.setFormatter(lformat)
 logger.addHandler(lc)
 
 # read config
-c = Config("../probed/settings.xml")
+c = slang.config.Config("../probed/settings.xml")
 
 # start up
 logger.debug("Starting up...")
 
-m = Manager()
+m = slang.manager.Manager()
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)
