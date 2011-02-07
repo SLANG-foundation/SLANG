@@ -43,7 +43,7 @@ class Probed(threading.Thread):
         """ Start probed application """
         try:
             # \todo - Redirect to /dev/null!
-            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-q'], 
+            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-k', '-q'], 
                 stdout=self.null, stderr=self.null, shell=False)
             self.logger.debug('Probe application started, pid %d', self.probed.pid)
         except Exception, e:
@@ -105,8 +105,8 @@ class Probed(threading.Thread):
                 continue
 
             try:
-            p = probe.from_struct(data)
-            self.pstore.add(p)
+                p = probe.from_struct(data)
+                self.pstore.add(p)
             except Exception, e:
                 self.logger.error("Unable to add probe, got %s: %s" % (e.__class__.__name__, e, ))
 

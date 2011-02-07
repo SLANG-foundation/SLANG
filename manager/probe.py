@@ -1,5 +1,4 @@
 from struct import unpack
-from timespec import Timespec
 import time
 
 #
@@ -16,7 +15,23 @@ def from_struct(structdata):
     """ Create a probe from the struct data """
     
     listdata = unpack('llc16siillllllll16s', structdata)
-    return Probe(listdata + (True, )) 
+
+    clist = (
+      listdata[0]*1000000000+listdata[1],   # 0: created
+      listdata[2],                          # 1: state
+      listdata[3],                          # 2: address
+      listdata[4],                          # 3: session_id
+      listdata[5],                          # 4: sequence number
+      listdata[6]*1000000000+listdata[7],   # t1
+      listdata[8]*1000000000+listdata[9],   # t2
+      listdata[10]*1000000000+listdata[11], # t3
+      listdata[12]*1000000000+listdata[13], # t4
+      None,                                 # In order
+      None,                                 # rtt
+      None                                  # Delay variation
+      )
+
+    return Probe(clist) 
 
 class Probe:
     """ A probe. """
@@ -39,22 +54,24 @@ class Probe:
 
     def __init__(self, data):
 
-        self.created = Timespec(data[0], data[1])
-        self.state = data[2]
-        self.addr = data[3]
-        self.session_id = data[4]
-        self.seq = data[5]
-        self.t1 = Timespec(data[6], data[7])
-        self.t2 = Timespec(data[8], data[9])
-        self.t3 = Timespec(data[10], data[11])
-        self.t4 = Timespec(data[12], data[13])
-        self.in_order = data[14]
-        self.rtt = Timespec(None, None)
-        self.delay_variation = Timespec(None, None)
+        self.created = data[0]
+        self.state = data[1]
+        self.addr = data[2]
+        self.session_id = data[3]
+        self.seq = data[4]
+        self.t1 = data[5]
+        self.t2 = data[6]
+        self.t3 = data[7]
+        self.t4 = data[8]
+        self.in_order = data[9]
+        self.rtt = data[10]
+        self.delay_variation = data[11]
+
         self.has_given = False
         self.has_gotten = False
 
-        self.rtt = self.getRtt()
+        if self.rtt is None:
+          self.rtt = self.getRtt()
 
     def getRtt(self):
         """ Calculates the rtt of the probe. """
@@ -62,7 +79,7 @@ class Probe:
         if self.successful():
             return (self.t4 - self.t1) - (self.t3 - self.t2)
         else:
-            return Timespec(None, None)
+            return None
 
     def toDict(self):
         """ Returns data as a dict.
@@ -75,11 +92,13 @@ class Probe:
             'seq': self.seq,
             'state': self.state,
             'in_order': self.in_order,
-            'created': (self.created.sec, self.created.nsec),
-            't1': (self.t1.sec, self.t1.nsec),
-            't2': (self.t2.sec, self.t2.nsec),
-            't3': (self.t3.sec, self.t3.nsec),
-            't4': (self.t4.sec, self.t4.nsec)
+            'created': self.created,
+            't1': self.t1,
+            't2': self.t2,
+            't3': self.t3,
+            't4': self.t4,
+            'rtt': self.rtt,
+            'delayvar': self.delay_variation
         }
 
     def lost(self):
@@ -138,7 +157,6 @@ class ProbeSet(list):
 
         return res
 
-
     def avg_rtt(self):
         """ Find the average RTT 
         
@@ -155,7 +173,7 @@ class ProbeSet(list):
 
         print "avg_rtt: %f" % (time.time() - t)
         if successful < 1:
-            return Timespec(0, 0)
+            return None
         return sum/successful
 
 
@@ -169,7 +187,7 @@ class ProbeSet(list):
         print "max_rtt: %f" % (time.time() - t)
 
         if len(r) < 1:
-            return Timespec(0, 0)
+            return None
         return max(r)
 
 
@@ -182,7 +200,7 @@ class ProbeSet(list):
                 r.append(p.rtt)
         print "min_rtt: %f" % (time.time() - t)
         if len(r) < 1:
-            return Timespec(0, 0)
+            return None
         return min(r)
 
 
@@ -202,7 +220,7 @@ class ProbeSet(list):
                 r.append(p.rtt)
 
         if len(r) < 1:
-            return Timespec(0, 0)
+            return None
 
         r.sort()
 

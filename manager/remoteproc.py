@@ -2,8 +2,6 @@ from twisted.web import xmlrpc, server
 import logging
 import time
 
-from timespec import Timespec
-
 class RemoteProc(xmlrpc.XMLRPC):
     """ Remote procedures """
 
@@ -44,14 +42,11 @@ class RemoteProc(xmlrpc.XMLRPC):
         while ctime < end:
             aggr_times.append(ctime)
             ctime += aggr_interval
-        #aggr_times.append(end)
-
-        for a in aggr_times:
-            self.logger.debug("Aggregation time %d", (a))
+        aggr_times.append(end)
 
         for i in range(0, len(aggr_times) - 1):
 #            t = time.time()
-            r = self.pstore.get_aggregate(session_id, Timespec(aggr_times[i], 0), Timespec(aggr_times[i+1], 0))
+            r = self.pstore.get_aggregate(session_id, aggr_times[i]*1000000000, aggr_times[i+1]*1000000000)
             r['start'] = aggr_times[i]
 
             # set null values to zero before we send them over XML-RPC
