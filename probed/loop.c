@@ -172,7 +172,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					continue;
 				}
 				if (addr2str(&addr_tmp, addrstr) == 0)
-					syslog(LOG_INFO, "server: %d (%s) connected", fd, addrstr);
+					syslog(LOG_INFO, "server: %s: %d: connected", addrstr, fd);
 				else
 					continue;
 				/* We don't expect to receive any data, just keep track */
@@ -290,9 +290,9 @@ static void server_kill_peer(int fd) {
 	slen = (socklen_t)sizeof tmp;
 	if (getpeername(fd, (struct sockaddr*)&tmp, &slen) == 0) {
 		if (addr2str(&tmp, addrstr) == 0) {
-			syslog(LOG_INFO, "server: %d (%s) disconnected", fd, addrstr);
-		} else syslog(LOG_INFO, "server: %d disconnected", fd);
-	} else syslog(LOG_INFO, "server: %d disconnected", fd);
+			syslog(LOG_INFO, "server: %s: %d disconnected", addrstr, fd);
+		} else syslog(LOG_INFO, "server: %d: disconnected", fd);
+	} else syslog(LOG_INFO, "server: %d: disconnected", fd);
 
 	/* Close, clear fd set, maybe decrease fd_max */
 	if (close(fd) < 0)
