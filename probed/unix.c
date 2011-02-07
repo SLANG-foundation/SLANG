@@ -22,6 +22,13 @@ void unix_fd_set(int sock, fd_set *fs) {
 }
 
 /**
+ * Used like FD_CLR
+ */
+void unix_fd_clr(int sock, fd_set *fs) {
+	FD_CLR(sock, fs);
+}
+
+/**
  * Used like FD_ZERO
  */
 void unix_fd_zero(fd_set *fs) {
