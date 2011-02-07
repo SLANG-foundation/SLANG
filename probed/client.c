@@ -110,7 +110,7 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 			(void)sleep(10);
 			continue;
 		}
-		syslog(LOG_INFO, "%s connecting to port %d\n", log, 
+		syslog(LOG_INFO, "%s Connecting to port %d\n", log, 
 				ntohs(server->sin6_port));
 		sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);	
 		if (sock < 0) {
