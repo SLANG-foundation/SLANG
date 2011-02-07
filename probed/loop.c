@@ -197,9 +197,9 @@ void loop_or_die(int s_udp, int s_tcp) {
 				/* Connected to server, ready to feed it! */
 				if (rx->type == TYPE_HELO) {
 					if (addr2str(&pkt.addr, addrstr) == 0)
-						syslog(LOG_INFO, "Server %s connected", addrstr);
+						syslog(LOG_INFO, "client: %s: connected", addrstr);
 					while ((sess = msess_next()) != NULL) {
-						if (memcmp(&pkt.addr, &sess->dst.sin6_addr, 
+						if (memcmp(&pkt.addr.sin6_addr, &sess->dst.sin6_addr, 
 									sizeof sess->dst.sin6_addr) == 0) {
 								sess->got_hello = 1;
 						}
