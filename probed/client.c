@@ -182,7 +182,7 @@ void client_res_init(void) {
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
 	LIST_INIT(&res_head);
 	/*@ +mustfreeonly +immediatetrans */
-	res_rtt_min.tv_sec = 99999;
+	res_rtt_min.tv_sec = -1;
 	res_rtt_min.tv_nsec = 0;
 	res_rtt_max.tv_sec = 0;
 	res_rtt_max.tv_nsec = 0;
@@ -340,7 +340,9 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 						printf("Response %4d from %d in %ld ns\n", 
 								(int)r->seq, (int)r->id, rtt.tv_nsec);
 					if (cmp_ts(&res_rtt_max, &rtt) == -1)
-						res_rtt_max = rtt;	
+						res_rtt_max = rtt;
+					if (res_rtt_min.tv_sec == -1)
+						res_rtt_min = rtt;
 					if (cmp_ts(&res_rtt_min, &rtt) == 1)
 						res_rtt_min = rtt;
 					res_rtt_total = res_rtt_total + rtt.tv_nsec;

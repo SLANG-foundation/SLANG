@@ -65,11 +65,14 @@ void tstamp_mode_hardware(int sock, char *iface) {
 	/* enable tx hw tstamp, ptp style, intel 82580 limit */
 	hwcfg.tx_type = HWTSTAMP_TX_ON; 
 	/* enable rx hw tstamp, all packets, yey! */
-	hwcfg.rx_filter = HWTSTAMP_FILTER_ALL; 
+	hwcfg.rx_filter = HWTSTAMP_FILTER_ALL;
+   	/* Check that one is root */
+	if (getuid() != 0)
+		syslog(LOG_ERR, "Hardware timestamping requires root privileges");	
 	/* apply by sending to ioctl */
 	if (ioctl(sock, SIOCSHWTSTAMP, &dev) < 0) {
 		syslog(LOG_ERR, "ioctl: SIOCSHWTSTAMP: %s", strerror(errno));
-		syslog(LOG_ERR, "Check %s, and that you're root\n", iface);
+		syslog(LOG_ERR, "Verify that %s supports hardware timestamp\n", iface);
 		/* otherwise, try kernel timestamps (socket only) */ 
 		syslog(LOG_INFO, "Falling back to kernel timestamps");
 		tstamp_mode_kernel(sock);
