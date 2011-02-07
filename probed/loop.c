@@ -24,7 +24,10 @@
 #include "client.h"
 #include "net.h"
 
-static int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer);
+static int server_find_peer_fd(int fd_first, addr_t *peer);
+static void server_kill_peer(int fd);
+fd_set fs;
+int fd_max = 0;
 
 /**
  * Main SLA-NG 'probed' state machine, handling all client/server stuff
@@ -62,8 +65,8 @@ void loop_or_die(int s_udp, int s_tcp) {
 	data_t *rx, tx, tx_last;
 	struct timespec ts;
 	struct timeval tv, last, now;
-	fd_set fs, fs_tmp;
-	int fd, fd_max = 0, fd_first;
+	fd_set fs_tmp;
+	int fd, fd_first, i;
 	int fd_pipe[2];
 	socklen_t slen;
 
@@ -135,7 +138,7 @@ void loop_or_die(int s_udp, int s_tcp) {
 					tx.type = TYPE_TIME;
 					/* In case of Intel RX timestamp error, kill last ts */
 					if (pkt.ts.tv_sec == 0 && pkt.ts.tv_nsec == 0) {
-						fd = server_find_peer_fd(fd_first, fd_max, &addr_last);
+						fd = server_find_peer_fd(fd_first, &addr_last);
 						syslog(LOG_ERR, "RX tstamp error, killing %d on %d",
 								tx_last.seq, tx_last.id);
 						if (fd >= 0) {
@@ -150,14 +153,10 @@ void loop_or_die(int s_udp, int s_tcp) {
 					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
 					tx_last = tx;
 					/* Really send TCP */
-					fd = server_find_peer_fd(fd_first, fd_max, &(pkt.addr));
+					fd = server_find_peer_fd(fd_first, &(pkt.addr));
 					if (fd < 0) continue;
-					syslog(LOG_DEBUG, "< TIME %d (%d)\n", rx->seq, fd);
-					if (send(fd, (char*)&tx, DATALEN, 0) == -1) {
-						if (addr2str(&(pkt.addr), addrstr) == 0)
-							syslog(LOG_ERR, "server: %s disconnected", addrstr);
-						if (close(fd) < 0)
-							syslog(LOG_ERR, "close: %s", strerror(errno));
+					if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
+						server_kill_peer(fd);
 					}
 				} 
 				if (pkt.data[0] == TYPE_PONG) {
@@ -170,29 +169,28 @@ void loop_or_die(int s_udp, int s_tcp) {
 				fd = accept(s_tcp, (struct sockaddr *)&addr_tmp, &slen);
 				if (fd < 0) {
 					syslog(LOG_ERR, "accept: %s", strerror(errno));
-				} else {
-					/* We don't expect to receive any data, just keep track */
-					if (fd > fd_max)
-						fd_max = fd;
-					if (addr2str(&addr_tmp, addrstr) == 0)
-						syslog(LOG_INFO, "Client %d %s connected", fd, addrstr);
-					else 
-						if (close(fd) < 0)
-							syslog(LOG_ERR, "close: %s", strerror(errno));
-					/* Hello, feed me with PINGs */
-					memset(&tx, 0, sizeof tx);
-					tx.type = TYPE_HELO;
-					if (send(fd, (char*)&tx, DATALEN, 0) == -1) {
-						if (addr2str(&addr_tmp, addrstr) == 0)
-							syslog(LOG_ERR, "server: %s disconnected", addrstr);
-						if (close(fd) < 0)
-							syslog(LOG_ERR, "close: %s", strerror(errno));
-					}
+					continue;
+				}
+				if (addr2str(&addr_tmp, addrstr) == 0)
+					syslog(LOG_INFO, "server: %d (%s) connected", fd, addrstr);
+				else
+					continue;
+				/* We don't expect to receive any data, just keep track */
+				unix_fd_set(fd, &fs);
+				if (fd > fd_max)
+					fd_max = fd;
+				/* Hello, feed me with PINGs */
+				memset(&tx, 0, sizeof tx);
+				tx.type = TYPE_HELO;
+				if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
+					server_kill_peer(i);
 				}
 			} else if (unix_fd_isset(fd_pipe[0], &fs_tmp) == 1) {
 				/* PIPE; timestamp from TCP client */
-				if (read(fd_pipe[0], &pkt, sizeof pkt) < 0)
+				if (read(fd_pipe[0], &pkt, sizeof pkt) < 0) {
 					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
+					continue;
+				}
 				rx = (data_t *)&pkt.data;
 				/* Connected to server, ready to feed it! */
 				if (rx->type == TYPE_HELO) {
@@ -201,13 +199,21 @@ void loop_or_die(int s_udp, int s_tcp) {
 					while ((sess = msess_next()) != NULL) {
 						if (memcmp(&pkt.addr.sin6_addr, &sess->dst.sin6_addr, 
 									sizeof sess->dst.sin6_addr) == 0) {
-								sess->got_hello = 1;
+							sess->got_hello = 1;
 						}
 					}
 				} else {
 					/* Security; make sure type is tstamp; ts is NULL */
 					rx->type = 't';
 					client_res_update(&pkt.addr.sin6_addr, rx, NULL);
+				}
+			} else {
+				/* It's a client. They shouldn't speak, it's probably a
+				 * disconnect. KILL IT. */
+				for (i = (fd_first + 1); i <= fd_max; i++) {
+					if (unix_fd_isset(i, &fs_tmp) == 1) {
+						server_kill_peer(i);
+					}	
 				}
 			}
 		} else {
@@ -241,14 +247,14 @@ void loop_or_die(int s_udp, int s_tcp) {
  * 
  * It also removes dead peers, as that functionality comes for free
  * when doing 'getpeername'. Therefore, it needs to know the lowest
- * static (listening) fd, in order not to kill them as well.
+ * static (listening) fd, in order not to kill them as well. It 
+ * modifies the global variable fd_max; the heighest seen fd in fs.
  *
  * \param[in] fd_first The lowest dynamic (client) file descriptor 
- * \param[in] fd_max   The highest file descriptor 
  * \param[in] peer     Pointer to IP address to find socket for 
- * \return    File descriptor to client socket of address 'peer'
+ * \return             File descriptor to client socket of address 'peer'
  */
-int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer) {
+static int server_find_peer_fd(int fd_first, addr_t *peer) {
 	int i;
 	addr_t tmp;
 	socklen_t slen;
@@ -262,11 +268,36 @@ int server_find_peer_fd(int fd_first, int fd_max, addr_t *peer) {
 			}
 		} else {
 			if (errno != EBADF) {
-				syslog(LOG_ERR, "server: %d disconnected", i);
-				if (close(i) < 0)
-					syslog(LOG_ERR, "server: close: %s", strerror(errno));
+				server_kill_peer(i);
 			}
 		}
 	}
 	return -1;
+}
+
+/**
+ * The function killing an client peer socket file descriptor, modifies
+ * global variables fs; the file descriptor set, and fd_max.
+ * 
+ * \param[in] fd       The lowest dynamic (client) file descriptor 
+ */
+static void server_kill_peer(int fd) {
+	char addrstr[INET6_ADDRSTRLEN];
+	addr_t tmp;
+	socklen_t slen;
+
+	/* Print disconnect message */
+	slen = (socklen_t)sizeof tmp;
+	if (getpeername(fd, (struct sockaddr*)&tmp, &slen) == 0) {
+		if (addr2str(&tmp, addrstr) == 0) {
+			syslog(LOG_INFO, "server: %d (%s) disconnected", fd, addrstr);
+		} else syslog(LOG_INFO, "server: %d disconnected", fd);
+	} else syslog(LOG_INFO, "server: %d disconnected", fd);
+
+	/* Close, clear fd set, maybe decrease fd_max */
+	if (close(fd) < 0)
+		syslog(LOG_ERR, "server: close: %s", strerror(errno));
+	unix_fd_clr(fd, &fs);
+	if (fd == fd_max)
+		fd_max--;
 }
