@@ -6,6 +6,7 @@
 #define TYPE_PING 'i'
 #define TYPE_PONG 'o'
 #define TYPE_TIME 't'
+#define TYPE_HELO 'h'
 #define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
 #define MSESS_NODE_NAME "probe"

@@ -74,30 +74,22 @@ void loop_or_die(int s_udp, int s_tcp) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-
 	/* PING results for clients */
 	client_res_init(); 
-
 	/* Address lookup */
 	if (cfg.op == SERVER) {
 		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
 	} else {
-
 		/* spawn client forks for all measurement sessions */
 		while ((sess = msess_next()) != NULL) {
-
-			/* make sure there is no fork already running with the same destination address */
+			/* make sure there is no fork already running with 
+			 * the same destination address */
 			if ((findsess = msess_find_running_addr(&sess->dst)) != NULL) {
-				syslog(LOG_DEBUG, "Found running probed child with same destination; pid: %d", findsess->child_pid);
 				sess->child_pid = findsess->child_pid;
 				continue;
 			}
-
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
-			//(void)sleep(1); // connect, wait!
-
 		}
-
 		if (cfg.op == CLIENT)
 			(void)signal(SIGINT, client_res_summary);
 	}
@@ -185,23 +177,46 @@ void loop_or_die(int s_udp, int s_tcp) {
 					if (addr2str(&addr_tmp, addrstr) == 0)
 						syslog(LOG_INFO, "Client %d %s connected", fd, addrstr);
 					else 
-						(void)close(fd);
+						if (close(fd) < 0)
+							syslog(LOG_ERR, "close: %s", strerror(errno));
+					/* Hello, feed me with PINGs */
+					memset(&tx, 0, sizeof tx);
+					tx.type = TYPE_HELO;
+					if (send(fd, (char*)&tx, DATALEN, 0) == -1) {
+						if (addr2str(&addr_tmp, addrstr) == 0)
+							syslog(LOG_ERR, "server: %s disconnected", addrstr);
+						if (close(fd) < 0)
+							syslog(LOG_ERR, "close: %s", strerror(errno));
+					}
 				}
 			} else if (unix_fd_isset(fd_pipe[0], &fs_tmp) == 1) {
 				/* PIPE; timestamp from TCP client */
 				if (read(fd_pipe[0], &pkt, sizeof pkt) < 0)
 					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
-				/* Security feature; make sure type is tstamp; ts is NULL */
 				rx = (data_t *)&pkt.data;
-				rx->type = 't';
-				client_res_update(&pkt.addr.sin6_addr, rx, NULL);
+				/* Connected to server, ready to feed it! */
+				if (rx->type == TYPE_HELO) {
+					if (addr2str(&pkt.addr, addrstr) == 0)
+						syslog(LOG_INFO, "Server %s connected", addrstr);
+					while ((sess = msess_next()) != NULL) {
+						if (memcmp(&pkt.addr, &sess->dst.sin6_addr, 
+									sizeof sess->dst.sin6_addr) == 0) {
+								sess->got_hello = 1;
+						}
+					}
+				} else {
+					/* Security; make sure type is tstamp; ts is NULL */
+					rx->type = 't';
+					client_res_update(&pkt.addr.sin6_addr, rx, NULL);
+				}
 			}
 		} else {
 			/* Send PING */
-
 			(void)gettimeofday(&now, 0);
 			while ((sess = msess_next()) != NULL) {
-
+				/* Are we connected to server? */
+				if (sess->got_hello != 1) 
+					continue;
 				diff_tv(&tv, &now, &sess->last_sent);
 				/* time to send new packet? */
 				if (cmp_tv(&tv, &sess->interval) == 1) {
