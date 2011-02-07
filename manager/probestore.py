@@ -11,7 +11,6 @@ from Queue import Queue, Empty
 import config
 from probe import Probe, ProbeSet
 import probe
-from timespec import Timespec
 
 class ProbeStore:
     """ Probe storage """
@@ -21,7 +20,8 @@ class ProbeStore:
     logger = None
     config = None
     db = None
-    buf = []
+    probes = None
+    max_seq = None
 
     def __init__(self):
         """Constructor """
@@ -29,6 +29,9 @@ class ProbeStore:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
         self.lock_buf = threading.Lock()
+
+        self.probes = dict()
+        self.max_seq = dict()
 
         self.logger.debug("Created instance")
 
@@ -38,25 +41,23 @@ class ProbeStore:
             self.db.execute("CREATE TABLE IF NOT EXISTS probes (" + 
                 "session_id INTEGER, " +
                 "seq INTEGER, " + 
-                "created_sec INTEGER, " +
-                "created_nsec INTEGER, " +
-                "t1_sec INTEGER, " + 
-                "t1_nsec INTEGER, " + 
-                "t2_sec INTEGER, " + 
-                "t2_nsec INTEGER, " + 
-                "t3_sec INTEGER, " + 
-                "t3_nsec INTEGER, " + 
-                "t4_sec INTEGER, " + 
-                "t4_nsec INTEGER, " + 
-                "rtt_as_nsec INTEGER, " +
+                "created INTEGER, " +
+                "t1 INTEGER, " + 
+                "t2 INTEGER, " + 
+                "t3 INTEGER, " + 
+                "t4 INTEGER, " + 
+                "rtt INTEGER, " +
+                "delayvar INTEGER, " +
+                "duplicates INTEGER, " +
+                "in_order INTEGER, " +
                 "state TEXT " + 
                 ");")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
 #            self.db.execute("CREATE INDEX IF NOT EXISTS idx_state ON probes(state)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id__created_sec__state ON probes(session_id, created_sec, state)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id__created_sec__rtt_as_nsec ON probes(session_id, created_sec, rtt_as_nsec)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_rtt_as_nsec ON probes(rtt_as_nsec)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_created_sec ON probes(created_sec)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__state ON probes(session_id, created, state)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__rtt ON probes(session_id, created, rtt)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__rtt ON probes(rtt)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes(created)")
             
         except Exception, e:
             self.logger.critical("Unable to open database: %s" % e)
@@ -70,25 +71,112 @@ class ProbeStore:
         self.db.join()
         self.logger.debug("db dead.")
 
-    def insert(self, p):
-        """ Insert probe """
+    def add(self, p):
+        """ Add probe to ProbeStore 
 
-        sql = str("INSERT INTO probes " +
+            TODO:
+            Handle duplicate packets!
+        
+            Logic when new probe arrives:
+            V2:
+            if p.seq > max_seq:
+                in order
+            else:
+                not in order
+
+            if we have seq - 1:
+                Calculate delay var for current packet
+                set has_given on seq - 1
+
+            if we have seq + 1:
+                Calculate delay var for seq + 1
+                set has_given on seq
+
+            for i in range(seq-1 seq+2):
+                try:
+                    if self.probes[p.session_id][i].has_given and self.probes[p.session_id][i].has_delayvar
+                        self.insert(self.probes[p.session_id][i])
+                        del self.probes[p.session_id][i]
+                except KeyError:
+                    continue
+                        
+
+            save current to list
+            set last seq to current
+
+        """
+
+        if not p.session_id in self.max_seq:
+            # No max sequence number for current measurement session.
+            # Probably new session. Add packet and mark as has gotten delay variation.
+            self.max_seq[p.session_id] = p.seq
+            p.has_gotten = True
+            if p.session_id not in self.probes:
+                self.probes[p.session_id] = dict()
+            self.probes[p.session_id][p.seq] = p
+            return
+
+        # Reordered?
+        if  p.seq > self.max_seq[p.session_id]:
+            p.in_order = True
+            self.max_seq[p.session_id] = p.seq
+        else:
+            p.in_order = False
+        
+        # check for previous packet
+        try:
+            p.set_prev_probe(self.probes[p.session_id][p.seq - 1])
+        except KeyError:
+            pass
+        
+        # check for next packet
+        try:
+            self.probes[p.session_id][p.seq + 1].set_prev_probe(p)
+        except KeyError:
+            pass
+
+        # save probe and update last_seq
+        if p.session_id not in self.probes: # Can this occur, given that we check it when we add new element to self.last_seq?
+            self.probes[p.session_id] = dict()
+        self.probes[p.session_id][p.seq] = p
+
+        # see if packets are ready to save
+        for i in range(p.seq-1, p.seq+2):
+            try:
+                if self.probes[p.session_id][i].has_given and self.probes[p.session_id][i].has_gotten:
+                    self.insert(self.probes[p.session_id][i])
+                    del self.probes[p.session_id][i]
+            except KeyError:
+                continue
+
+
+    def insert(self, p):
+        """ Insert probe into database """
+
+        sql = ("INSERT INTO probes " +
             "(session_id, seq, state, " + 
-            "created_sec, created_nsec, " +
-            "t1_sec, t1_nsec, " +
-            "t2_sec, t2_nsec, " + 
-            "t3_sec, t3_nsec, " +
-            "t4_sec, t4_nsec, rtt_as_nsec) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            "created, t1, t2, t3, t4, " +
+            "rtt, delayvar, "+
+            "in_order, duplicates)" +
+            " VALUES " +
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+        dv = None
+        if p.delay_variation is not None:
+            dv = abs(p.delay_variation)
+
         try:
             self.db.execute(sql, 
-                    (p.session_id, p.seq, p.state, p.created.sec, p.created.nsec,
-                     p.t1.sec, p.t1.nsec, p.t2.sec, p.t2.nsec,
-                     p.t2.sec, p.t3.nsec, p.t4.sec, p.t4.nsec, p.rtt().to_nanoseconds()),
-                    )
+                    (p.session_id, p.seq, p.state, p.created,
+                     p.t1, p.t2, p.t2, p.t4, 
+                     p.rtt, dv,
+                     p.in_order, 0
+                    ),
+            )
+                      
+        
         except Exception, e:
-            self.logger.error("Unable to flush probe to database: %s" % e)
+            self.logger.error("Unable to flush probe to database: %s: " % e)
 
     def flush(self):
         """ Requesting commit """    
@@ -104,9 +192,9 @@ class ProbeStore:
 
         now = int(time.time())
 
-        sql = "DELETE FROM probes WHERE created_sec < ?"
+        sql = "DELETE FROM probes WHERE created < ?"
         try:
-            self.db.execute(sql, (now - age, ))
+            self.db.execute(sql, (now - age/1000000000, ))
         except Exception, e:
             self.logger.error("Unable to delete old data: %s" % e)
 
@@ -133,18 +221,15 @@ class ProbeStore:
 
         #self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
 
-        sql = "SELECT * FROM probes WHERE session_id = ? AND created_sec > ? AND created_sec < ?"
+        sql = "SELECT * FROM probes WHERE session_id = ? AND created > ? AND created < ?"
         res = self.db.select(sql, (session_id, start, end))
 
         pset = ProbeSet()
         for row in res:
             pdlist = (
-                row['created_sec'], row['created_nsec'],
+                row['created'],
                 row['state'], '', row['session_id'], row['seq'],
-                row['t1_sec'], row['t1_nsec'],
-                row['t2_sec'], row['t2_nsec'],
-                row['t3_sec'], row['t3_nsec'],
-                row['t4_sec'], row['t4_nsec'],
+                row['t1'], row['t2'], row['t3'], row['t4'], None, row['rtt'], row['delayvar']
                 )
             pset.append(Probe(pdlist))
 
@@ -166,10 +251,15 @@ class ProbeStore:
             'rtt_avg': 0,        
             'rtt_med': 0,        
             'rtt_95th': 0,        
+            'delayvar_max': 0,
+            'delayvar_min': 0,
+            'delayvar_avg': 0,        
+            'delayvar_med': 0,        
+            'delayvar_95th': 0,        
         }
 
-        where = "session_id = ? AND created_sec >= ? AND created_sec < ?"
-        whereargs = (session_id, start.sec, end.sec)
+        where = "session_id = ? AND created >= ? AND created < ?"
+        whereargs = (session_id, start, end)
         
         # get number of probes - needed for percentile and percentage calculations
         nrows = 0
@@ -177,12 +267,12 @@ class ProbeStore:
         res = self.db.select(sql, whereargs)
         for row in res:
             if row['count'] == 0:
-                self.logger.debug("No data for session %d from %d to %d" % (session_id, start.sec, end.sec))
+                self.logger.debug("No data for session %d from %d to %d" % (session_id, start, end))
                 return retdata
             else:
                 retdata['total'] = row['count']
 
-        self.logger.debug("Aggregating session %d from %d to %d, %d rows" % (session_id, start.sec, end.sec, retdata['total'], ))
+#        self.logger.debug("Aggregating session %d from %d to %d, %d rows" % (session_id, start, end, retdata['total'], ))
 
         # get percentages
         sql = "SELECT CAST( COUNT(*) AS REAL) AS lost FROM PROBES WHERE state = ? AND " + where
@@ -197,27 +287,50 @@ class ProbeStore:
 
 
         # get max, min and average
-        sql = ("SELECT MAX(rtt_as_nsec) AS max, MIN(rtt_as_nsec) AS min, " + 
-            "AVG(rtt_as_nsec) AS avg FROM probes " + 
-            "WHERE rtt_as_nsec IS NOT NULL AND " + where)
+        sql = ("SELECT MAX(rtt) AS max, MIN(rtt) AS min, " + 
+            "AVG(rtt) AS avg FROM probes " + 
+            "WHERE rtt IS NOT NULL AND " + where)
         res = self.db.select(sql, whereargs)
         for row in res:
-            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
+#            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
             retdata['rtt_max'] = row['max']
             retdata['rtt_min'] = row['min']
             retdata['rtt_avg'] = row['avg']
 
+        sql = ("SELECT MAX(delayvar) AS max, MIN(delayvar) AS min, " + 
+            "AVG(delayvar) AS avg FROM probes " + 
+            "WHERE delayvar IS NOT NULL AND " + where)
+        res = self.db.select(sql, whereargs)
+        for row in res:
+#            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
+            retdata['delayvar_max'] = row['max']
+            retdata['delayvar_min'] = row['min']
+            retdata['delayvar_avg'] = row['avg']
+
         # get percentiles
-        retdata['rtt_med'] = self.get_rtt_percentile(session_id, start, end, 50)
-        retdata['rtt_95th'] = self.get_rtt_percentile(session_id, start, end, 95)
+        retdata['rtt_med'] = self.get_percentile(session_id, start, end, "rtt", 50)
+        retdata['rtt_95th'] = self.get_percentile(session_id, start, end, "rtt", 95)
+        retdata['delayvar_med'] = self.get_percentile(session_id, start, end, "delayvar", 50)
+        retdata['delayvar_95th'] = self.get_percentile(session_id, start, end, "delayvar", 95)
 
         return retdata
 
-    def get_rtt_percentile(self, session_id, start, end, percentile):
-        """ Get percentileth percentile of RTT. """
+    def get_percentile(self, session_id, start, end, type, percentile):
+        """ Get percentileth percentile of RTT or delay variation.  
+        
+            TODO:
+            Look for different states for rtt/delayvar?
+        """
 
-        where = "session_id = ? AND created_sec >= ? AND created_sec < ? AND state = ?"
-        whereargs = (session_id, start.sec, end.sec, probe.STATE_READY)
+        if type == "rtt":
+            column = "rtt"
+        elif type == "delayvar":
+            column = "delayvar"
+        else:
+            return None
+
+        where = "session_id = ? AND created >= ? AND created < ? AND state = ?"
+        whereargs = (session_id, start, end, probe.STATE_READY)
 
         sql = "SELECT COUNT(*) AS count FROM probes WHERE " + where
         res = self.db.select(sql, whereargs)
@@ -227,8 +340,8 @@ class ProbeStore:
         if nrows < 1:
             return None
 
-        sql = ("SELECT rtt_as_nsec AS percentile FROM probes WHERE " + where +
-            " ORDER BY rtt_as_nsec ASC LIMIT 1 OFFSET CAST(? * ? / 100 AS INTEGER)")
+        sql = ("SELECT " + column + " AS percentile FROM probes WHERE " + where +
+            " ORDER BY " + column + " ASC LIMIT 1 OFFSET CAST(? * ? / 100 AS INTEGER)")
 
         res = self.db.select(sql, whereargs + (nrows, percentile))
 

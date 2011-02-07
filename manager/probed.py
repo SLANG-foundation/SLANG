@@ -43,7 +43,7 @@ class Probed(threading.Thread):
         """ Start probed application """
         try:
             # \todo - Redirect to /dev/null!
-            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-q'], 
+            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-k', '-q'], 
                 stdout=self.null, stderr=self.null, shell=False)
             self.logger.debug('Probe application started, pid %d', self.probed.pid)
         except Exception, e:
@@ -95,18 +95,20 @@ class Probed(threading.Thread):
                 # ~780 probes can be held in fifo buff before pause
                 data = self.fifo.read(128)
 #                self.logger.debug("got ipc: %d bytes " % len(data))
-
-                # error condition - handle in nice way!
-                # \todo Handle read from dead fifo in a nice way.
-                if len(data) < 1:
-                    continue
-
-                p = probe.from_struct(data)
-                self.pstore.insert(p)
-
             except Exception, e:
                 self.logger.error("Unable to read from FIFO: %s" % e)
                 time.sleep(1) 
+
+            # error condition - handle in nice way!
+            # \todo Handle read from dead fifo in a nice way.
+            if len(data) < 1:
+                continue
+
+            try:
+                p = probe.from_struct(data)
+                self.pstore.add(p)
+            except Exception, e:
+                self.logger.error("Unable to add probe, got %s: %s" % (e.__class__.__name__, e, ))
 
         self.fifo.close()
 

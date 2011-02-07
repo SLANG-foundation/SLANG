@@ -2,8 +2,6 @@ from twisted.web import xmlrpc, server
 import logging
 import time
 
-from timespec import Timespec
-
 class RemoteProc(xmlrpc.XMLRPC):
     """ Remote procedures """
 
@@ -44,14 +42,11 @@ class RemoteProc(xmlrpc.XMLRPC):
         while ctime < end:
             aggr_times.append(ctime)
             ctime += aggr_interval
-        #aggr_times.append(end)
+        aggr_times.append(end)
 
-        for a in aggr_times:
-            self.logger.debug("Aggregation time %d", (a))
-
-        for i in range(0, len(aggr_times) - 2):
-            t = time.time()
-            r = self.pstore.get_aggregate(session_id, Timespec(aggr_times[i], 0), Timespec(aggr_times[i+1], 0))
+        for i in range(0, len(aggr_times) - 1):
+#            t = time.time()
+            r = self.pstore.get_aggregate(session_id, aggr_times[i]*1000000000, aggr_times[i+1]*1000000000)
             r['start'] = aggr_times[i]
 
             # set null values to zero before we send them over XML-RPC
@@ -60,12 +55,12 @@ class RemoteProc(xmlrpc.XMLRPC):
                     r[k] = 0
 
             result.append(r)
-            print "iteration %d finished in %f seconds" % (i, time.time() - t)
+#            print "iteration %d finished in %f seconds" % (i, time.time() - t)
 
-        for a in result:
-            self.logger.debug("Aggregated data:")
-            for k, v in a.items():
-                self.logger.debug("%s: %s" % (k, v))
+#        for a in result:
+#            self.logger.debug("Aggregated data:")
+#            for k, v in a.items():
+#                self.logger.debug("%s: %s" % (k, v))
 
         return result
 
