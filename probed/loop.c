@@ -290,7 +290,7 @@ static void server_kill_peer(int fd) {
 	slen = (socklen_t)sizeof tmp;
 	if (getpeername(fd, (struct sockaddr*)&tmp, &slen) == 0) {
 		if (addr2str(&tmp, addrstr) == 0) {
-			syslog(LOG_INFO, "server: %s: %d disconnected", addrstr, fd);
+			syslog(LOG_INFO, "server: %s: %d: disconnected", addrstr, fd);
 		} else syslog(LOG_INFO, "server: %d: disconnected", fd);
 	} else syslog(LOG_INFO, "server: %d: disconnected", fd);
 
