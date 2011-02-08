@@ -41,18 +41,59 @@ class Probed(threading.Thread):
 
     def start_probed(self):
         """ Start probed application """
+
+        probed_args = ['../probed/probed', '-d', '-q']
+
+        # get configuration - port
+        try:
+            port = self.config.get_param("/config/port")
+        except NotFoundError:
+            port = 60666
+            self.logger.info("Port not found in config. Falling back to default (%d)" % port)
+
+        probed_args += ['-p', port]
+
+        # timestamping type - hardware is default
+        try:
+            tstype = self.config.get_param("/config/timestamp")
+        except NotFoundError:
+            tstype = kernel
+            self.logger.info("Timestamping type not found in config. Falling back to default (%s)" & tstype)
+
+        if tstype == 'kernel':
+            probed_args += ['-k']
+
+        elif tstype == 'userland':
+            probed_args += ['-u']
+
+        elif tstype == 'hardware':
+            # Hardware timestamping is the default action and does not 
+            # need to be passed to probed. However, it requires the 
+            # interface name to enable timestamping for.
+            try:
+                ifname = self.config.get_param("/config/interface")
+            except NotFoundError:
+                ifname = "eth0"
+                self.logger.info("Interface not found in config. Falling back to default (%s)" % ifname)
+
+            probed_args += ['-i', ifname]
+
+        # config file
+        probed_args += ['-f', self.config.get_path()]
+
         try:
             # \todo - Redirect to /dev/null!
-            self.probed = subprocess.Popen(['../probed/probed', '-i', self.config.get_param("/config/interface"), '-d', '-k', '-q'], 
+            self.probed = subprocess.Popen(probed_args, 
                 stdout=self.null, stderr=self.null, shell=False)
             self.logger.debug('Probe application started, pid %d', self.probed.pid)
         except Exception, e:
-            self.logger.critical("Unable to start probe application: %s" % e)
-            raise ProbedError("Unable to start probed application: %s" % e)
+            self.logger.critical("Unable to start probe application (%s): %s" % (e.__class__.__name__, e))
+            raise ProbedError("Unable to start probed application: (%s): %s" % (e.__class__.__name__, e))
 
         time.sleep(1)
         if self.probed.poll() != None:
-            raise ProbedError("Unable to start probed application")
+            self.logger.error("Probed not running after 1 second. args: %s" % str(probed_args))
+            raise ProbedError("Probed not running after 1 second")
 
     def open_fifo(self):
         try:

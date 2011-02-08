@@ -25,12 +25,12 @@ lc.setFormatter(lformat)
 logger.addHandler(lc)
 
 # read config
-c = slang.config.Config("../probed/settings.xml")
+#c = slang.config.Config("../probed/settings.xml")
 
 # start up
 logger.debug("Starting up...")
 
-m = slang.manager.Manager()
+m = slang.manager.Manager('slang.tele2.net')
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)

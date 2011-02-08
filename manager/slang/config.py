@@ -46,6 +46,10 @@ class Config:
 
         return r[0].text
 
+    def get_path(self):
+        """ Get path to config file. """
+        return self.filename
+
 class ConfigError(Exception):
     pass
 

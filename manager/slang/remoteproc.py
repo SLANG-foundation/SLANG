@@ -103,3 +103,13 @@ class RemoteProc(xmlrpc.XMLRPC):
             pdlist.append(p.toDict)
 
         return pd_list
+
+    def xmlrpc_get_current_sessions(self):
+        """ Get current measurement sessions there is data for. """
+
+        return self.pstore.current_sessions()
+
+    def xmlrpc_get_storage_statistics(self):
+        """ Get some statistics from the probe storage. """
+        
+        return self.pstore.get_storage_statistics()
