@@ -5,6 +5,7 @@ import os
 import logging
 import threading
 import signal
+import httplib
 from twisted.web import xmlrpc, server
 from twisted.internet import reactor
 
@@ -16,19 +17,27 @@ import remoteproc
 
 class Manager:
 
+    manager_host = None
+    cfg_path = "/tmp/slang_settings.xml"
+
     logger = None
     config = None
     server = None
     pstore = None
+    probed = None
     maintainer = None
 
     thread_stop = False
 
-    def __init__(self):
+    def __init__(self, manager_host):
         """ Constructor """
 
-        self.config = config.Config()
+        # reload
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.manager_host = manager_host
+        self.reload()      
+
+        self.config = config.Config(self.cfg_path)
 
         try:
             self.pstore = probestore.ProbeStore()
@@ -54,11 +63,23 @@ class Manager:
         self.logger.info("Reloading...")
 
         # fetch config
+        conn = httplib.HTTPConnection(self.manager_host)
+        conn.request("GET", "/cfg.php")
+        response = conn.getresponse()
+        if response.status != 200:
+            raise ManagerError("Unable to fetch configuration: %s %s" % (response.status, response.reason))
+        cfg_data = response.read()
 
         # write to disk
+        cfg_file = open("/tmp/slang_settings.xml", "w")
+        cfg_file.write(cfg_data)
 
         # send SIGHUP
-        self.probe.send_signal(SIGHUP)
+        if self.config is not None:
+            self.config.read_file(self.cfg_data)
+
+        if self.probed is not None:
+            self.probed.restart()
 
         return 1;
 
@@ -125,3 +146,6 @@ class Manager:
         reactor.run()
 
         self.logger.info("Exiting...")
+
+class ManagerError(Exception):
+    pass

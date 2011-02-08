@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
 
 	/* Default settings */
-	cfgpath = "settings.xml";
+	cfgpath = "/tmp/slang_settings.xml";
 	log = LOG_PERROR; /* Print to stdout */
 	iface = "eth0"; /* Why not hehe */
 	port = "60666"; /* Sexy port */
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 	/*@ -branchstate OK that opcode. etc changes storage @*/
 	/*@ -unrecog OK that 'getopt' and 'optarg' is missing; SPlint bug */
 	/* +charintliteral OK to compare 'arg' (int) int with char @*/
-	while ((arg = getopt(argc, argv, "qdvshc:i:p:w:ku")) != -1) {
+	while ((arg = getopt(argc, argv, "qdvf:shc:i:p:w:ku")) != -1) {
 		if (arg == (int)'h') help_and_die();
 		if (arg == (int)'?') exit(EXIT_FAILURE);
 		if (arg == (int)'q') log = 0;
@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
  * Prints the CLI help message, when 'probed' is started without arguments
  */
 static void help_and_die(void) {
-	p("usage: probed [-saqd] [-c addr] [-t type] [-i iface] [-p port]");
+	p("usage: probed [-saqd] [-c addr] [-t type] [-i iface] [-p port] [-f file]");
 	p("");
 	p("\t          MODES OF OPERATION");
 	p("\t-c addr   Client mode: PING 'addr', fetch UDP timestamps");
@@ -139,6 +139,7 @@ static void help_and_die(void) {
 	p("\t-w usecs  Client mode wait time between PINGs, in microseconds");
 	p("\t-v        Output more debugging");
 	p("\t-q        Be quiet, log error to syslog only");
+	p("\t-f file   Path to configuration file");
 	exit(EXIT_FAILURE);
 }
 

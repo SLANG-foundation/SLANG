@@ -194,14 +194,27 @@ class ProbeStore:
 
         sql = "DELETE FROM probes WHERE created < ?"
         try:
-            self.db.execute(sql, (now - age/1000000000, ))
+            self.db.execute(sql, ((now - age)*1000000000, ))
         except Exception, e:
             self.logger.error("Unable to delete old data: %s" % e)
+
 
     ###################################################################
     #
     # Functions to fetch data from database
     #
+
+    def current_sessions(self):
+        """ Get IDs of current sessions """
+        
+        sql = "SELECT DISTINCT(session_id) AS session_id FROM probes"
+        res = self.db.select(sql)
+        retval = list()
+        for r in res:
+            retval.append(r['session_id'])
+
+        return retval
+
 
     def get_raw(self, session_id, start, end=None):
         """ Get raw data from database.
@@ -352,6 +365,28 @@ class ProbeStore:
         return None
 
 
+    def get_storage_statistics(self):
+        """ Get database statistics """
+
+        retval = {}
+
+        # Get number of rows in database
+        sql = "SELECT COUNT(*) AS c FROM probes"
+        res = self.db.select(sql)
+        for row in res:
+            retval['db_numrows'] = row['c']
+        
+        # number of sessions in state dict
+        retval['state_numsessions'] = len(self.probes)
+
+        # number of probes in state dict
+        retval['state_numprobes'] = 0
+        for session in self.probes:
+            retval['state_numprobes'] += len(self.probes[session])
+
+        return retval
+
+
 class ProbeStoreError(Exception):
     pass
 
@@ -413,6 +448,9 @@ class ProbeStoreDB(threading.Thread):
                 exec_c += 1
             except Exception, e:
                 self.logger.error("Unable to execute SQL command (%s): %s" % (req, e))
+
+            if req.lower().find("delete from ") >= 1:
+                self.logger.debug("Deleted %d rows." % curs.rowcount)
 
             # handle response from select queries
             if res:
