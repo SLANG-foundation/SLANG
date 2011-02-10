@@ -266,9 +266,7 @@ static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 	/* if no IP_TOS header was found, dscp still keeps its initial 
 	 * value of 255 (which is invalid since the DSCP field is six bits) 
 	 */
-	if (tos == 255) 
-		return -1;
-	if (tclass == -1) 
+	if (tos == 255 && tclass == -1) 
 		return -1;
 	return 0;
 
