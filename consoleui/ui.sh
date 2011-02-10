@@ -299,6 +299,8 @@ menu_shell()
 	bash
 }
 
+setterm -powersave off -blank 0
+
 # MAIN MENU LOOP
 while true
 do

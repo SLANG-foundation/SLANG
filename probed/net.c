@@ -118,26 +118,6 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 }
 
 /**
- * Set DSCP-value of socket.
- *
- * \param[in] sock Socket
- * \param[in] dscp DSCP value 
- * \return Status; 0 on successs, <0 on failure.
- */
-int dscp_set(int sock, uint8_t dscp) {
-
-	dscp <<= 2;
-
-	if (setsockopt(sock, IPPROTO_IP, IP_TOS, &dscp, (socklen_t)sizeof dscp) < 0) {
-		syslog(LOG_ERR, "Unable to set IP_TOS");
-		return -1;
-	} else {
-		return 0;
-	}
-
-}
-
-/**
  * Bind two listening sockets, one UDP (ping/pong) and one TCP (timestamps)
  * 
  * \param[out] s_udp Pointer to UDP socket to create and bind
@@ -170,13 +150,15 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
 
 	/* enable reading of TOS & TTL on received packets */
-	//f = 3;
 	f = 1;
 	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTOS, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
 	f = 60;
 	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTTL, &f, slen) < 0)
-		syslog(LOG_ERR, "setsockopt: IP_RECVTOS: %s", strerror(errno));
+		syslog(LOG_ERR, "setsockopt: IP_RECVTTL: %s", strerror(errno));
+	f = 1;
+	if (setsockopt(*s_udp, IPPROTO_IPV6, IPV6_RECVTCLASS, &f, slen) < 0)
+		syslog(LOG_ERR, "setsockopt: IPV6_RECVTCLASS: %s", strerror(errno));
 
 	/* Bind port */
 	slen = (socklen_t)sizeof (struct sockaddr_in6);
@@ -214,6 +196,34 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 }
 
 /**
+ * Set DSCP-value of socket.
+ *
+ * \param[in] sock Socket
+ * \param[in] dscp DSCP value 
+ * \return Status; 0 on successs, <0 on failure.
+ */
+int dscp_set(int sock, uint8_t dscp) {
+	socklen_t slen;
+	int tclass = 0;
+
+	/* IPv6 TCLASS */
+	slen = (socklen_t)sizeof tclass;
+	tclass = (int)dscp;
+	if (setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, &tclass, slen) < 0) {
+		syslog(LOG_ERR, "setsockopt: IPV6_TCLASS: %s", strerror(errno));
+		return -1;
+	}
+	/* IPv4 TOS */
+	slen = (socklen_t)sizeof dscp;
+	dscp <<= 2;
+	if (setsockopt(sock, IPPROTO_IP, IP_TOS, &dscp, slen) < 0) {
+		syslog(LOG_ERR, "Unable to set IP_TOS");
+		return -1;
+	}
+	return 0;
+}
+
+/**
  * Extracts the DSCP value from a packet.
  *
  * \param[in] msg Pointer to the message's header data.
@@ -225,24 +235,30 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 
 	struct cmsghdr *cmsg;
-	int *tos_ptr;
-	uint8_t dscp = 255;
+	int *ptr;
+	uint8_t tos = 255;
+	int tclass = -1;
 
 	*dscp_out = 0;
 	
 	/* iterate cmsg headers, look for IP_TOS */
 	/*@ -branchstate Don't care about cmsg storage */
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
-		if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_TOS) {
-
+		if (cmsg->cmsg_level == IPPROTO_IP && 
+			cmsg->cmsg_type == IP_TOS) { 
 			/* Fetch TOS value and extract DSCP by
-			 * discarding the two righmost bits (ECN)
-			 */
-
-			tos_ptr = (int *)CMSG_DATA(cmsg);
-			dscp = (uint8_t)*tos_ptr;
-			*dscp_out = dscp >> 2;
-
+			 * discarding the two righmost bits (ECN) */
+			ptr = (int *)CMSG_DATA(cmsg);
+			tos = (uint8_t)*ptr;
+			*dscp_out = tos >> 2;
+		}
+		if (cmsg->cmsg_level == IPPROTO_IPV6 && 
+			cmsg->cmsg_type == IPV6_TCLASS) { 
+			/* Fetch TOS value and extract DSCP by
+			 * discarding the two righmost bits (ECN) */
+			ptr = (int *)CMSG_DATA(cmsg);
+			tclass = (int)*ptr;
+			*dscp_out = (uint8_t)tclass;
 		}
 	}
 	/*@ +branchstate */
@@ -250,10 +266,10 @@ static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 	/* if no IP_TOS header was found, dscp still keeps its initial 
 	 * value of 255 (which is invalid since the DSCP field is six bits) 
 	 */
-	if (dscp == 255) {
+	if (tos == 255) 
 		return -1;
-	} else {
-		return 0;
-	}
+	if (tclass == -1) 
+		return -1;
+	return 0;
 
 }

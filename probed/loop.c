@@ -13,7 +13,6 @@
 #endif
 #include <errno.h>
 #include <string.h>
-#include <signal.h>
 #include <syslog.h>
 #include <sys/time.h>
 #include "probed.h"
@@ -21,8 +20,8 @@
 #include "msess.h"
 #include "unix.h"
 #include "util.h"
-#include "client.h"
 #include "net.h"
+#include "client.h"
 
 static int server_find_peer_fd(int fd_first, addr_t *peer);
 static void server_kill_peer(int fd);
@@ -77,15 +76,13 @@ void loop_or_die(int s_udp, int s_tcp) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	/* PING results for clients */
-	client_res_init(); 
-	/* Address lookup */
-	if (cfg.op == SERVER) {
-		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
-	} else {
-		/* spawn client forks for all measurement sessions */
+	/* For CLIENT and DAEMON, start 'clients'  */
+	if (cfg.op == CLIENT || cfg.op == DAEMON) {
+		/* PING results, both CLIENT and DAEMON */
+		client_res_init(); 
+		/* Spawn client forks for all measurement sessions */
 		while ((sess = msess_next()) != NULL) {
-			/* make sure there is no fork already running with 
+			/* Make sure there is no fork already running with 
 			 * the same destination address */
 			if ((findsess = msess_find_running_addr(&sess->dst)) != NULL) {
 				sess->child_pid = findsess->child_pid;
@@ -93,8 +90,6 @@ void loop_or_die(int s_udp, int s_tcp) {
 			}
 			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
 		}
-		if (cfg.op == CLIENT)
-			(void)signal(SIGINT, client_res_summary);
 	}
 
 	/* Timers for sending data */

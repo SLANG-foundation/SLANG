@@ -10,6 +10,7 @@
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
+#include <signal.h>
 #include <string.h>
 #include <netdb.h>
 #include <syslog.h>
@@ -18,6 +19,7 @@
 #include "util.h"
 #include "tstamp.h"
 #include "config.h"
+#include "client.h"
 #include "loop.h"
 
 struct config cfg;
@@ -84,18 +86,19 @@ int main(int argc, char *argv[]) {
 	if (tstamp == USERLAND) tstamp_mode_userland(s_udp);
 
 	/* Start server, client or daemon */
-	if (cfg.op == SERVER) loop_or_die(s_udp, s_tcp);
-	if (cfg.op == CLIENT) {
+	if (cfg.op == SERVER) {
+		syslog(LOG_INFO, "Server mode: waiting for PINGs\n");
+		loop_or_die(s_udp, s_tcp);
+	} else if (cfg.op == CLIENT) {
 		client_msess = msess_add(0);
+		client_msess->dscp = 1;
 		client_msess->interval.tv_sec = 0;
 		client_msess->interval.tv_usec = atoi(wait);
-
-		/* prepare for getaddrinfo */
+		/* Prepare for getaddrinfo */
 		memset(&dst_hints, 0, sizeof dst_hints);
 		dst_hints.ai_family = AF_INET6;
 		dst_hints.ai_flags = AI_V4MAPPED;
-
-		/* get address */
+		/* Get address */
 		ret_val = getaddrinfo(addr, port, &dst_hints, &dst_addr);
 		if (ret_val < 0) {
 			syslog(LOG_ERR, "Unable to look up hostname %s: %s", addr, 
@@ -103,17 +106,17 @@ int main(int argc, char *argv[]) {
 			exit(EXIT_FAILURE);
 		}
 		memcpy(&client_msess->dst, dst_addr->ai_addr, sizeof client_msess->dst);
+		/* Print results on Ctrl+C */
+		(void)signal(SIGINT, client_res_summary);
 		loop_or_die(s_udp, s_tcp);
-	}
-
-	if (cfg.op == DAEMON) {
+	} else { /* Implicit cfg.op == DAEMON */
 		p("Daemon mode; both server and client, output to pipe");
-		/* read config */
+		/* Read config */
 		reload(cfgpath);
 		(void)config_msess();
 		loop_or_die(s_udp, s_tcp);
 	}
-
+	/* We will never get here */
 	(void)close(s_udp);
 	(void)close(s_tcp);
 	closelog();
