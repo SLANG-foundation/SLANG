@@ -145,10 +145,8 @@ pid_t client_fork(int pipe, addr_t *server) {
 	ts_t zero;
 	socklen_t slen;
 
-	if (addr2str(server, addrstr) < 0) {
-		printf("crap\n");
+	if (addr2str(server, addrstr) < 0)
 		return -1;
-	}
 	(void)snprintf(log, 100, "client: %s:", addrstr);
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
@@ -508,12 +506,9 @@ void client_msess_forkall(int pipe) {
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
 		/* Make sure there is no fork already running with 
 		 * the same destination address */
-		printf("cp45 %d\n", s->id);
 		if (client_msess_isaddrtaken(&s->dst, s->id) == 1) {
-			printf("cp %d\n", s->id);
 			continue;
 		}
-		printf("yey\n");
 		s->child_pid = client_fork(pipe, &s->dst);
 	}
 }
