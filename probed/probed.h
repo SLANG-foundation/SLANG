@@ -9,7 +9,6 @@
 #define TYPE_HELO 'h'
 #define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
-#define MSESS_NODE_NAME "probe"
 
 typedef struct timespec ts_t;
 typedef struct sockaddr_in6 addr_t;
@@ -30,6 +29,7 @@ struct config {
 	enum tsmode ts; /* timestamping type */
 	enum opmode op; /* operation mode */
 	int fifo; /* file descriptor to named pipe for daemon mode */
+	int shouldreload;
 };
 extern struct config cfg;
 

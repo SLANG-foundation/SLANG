@@ -18,27 +18,34 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <syslog.h>
+#include <netdb.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include <sys/prctl.h>
+#include <sys/time.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
 #include "probed.h"
 #include "client.h"
 #include "util.h"
 #include "unix.h"
-#include "config.h"
+#include "net.h"
 
-#define STATE_PING 'i'
-#define STATE_GOT_TS 't' /* Because of Intel RX timestamp bug */
-#define STATE_GOT_PONG 'o' /* Because of Intel RX timestamp bug */
-#define STATE_TSWAIT 'w' /* Because of Intel RX timestamp bug */
-#define STATE_TSERROR 'e' /* Missing timestamp (Intel...?) */
-#define STATE_TIMEOUT 't'
-#define STATE_PONGLOSS 'l' /* We've got TS, but no pong */
-#define STATE_READY 'r'
-#define STATE_DUP 'd' /* We've got a PONG we didn't recognize, DUP? */
+#define STATE_PING 'i'     /* PING, the initial state */
+#define STATE_GOT_TS 't'   /* PING->TS, ability to detect PONG loss */
+#define STATE_GOT_PONG 'o' /* PING->PONG, ability to detect TS errors */
+#define STATE_TSWAIT 'w'   /* TS->PONG or PONG->TS, wait for TS correction */
+#define STATE_TSERROR 'e'  /* Ready, but missing correct TS */
+#define STATE_TIMEOUT 't'  /* Ready, but timeout, got neither PONG or TS */
+#define STATE_PONGLOSS 'l' /* Ready, but timeout, got only TS, lost PONG */
+#define STATE_READY 'r'    /* Ready, got both PONG and valid TS */
+#define STATE_DUP 'd'      /* Got a PONG we didn't recognize, DUP? */
+#define XML_NODE "probe"
 
 /* List of probe results */
 static LIST_HEAD(res_listhead, res) res_head;
+static LIST_HEAD(msess_listhead, msess) msess_head;
 struct res {
 	/*@dependent@*/ ts_t created;
 	char state;
@@ -46,18 +53,69 @@ struct res {
 	num_t id;
 	num_t seq;
 	/*@dependent@*/ ts_t ts[4];
-	LIST_ENTRY(res) res_list;
+	LIST_ENTRY(res) list;
+};
+/** 
+ * Struct for storing configuration for one measurement session.
+ */
+struct msess {
+	uint16_t id; /**< Measurement session ID */
+	struct sockaddr_in6 dst; /**< Destination address and port */
+	struct timeval interval; /**< Probe interval */
+	int timeout; /**< Timeout for PING */
+	int got_hello; /**< Are we connected with server? */ 
+	uint8_t dscp; /**< DiffServ Code Point value of measurement session */
+	pid_t child_pid; /**< PID of child process doing the TCP connection */
+	uint32_t last_seq; /**< Last sequence number sent */
+	struct timeval last_sent; /**< Time last probe was sent */
+	LIST_ENTRY(msess) list;
 };
 /* Client mode statistics */
-/*@ -exportlocal TODO wtf */
-int res_ok = 0;
-int res_timeout = 0;
-int res_pongloss = 0;
-int res_tserror = 0;
-int res_dup = 0;
-long long res_rtt_total = 0;
+static int res_ok = 0;
+static int res_timeout = 0;
+static int res_pongloss = 0;
+static int res_tserror = 0;
+static int res_dup = 0;
+static long long res_rtt_total = 0;
 ts_t res_rtt_min, res_rtt_max;
-/*@ +exportlocal */
+static pid_t client_fork(int pipe, struct sockaddr_in6 *server);
+static int client_msess_isaddrtaken(addr_t *addr);
+
+/**
+ * Initializes global variables
+ *
+ * Init global variables such as the linked lists. Should be run once.
+ */
+void client_init(void) {
+	/*@ -mustfreeonly -immediatetrans TODO wtf */
+	LIST_INIT(&msess_head);
+	LIST_INIT(&res_head);
+	/*@ +mustfreeonly +immediatetrans */
+	res_rtt_min.tv_sec = -1;
+	res_rtt_min.tv_nsec = 0;
+	res_rtt_max.tv_sec = 0;
+	res_rtt_max.tv_nsec = 0;
+	/*@ -nullstate TODO wtf? */
+	return;
+	/*@ +nullstate */
+}
+
+/**
+ * Initializes a FIFO used by client_res_* functions in DAEMON mode
+ *
+ * When running in deamon mode, open a FIFO. Should be run once.
+ * 
+ * @todo Is the really good to wait for FIFO open?
+ */
+void client_res_fifo_or_die(char *fifopath) {
+	(void)unlink(fifopath);
+	if (mknod(fifopath, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
+		syslog(LOG_ERR, "mknod: %s: %s", fifopath, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	syslog(LOG_INFO, "Waiting for listeners on FIFO %s", fifopath);
+	cfg.fifo = open(fifopath, O_WRONLY);
+}
 
 /**
  * Forks a 'client' process that connects to a server to get timestamps
@@ -86,23 +144,19 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 	ts_t zero;
 	socklen_t slen;
 
-	/* Create client fork - parent returns */
 	if (addr2str(server, addrstr) < 0)
 		return -1;
 	(void)snprintf(log, 100, "client: %s:", addrstr);
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
+	/* Create client fork; parent returns */
 	client_pid = fork();
 	if (client_pid != 0) return client_pid;
-
-	/* 
-	 * We are child 
-	 */
+	/* We are child */
 	/* Please kill me, I hate myself */
 	(void)prctl(PR_SET_PDEATHSIG, SIGKILL);
 	/* We're going to send a struct packet over the pipe */
 	memset(&pkt.ts, 0, sizeof zero);
-
 	/* Try to stay connected to server; forever */
 	while (1 == 1) {
 		memcpy(&pkt.addr, server, sizeof pkt.addr);
@@ -153,45 +207,6 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 }
 
 /**
- * Initializes global variables and a FIFO used by client_res_* functions
- *
- * When running in deamon mode, open a FIFO. Always init global variables
- * such as the res_head linked list. Should be run once.
- * 
- * @todo Is the really good to wait for FIFO open?
- */
-void client_res_init(void) {
-
-	char fifo_path[TMPLEN];
-
-	if (cfg.op == DAEMON) {
-		if (config_getkey("/config/fifopath", fifo_path, TMPLEN) < 0) {
-			syslog(LOG_CRIT, "client_res_init: Unable to find FIFO path in config!");
-			exit(EXIT_FAILURE);
-		}
-		(void)unlink(fifo_path);
-
-		if (mknod(fifo_path, (__mode_t)S_IFIFO | 0644, (__dev_t)0) < 0) {
-			syslog(LOG_ERR, "mknod: %s: %s", fifo_path, strerror(errno));
-			exit(EXIT_FAILURE);
-		}
-
-		syslog(LOG_INFO, "Waiting for listeners on FIFO %s", fifo_path);
-		cfg.fifo = open(fifo_path, O_WRONLY);
-	}
-	/*@ -mustfreeonly -immediatetrans TODO wtf */
-	LIST_INIT(&res_head);
-	/*@ +mustfreeonly +immediatetrans */
-	res_rtt_min.tv_sec = -1;
-	res_rtt_min.tv_nsec = 0;
-	res_rtt_max.tv_sec = 0;
-	res_rtt_max.tv_nsec = 0;
-	/*@ -nullstate TODO wtf? */
-	return;
-	/*@ +nullstate */
-}
-
-/**
  * Insert a new 'ping' into the result list
  *
  * Should be run once for each 'ping', inserting timestamp T1.
@@ -213,7 +228,7 @@ void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts) {
 	r->seq = d->seq;
 	r->ts[0] = *ts;
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
-	LIST_INSERT_HEAD(&res_head, r, res_list);
+	LIST_INSERT_HEAD(&res_head, r, list);
 	/*@ +mustfreeonly +immediatetrans */
 	client_res_update(a, d, ts);
 	/*@ -compmempass TODO wtf? */
@@ -294,7 +309,7 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 			}
 		}
 		/* Timeout */
-		diff_ts(&diff, &now, &(r->created)); 
+		diff_ts(&diff, &now, &(r->created));
 		if (diff.tv_sec > 10) {
 			/* Define three states: TIMEOUT, TSERROR and GOT_TS */
 			if (r->state == STATE_GOT_PONG || r->state == STATE_READY) 
@@ -349,16 +364,16 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				}
 			}
 			/* Ready, timeout or error; safe removal */
-			r_tmp = r->res_list.le_next;
+			r_tmp = r->list.le_next;
 			/*@ -branchstate -onlytrans TODO wtf */
-			LIST_REMOVE(r, res_list);
+			LIST_REMOVE(r, list);
 			/*@ +branchstate +onlytrans */
 			free(r);
 			r = r_tmp;
 			continue;
 		}
 		/* Alright, next entry */
-		r = r->res_list.le_next;
+		r = r->list.le_next;
 	}
 	/* Didn't find PING, probably removed. DUP! */
 	if (found == 0 && d->type == 'o') {
@@ -400,4 +415,271 @@ void client_res_summary(/*@unused@*/ int sig) {
 	else 
 		printf(", min: %ld ns\n", res_rtt_min.tv_nsec);
 	exit(0);
+}
+
+/**
+ * Insert measurement session to list, used mainly by client mode
+ *
+ * Whereas DAEMON mode uses client_msess_reconf to populate msess,
+ * this code is mainly for the CLIENT mode, in order to add a measurement
+ * session.
+ *
+ * \return 0 on success, otherwise -1
+ */
+int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
+	int ret;
+	struct msess *s;
+	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
+
+	s = malloc(sizeof s);
+	if (s == NULL) return -1;
+	memset(s, 0, sizeof s);
+	s->id = id;
+	s->dscp = dscp;
+	s->interval.tv_sec = 0;
+	s->interval.tv_usec = wait;
+	/* Prepare for getaddrinfo */
+	memset(&dst_hints, 0, sizeof dst_hints);
+	dst_hints.ai_family = AF_INET6;
+	dst_hints.ai_flags = AI_V4MAPPED;
+	/* Get address */
+	ret = getaddrinfo(a, port, &dst_hints, &dst_addr);
+	if (ret < 0) {
+		syslog(LOG_ERR, "Unable to look up hostname %s: %s", a, 
+				gai_strerror(ret));
+		freeaddrinfo(dst_addr);
+		free(s);
+		return -1;
+	}
+	memcpy(&s->dst, dst_addr->ai_addr, sizeof s->dst);
+	freeaddrinfo(dst_addr);
+	/*@ -mustfreeonly -immediatetrans TODO wtf */
+	LIST_INSERT_HEAD(&msess_head, s, list);
+	/*@ +mustfreeonly +immediatetrans */
+	/*@ -compmempass TODO wtf? */
+	return 0;
+	/*@ +compmempass */
+}
+
+/**
+ * Send PING packets on the UDP socket for all measurement sessions 
+ *
+ * This is called from the main loop at constant intervals, and
+ * this function determines if it is time to send to a particular
+ * msess 
+ *
+ * \param[in] s_udp The UDP socket to send on
+ */
+
+void client_msess_transmit(int s_udp) {
+	struct timeval tmp, now;
+	struct msess *s;
+	data_t tx;
+	ts_t ts;
+
+	(void)gettimeofday(&now, 0);
+	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
+		/* Are we connected to server? */
+		if (s->got_hello != 1) 
+			continue;
+		timersub(&now, &s->last_sent, &tmp);
+		//diff_tv(&tmp, &now, &s->last_sent);
+		/* time to send new packet? */
+		if (cmp_tv(&tmp, &s->interval) == 1) {
+			memset(&tx, 0, sizeof tx);
+			tx.type = TYPE_PING;
+			tx.id = s->id;
+			s->last_seq++;
+			tx.seq = s->last_seq;
+			(void)dscp_set(s_udp, s->dscp);
+			if (send_w_ts(s_udp, &s->dst, (char*)&tx, &ts) < 0)
+				continue;
+			client_res_insert(&s->dst.sin6_addr, &tx, &ts);
+			memcpy(&s->last_sent, &now, sizeof now);
+		}
+	}
+
+}
+
+/** 
+ * Spawn client forks for all configured measurement sessions
+ *
+ * See comments on client_fork for more information.
+ *
+ * \param[in] pipe The pipe file descriptor where results are sent 
+ */
+void client_msess_forkall(int pipe) {
+	struct msess *s;
+
+	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
+		/* Make sure there is no fork already running with 
+		 * the same destination address */
+		if (client_msess_isaddrtaken(&s->dst) == 1) 
+				continue;
+		s->child_pid = client_fork(pipe, &s->dst);
+	}
+}
+
+/**
+ * Reload configuration; measurement sessions in DAEMON mode
+ *
+ * Mostly, this is about:
+ * 1. Killing all client forks (children handling the TCP)
+ * 2. Empty the msess list (measurement sessions)
+ * 3. Empty the result list (measurement results)
+ * 4. Re-populate msess from XML configuration file
+ * 5. Start client forks again (not done here!)
+ *
+ * \param[in] port    Because getaddrinfo needs the "global" port
+ * \param[in] cfgpath We need the path to the XML file 
+ * \return            0 on success, -1 on error
+ */
+int client_msess_reconf(char *port, char *cfgpath) {
+	int ret = 0;
+	struct msess *s, *s_tmp;
+	struct res *r, *r_tmp;
+	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
+	xmlDoc *cfgdoc = 0;
+	xmlNode *root, *n, *k;
+	xmlChar *c;
+
+	/* Sanity check; only run this if in DAEMON mode */
+	if (cfg.op != DAEMON)
+		return -1;
+	/* Kill all clients */
+	s = msess_head.lh_first;
+	while (s != NULL) {
+		/* Kill child process */
+		if (s->child_pid != 0)
+			if (kill(s->child_pid, SIGKILL) != 0)
+				syslog(LOG_ERR, "client: kill: %s", strerror(errno));
+		s_tmp = s->list.le_next;
+		/* -branchstate -onlytrans TODO wtf */
+		LIST_REMOVE(s, list);
+		/* +branchstate +onlytrans */
+		free(s);
+		s = s_tmp;
+	}
+	LIST_INIT(&msess_head);
+	/* Kill all client results */
+	r = res_head.lh_first;
+	while (r != NULL) {
+		r_tmp = r->list.le_next;
+		/* -branchstate -onlytrans TODO wtf */
+		LIST_REMOVE(r, list);
+		/* +branchstate +onlytrans */
+		free(r);
+		r = r_tmp;
+	}
+	LIST_INIT(&res_head);
+	/* Populate msess list from config */
+	cfgdoc = xmlParseFile(cfgpath);
+	/* Configuration sanity checks */
+	if (!cfgdoc) {
+		syslog(LOG_ERR, "No configuration");
+		return -1;
+	}
+	root = cfgdoc->children;
+	if (!root) {
+		syslog(LOG_ERR, "Empty configuration");
+		xmlFreeDoc(cfgdoc);
+		return -1;
+	}
+	/* Iterate config, look for <probe> */
+	for (n = root->children; n != NULL; n = n->next) {
+		/* Begin <probe> loop */
+		if (n->type != XML_ELEMENT_NODE) 
+			continue;
+		if (strncmp((char *)n->name, XML_NODE, strlen(XML_NODE)) != 0)
+			continue;
+		s = malloc(sizeof s);
+		memset(s, 0, sizeof s);
+		/* Get ID */
+		c = xmlGetProp(n, (xmlChar *)"id");
+		if (c != NULL) {
+			s->id = atoi((char *)c);
+		} else {
+			syslog(LOG_ERR, "Probe is missing id=");
+			continue;
+		}
+		xmlFree(c);
+		for (k = n->children; k != NULL; k = k->next) {
+			/* Begin <address/dscp/etc> loop */
+			if (k->type != XML_ELEMENT_NODE) 
+				continue;
+			c = xmlNodeGetContent(k);
+			/* Interval */
+			if (strcmp((char *)k->name, "interval") == 0) 
+				s->interval.tv_usec = atoi((char *)c);
+			/* Address */
+			if (strcmp((char *)k->name, "address") == 0) {
+				/* prepare for getaddrinfo */
+				memset(&dst_hints, 0, sizeof dst_hints);
+				dst_hints.ai_family = AF_INET6;
+				dst_hints.ai_flags = AI_V4MAPPED;
+				ret = getaddrinfo((char *)c, port, &dst_hints, &dst_addr);
+				if (ret < 0) {
+					syslog(LOG_ERR, "Probe hostname %s: %s", (char *)c, 
+							gai_strerror(ret));
+					freeaddrinfo(dst_addr);
+				} else {
+					memcpy(&s->dst, dst_addr->ai_addr, sizeof s->dst);
+					freeaddrinfo(dst_addr);
+				}
+
+			}
+			/* DSCP */
+			if (strcmp((char *)k->name, "dscp") == 0) 
+				s->dscp = atoi((char *)c);
+			xmlFree(c);
+			/* End <address/dscp/etc> loop */
+		}
+		/*@ -mustfreeonly -immediatetrans TODO wtf */
+		LIST_INSERT_HEAD(&msess_head, s, list);
+		/*@ +mustfreeonly +immediatetrans */
+		/* End <probe> loop */
+	}
+	xmlFreeDoc(cfgdoc);
+	return 0;
+}
+
+/**
+ * Set the measurement session with address 'addr' to 'ready'
+ *
+ * \param[in] addr Address of the connected session
+ * \return         Returns 0 is the address was found
+ */ 
+int client_msess_gothello(addr_t *addr) {
+	size_t slen;
+	struct msess *s;
+
+	slen = sizeof s->dst.sin6_addr;
+	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
+		if (memcmp(&addr->sin6_addr, &s->dst.sin6_addr, slen) == 0) {
+			s->got_hello = 1;
+			return 0;
+		}
+	}
+	return -1;
+}
+
+/**
+ * Find msess with running child process bound to a certain address
+ *
+ * \param[in] addr The address to look for
+ * \return         1 if it was found, otherwise 0
+ */
+int client_msess_isaddrtaken(addr_t *addr) {
+	struct msess *s;
+	size_t len;
+
+	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
+		if (s->child_pid == 0) 
+			continue;
+		/* compare addresses */
+		len = sizeof s->dst.sin6_addr;
+		if (memcmp(&addr->sin6_addr, &s->dst.sin6_addr, len) == 0) 
+			return 1;
+	}
+	return 0;
 }

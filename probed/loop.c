@@ -17,7 +17,6 @@
 #include <sys/time.h>
 #include "probed.h"
 #include "loop.h"
-#include "msess.h"
 #include "unix.h"
 #include "util.h"
 #include "net.h"
@@ -25,8 +24,8 @@
 
 static int server_find_peer_fd(int fd_first, addr_t *peer);
 static void server_kill_peer(int fd);
-fd_set fs;
-int fd_max = 0;
+static fd_set fs;
+static int fd_max = 0;
 
 /**
  * Main SLA-NG 'probed' state machine, handling all client/server stuff
@@ -52,48 +51,31 @@ int fd_max = 0;
  *  loop: wait for ping > send pong > find fd > send TCP tstamp    \n
  *  loop: wait for TCP connect > add to fd set > remove dead fds   \n
  *
- * \param[in] s_udp A listening UDP socket to use for PING/PONG
- * \param[in] s_tcp A listening TCP socket for client accept and TSTAMP
+ * \param[in] s_udp   Listening UDP socket to use for PING/PONG
+ * \param[in] s_tcp   Listening TCP socket for client accept and TSTAMP
+ * \param[in] port    client_msess_reconf's getaddrinfo needs the port
+ * \param[in] cfgpath client_msess_reconf needs XML config
  * \bug       The 'first', not 'correct' TCP client socket will be used
  */
-void loop_or_die(int s_udp, int s_tcp) {
+void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 
 	char addrstr[INET6_ADDRSTRLEN];
 	struct sockaddr_in6 addr_tmp, addr_last;
 	pkt_t pkt;
 	data_t *rx, tx, tx_last;
-	struct timespec ts;
-	struct timeval tv, last, now;
+	ts_t ts;
+	struct timeval tv;
 	fd_set fs_tmp;
 	int fd, fd_first, i;
 	int fd_pipe[2];
 	socklen_t slen;
-
-	struct msess *sess, *findsess;
 
 	/* IPC for children-to-parent (TCP client to UDP state machine) */
 	if (pipe(fd_pipe) < 0) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	/* For CLIENT and DAEMON, start 'clients'  */
-	if (cfg.op == CLIENT || cfg.op == DAEMON) {
-		/* PING results, both CLIENT and DAEMON */
-		client_res_init(); 
-		/* Spawn client forks for all measurement sessions */
-		while ((sess = msess_next()) != NULL) {
-			/* Make sure there is no fork already running with 
-			 * the same destination address */
-			if ((findsess = msess_find_running_addr(&sess->dst)) != NULL) {
-				sess->child_pid = findsess->child_pid;
-				continue;
-			}
-			sess->child_pid = client_fork(fd_pipe[1], &sess->dst);
-		}
-	}
 
-	/* Timers for sending data */
-	(void)gettimeofday(&last, 0);
 	/* Add both pipe, UDP and TCP to the FD set, note highest FD */
 	unix_fd_zero(&fs);
 	unix_fd_zero(&fs_tmp);
@@ -114,14 +96,14 @@ void loop_or_die(int s_udp, int s_tcp) {
 		tv.tv_sec = 0;
 		tv.tv_usec = 100;
 		if (select(fd_max + 1, &fs_tmp, NULL, NULL, &tv) > 0) {
+			/* CLIENT/SERVER: UDP socket, that is PING and PONG */
 			if (unix_fd_isset(s_udp, &fs_tmp) == 1) {
-				/* UDP socket; PING and PONG */
 				pkt.data[0] = '\0';
 				if (recv_w_ts(s_udp, 0, &pkt) < 0)
 					continue;
 				rx = (data_t *)&pkt.data;
+				/* SERVER: Send UDP PONG */
 				if (pkt.data[0] == TYPE_PING) {
-					/* Send UDP PONG */
 					tx.type = TYPE_PONG;
 					tx.id = rx->id;
 					tx.seq = rx->seq;
@@ -131,34 +113,18 @@ void loop_or_die(int s_udp, int s_tcp) {
 					/* Send TCP timestamp */
 					tx.t3 = ts;
 					tx.type = TYPE_TIME;
-					/* In case of Intel RX timestamp error, kill last ts */
-					if (pkt.ts.tv_sec == 0 && pkt.ts.tv_nsec == 0) {
-						fd = server_find_peer_fd(fd_first, &addr_last);
-						syslog(LOG_ERR, "RX tstamp error, killing %d on %d",
-								tx_last.seq, tx_last.id);
-						if (fd >= 0) {
-							tx_last.t2.tv_sec = 0;
-							tx_last.t2.tv_nsec = 0;
-							tx_last.t3.tv_sec = 0;
-							tx_last.t3.tv_nsec = 0;
-							(void)send(fd, (char*)&tx_last, DATALEN, 0);
-						} 
-					}
-					/* Save addr and data for later, in case next is error */ 
-					memcpy(&addr_last, &pkt.addr, sizeof addr_last);
-					tx_last = tx;
-					/* Really send TCP */
 					fd = server_find_peer_fd(fd_first, &(pkt.addr));
 					if (fd < 0) continue;
 					if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
 						server_kill_peer(fd);
 					}
 				} 
+				/* CLIENT: Update results with received UDP PONG */
 				if (pkt.data[0] == TYPE_PONG) {
 					client_res_update(&pkt.addr.sin6_addr, rx, &pkt.ts);
 				} 
+			/* SERVER: TCP socket, accept timestamp connection */
 			} else if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
-				/* TCP socket; Accept timestamp connection */
 				slen = (socklen_t)sizeof (struct sockaddr_in6);
 				memset(&addr_tmp, 0, sizeof addr_tmp);
 				fd = accept(s_tcp, (struct sockaddr *)&addr_tmp, &slen);
@@ -170,34 +136,30 @@ void loop_or_die(int s_udp, int s_tcp) {
 					syslog(LOG_INFO, "server: %s: %d: Connected", addrstr, fd);
 				else
 					continue;
-				/* We don't expect to receive any data, just keep track */
+				/* Keep track of client's FD, although it will be quiet */
 				unix_fd_set(fd, &fs);
 				if (fd > fd_max)
 					fd_max = fd;
-				/* Hello, feed me with PINGs */
+				/* Send hello, feed me with PINGs */
 				memset(&tx, 0, sizeof tx);
 				tx.type = TYPE_HELO;
 				if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
-					server_kill_peer(i);
+					server_kill_peer(fd);
 				}
+			/* CLIENT: PIPE; timestamps from client_fork (TCP) */
 			} else if (unix_fd_isset(fd_pipe[0], &fs_tmp) == 1) {
-				/* PIPE; timestamp from TCP client */
 				if (read(fd_pipe[0], &pkt, sizeof pkt) < 0) {
 					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
 					continue;
 				}
 				rx = (data_t *)&pkt.data;
-				/* Connected to server, ready to feed it! */
 				if (rx->type == TYPE_HELO) {
+					/* Connected to server, ready to feed it! */
+					if (client_msess_gothello(&pkt.addr) != 0)
+						syslog(LOG_INFO, "client: Unknown client connected");
 					if (addr2str(&pkt.addr, addrstr) == 0)
 						syslog(LOG_INFO, "client: %s: Connected", addrstr);
-					while ((sess = msess_next()) != NULL) {
-						if (memcmp(&pkt.addr.sin6_addr, &sess->dst.sin6_addr, 
-									sizeof sess->dst.sin6_addr) == 0) {
-							sess->got_hello = 1;
-						}
-					}
-				} else {
+				} else { /* Implicit: type == TYPE_TS */
 					/* Security; make sure type is tstamp; ts is NULL */
 					rx->type = 't';
 					client_res_update(&pkt.addr.sin6_addr, rx, NULL);
@@ -211,27 +173,15 @@ void loop_or_die(int s_udp, int s_tcp) {
 					}	
 				}
 			}
+		/* CLIENT: select() timeout, time to send data and reload config */
 		} else {
-			/* Send PING */
-			(void)gettimeofday(&now, 0);
-			while ((sess = msess_next()) != NULL) {
-				/* Are we connected to server? */
-				if (sess->got_hello != 1) 
-					continue;
-				diff_tv(&tv, &now, &sess->last_sent);
-				/* time to send new packet? */
-				if (cmp_tv(&tv, &sess->interval) == 1) {
-					memset(&tx, 0, sizeof tx);
-					tx.type = TYPE_PING;
-					tx.id = sess->id;
-					tx.seq = msess_get_seq(sess);
-					(void)dscp_set(s_udp, sess->dscp);
-					if (send_w_ts(s_udp, &sess->dst, (char*)&tx, &ts) < 0)
-						continue;
-					client_res_insert(&sess->dst.sin6_addr, &tx, &ts);
-					memcpy(&sess->last_sent, &now, sizeof now);
-
-				}
+			/* Send PINGs to all clients */
+			client_msess_transmit(s_udp);
+			/* Configuration reload, shoudreload is set on SIGHUP */
+			if (cfg.shouldreload == 1) {
+				cfg.shouldreload = 0;
+				(void)client_msess_reconf(port, cfgpath);
+				client_msess_forkall(fd_pipe[0]);
 			}
 		}
 	}
@@ -282,6 +232,7 @@ static void server_kill_peer(int fd) {
 	socklen_t slen;
 
 	/* Print disconnect message */
+	memset(&tmp, 0, sizeof tmp);
 	slen = (socklen_t)sizeof tmp;
 	if (getpeername(fd, (struct sockaddr*)&tmp, &slen) == 0) {
 		if (addr2str(&tmp, addrstr) == 0) {
