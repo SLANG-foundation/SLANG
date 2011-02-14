@@ -426,7 +426,7 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 	struct msess *s;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
 
-	s = malloc(sizeof s);
+	s = malloc(sizeof *s);
 	if (s == NULL) return -1;
 	memset(s, 0, sizeof s);
 	s->id = id;
@@ -595,7 +595,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			continue;
 		if (strncmp((char *)n->name, XML_NODE, strlen(XML_NODE)) != 0)
 			continue;
-		s = malloc(sizeof s);
+		s = malloc(sizeof *s);
 		if (s == NULL) continue;
 		memset(s, 0, sizeof s);
 		/* Get ID */
