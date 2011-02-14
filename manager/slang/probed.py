@@ -5,6 +5,7 @@ import sys
 import logging
 import threading
 import time
+import signal
 
 import probe
 import config
@@ -20,7 +21,7 @@ class Probed(threading.Thread):
     pstore = None
     thread_stop = False
 
-    def __init__(self, pstore):
+    def __init__(self, pstore, probed_cfg_path):
 
         threading.Thread.__init__(self)
 
@@ -29,6 +30,7 @@ class Probed(threading.Thread):
 
         self.pstore = pstore
         self.null = open("/dev/null", 'w')
+        self.probed_cfg_path = probed_cfg_path
 
         # start probe application
         self.start_probed()
@@ -42,22 +44,31 @@ class Probed(threading.Thread):
     def start_probed(self):
         """ Start probed application """
 
-        probed_args = ['../probed/probed', '-d', '-q']
+        probed_args = ['../probed/probed', '-q']
 
         # get configuration - port
         try:
             port = self.config.get_param("/config/port")
         except NotFoundError:
             port = 60666
-            self.logger.info("Port not found in config. Falling back to default (%d)" % port)
+            self.logger.warning("Port not found in config. Falling back to default (%d)" % port)
 
         probed_args += ['-p', port]
+
+        # FIFO path
+        try:
+            fifo_path = self.config.get_param("/config/fifopath")
+        except NotFoundError:
+            fifo_path = "/tmp/probed.fifo"
+            self.logger.warning("FIFO path not found in config. Falling back to default(%s)" % fifo_path)
+
+        probed_args += ['-d', fifo_path]
 
         # timestamping type - hardware is default
         try:
             tstype = self.config.get_param("/config/timestamp")
         except NotFoundError:
-            tstype = kernel
+            tstype = 'kernel'
             self.logger.info("Timestamping type not found in config. Falling back to default (%s)" & tstype)
 
         if tstype == 'kernel':
@@ -79,7 +90,7 @@ class Probed(threading.Thread):
             probed_args += ['-i', ifname]
 
         # config file
-        probed_args += ['-f', self.config.get_path()]
+        probed_args += ['-f', self.probed_cfg_path]
 
         try:
             # \todo - Redirect to /dev/null!
@@ -104,6 +115,11 @@ class Probed(threading.Thread):
     def stop(self):
         """ Stop thread execution """
         self.thread_stop = True
+
+    def reload(self):
+        """ Reload probed application """
+
+        self.probed.signal(signal.SIGHUP)
 
     def run(self):
         """

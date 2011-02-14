@@ -18,7 +18,8 @@ import remoteproc
 class Manager:
 
     manager_host = None
-    cfg_path = "/tmp/slang_settings.xml"
+    cfg_path = "/etc/slang.conf"
+    probed_cfg_path = "/tmp/probed.conf"
 
     logger = None
     config = None
@@ -42,7 +43,7 @@ class Manager:
         try:
             self.pstore = probestore.ProbeStore()
             self.maintainer = maintainer.Maintainer(self.pstore)
-            self.probed = probed.Probed(self.pstore)
+            self.probed = probed.Probed(self.pstore, self.probed_cfg_path)
 
             # Create XML-RPC server
             self.xmlrpc = remoteproc.RemoteProc(self.pstore, self)
@@ -55,14 +56,14 @@ class Manager:
     def reload(self):
         """ Reload 
 
-           Fetches configuration from central node and saves to disk.
+           Fetches probe configuration from central node and saves to disk.
            Then, send a SIGHUP to the probe application to make it reload
            the configuration.
         """
 
-        self.logger.info("Reloading...")
+        self.logger.info("Reloading probed...")
 
-        # fetch config
+        # fetch probed config
         conn = httplib.HTTPConnection(self.manager_host)
         conn.request("GET", "/cfg.php")
         response = conn.getresponse()
@@ -71,15 +72,12 @@ class Manager:
         cfg_data = response.read()
 
         # write to disk
-        cfg_file = open("/tmp/slang_settings.xml", "w")
-        cfg_file.write(cfg_data)
+        probed_cfg_file = open(self.probed_cfg_path, "w")
+        probed_cfg_file.write(cfg_data)
 
         # send SIGHUP
-        if self.config is not None:
-            self.config.read_file(self.cfg_data)
-
         if self.probed is not None:
-            self.probed.restart()
+            self.probed.reload()
 
         return 1;
 

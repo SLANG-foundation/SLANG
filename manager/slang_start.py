@@ -24,9 +24,6 @@ lc.setLevel(logging.DEBUG)
 lc.setFormatter(lformat)
 logger.addHandler(lc)
 
-# read config
-#c = slang.config.Config("../probed/settings.xml")
-
 # start up
 logger.debug("Starting up...")
 
