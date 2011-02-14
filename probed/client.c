@@ -35,7 +35,6 @@
 #define STATE_PING 'i'     /* PING, the initial state */
 #define STATE_GOT_TS 't'   /* PING->TS, ability to detect PONG loss */
 #define STATE_GOT_PONG 'o' /* PING->PONG, ability to detect TS errors */
-#define STATE_TSWAIT 'w'   /* TS->PONG or PONG->TS, wait for TS correction */
 #define STATE_TSERROR 'e'  /* Ready, but missing correct TS */
 #define STATE_TIMEOUT 't'  /* Ready, but timeout, got neither PONG or TS */
 #define STATE_PONGLOSS 'l' /* Ready, but timeout, got only TS, lost PONG */
@@ -77,9 +76,11 @@ static int res_pongloss = 0;
 static int res_tserror = 0;
 static int res_dup = 0;
 static long long res_rtt_total = 0;
-ts_t res_rtt_min, res_rtt_max;
-static pid_t client_fork(int pipe, struct sockaddr_in6 *server);
-static int client_msess_isaddrtaken(addr_t *addr);
+static ts_t res_rtt_min, res_rtt_max;
+
+static void client_res_insert(struct in6_addr *a, data_t *d, ts_t *ts);
+static pid_t client_fork(int pipe, addr_t *server);
+static int client_msess_isaddrtaken(addr_t *addr, uint16_t id);
 
 /**
  * Initializes global variables
@@ -133,7 +134,7 @@ void client_res_fifo_or_die(char *fifopath) {
  * \todo         Should we simply send a dummy packet, just for conn status?
  */
 
-pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
+pid_t client_fork(int pipe, addr_t *server) {
 	int sock, r;
 	pid_t client_pid;
 	char addrstr[INET6_ADDRSTRLEN];
@@ -144,8 +145,10 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 	ts_t zero;
 	socklen_t slen;
 
-	if (addr2str(server, addrstr) < 0)
+	if (addr2str(server, addrstr) < 0) {
+		printf("crap\n");
 		return -1;
+	}
 	(void)snprintf(log, 100, "client: %s:", addrstr);
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
@@ -164,7 +167,7 @@ pid_t client_fork(int pipe, struct sockaddr_in6 *server) {
 			(void)sleep(10);
 			continue;
 		}
-		syslog(LOG_INFO, "%s Connecting to port %d\n", log, 
+		syslog(LOG_INFO, "%s Connecting to port %d", log, 
 				ntohs(server->sin6_port));
 		sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);	
 		if (sock < 0) {
@@ -257,14 +260,6 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 	(void)clock_gettime(CLOCK_REALTIME, &now);
 	r = res_head.lh_first;
 	while (r != NULL) {
-		/* 
-		 * Because of Intel RX timestamp bug, wait until next TS to print 
-	 	 * in order to have time to correct a previous timestamp.
-		 * If waiting for correcting TS, and TS arrives, set to ready. 
-		 */
-		if (r->state == STATE_TSWAIT && d->type == 't') {
-			r->state = STATE_READY;
-		}
 		/* If match; update */
 		if (r->id == d->id &&
 			r->seq == d->seq &&
@@ -274,14 +269,14 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 				if (r->state == STATE_PING)
 					r->state = STATE_GOT_PONG;
 				if (r->state == STATE_GOT_TS)
-					r->state = STATE_TSWAIT;
+					r->state = STATE_READY;
 				if (ts != NULL) r->ts[3] = *ts;
 				else syslog(LOG_ERR, "client_res: t4 missing");
 			} else if (d->type == 't') {
 				if (r->state == STATE_PING)
 					r->state = STATE_GOT_TS;
 				if (r->state == STATE_GOT_PONG)
-					r->state = STATE_TSWAIT;
+					r->state = STATE_READY;
 				r->ts[1] = d->t2;
 				r->ts[2] = d->t3;
 			}
@@ -303,9 +298,9 @@ void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts) {
 			now.tv_sec = 0;
 			now.tv_nsec = 0;
 			if (cmp_ts(&now, &rtt) == 1) {
-					r->state = STATE_TSERROR;
-					syslog(LOG_ERR, "client_res: Ping %d from %d has neg. RTT",
-							(int)r->seq, (int)r->id);
+				r->state = STATE_TSERROR;
+				syslog(LOG_ERR, "client_res: Ping %d from %d has neg. RTT",
+						(int)r->seq, (int)r->id);
 			}
 		}
 		/* Timeout */
@@ -437,12 +432,10 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 	s->id = id;
 	s->dscp = dscp;
 	s->interval.tv_sec = 0;
-	s->interval.tv_usec = wait;
 	/* Prepare for getaddrinfo */
 	memset(&dst_hints, 0, sizeof dst_hints);
 	dst_hints.ai_family = AF_INET6;
 	dst_hints.ai_flags = AI_V4MAPPED;
-	/* Get address */
 	ret = getaddrinfo(a, port, &dst_hints, &dst_addr);
 	if (ret < 0) {
 		syslog(LOG_ERR, "Unable to look up hostname %s: %s", a, 
@@ -451,6 +444,8 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 		free(s);
 		return -1;
 	}
+	/* TODO if we place this line above getaddrinfo, it crashes!! */
+	s->interval.tv_usec = wait;
 	memcpy(&s->dst, dst_addr->ai_addr, sizeof s->dst);
 	freeaddrinfo(dst_addr);
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
@@ -483,7 +478,6 @@ void client_msess_transmit(int s_udp) {
 		if (s->got_hello != 1) 
 			continue;
 		timersub(&now, &s->last_sent, &tmp);
-		//diff_tv(&tmp, &now, &s->last_sent);
 		/* time to send new packet? */
 		if (cmp_tv(&tmp, &s->interval) == 1) {
 			memset(&tx, 0, sizeof tx);
@@ -514,8 +508,12 @@ void client_msess_forkall(int pipe) {
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
 		/* Make sure there is no fork already running with 
 		 * the same destination address */
-		if (client_msess_isaddrtaken(&s->dst) == 1) 
-				continue;
+		printf("cp45 %d\n", s->id);
+		if (client_msess_isaddrtaken(&s->dst, s->id) == 1) {
+			printf("cp %d\n", s->id);
+			continue;
+		}
+		printf("yey\n");
 		s->child_pid = client_fork(pipe, &s->dst);
 	}
 }
@@ -546,33 +544,6 @@ int client_msess_reconf(char *port, char *cfgpath) {
 	/* Sanity check; only run this if in DAEMON mode */
 	if (cfg.op != DAEMON)
 		return -1;
-	/* Kill all clients */
-	s = msess_head.lh_first;
-	while (s != NULL) {
-		/* Kill child process */
-		if (s->child_pid != 0)
-			if (kill(s->child_pid, SIGKILL) != 0)
-				syslog(LOG_ERR, "client: kill: %s", strerror(errno));
-		s_tmp = s->list.le_next;
-		/* -branchstate -onlytrans TODO wtf */
-		LIST_REMOVE(s, list);
-		/* +branchstate +onlytrans */
-		free(s);
-		s = s_tmp;
-	}
-	LIST_INIT(&msess_head);
-	/* Kill all client results */
-	r = res_head.lh_first;
-	while (r != NULL) {
-		r_tmp = r->list.le_next;
-		/* -branchstate -onlytrans TODO wtf */
-		LIST_REMOVE(r, list);
-		/* +branchstate +onlytrans */
-		free(r);
-		r = r_tmp;
-	}
-	LIST_INIT(&res_head);
-	/* Populate msess list from config */
 	cfgdoc = xmlParseFile(cfgpath);
 	/* Configuration sanity checks */
 	if (!cfgdoc) {
@@ -583,9 +554,41 @@ int client_msess_reconf(char *port, char *cfgpath) {
 	if (!root) {
 		syslog(LOG_ERR, "Empty configuration");
 		xmlFreeDoc(cfgdoc);
+		/*@ -mustfreefresh TODO SPlint does not understand xmlFree? */
 		return -1;
+		/*@ +mustfreefresh */
 	}
-	/* Iterate config, look for <probe> */
+	/* Kill all clients */
+	s = msess_head.lh_first;
+	while (s != NULL) {
+		/* Kill child process */
+		if (s->child_pid != 0)
+			if (kill(s->child_pid, SIGKILL) != 0)
+				syslog(LOG_ERR, "client: kill: %s", strerror(errno));
+		s_tmp = s->list.le_next;
+		/*@ -branchstate -onlytrans TODO wtf */
+		LIST_REMOVE(s, list);
+		/*@ +branchstate +onlytrans */
+		free(s);
+		s = s_tmp;
+	}
+	/*@ -mustfreeonly -immediatetrans TODO wtf */
+	LIST_INIT(&msess_head);
+	/*@ +mustfreeonly +immediatetrans */
+	/* Kill all client results */
+	r = res_head.lh_first;
+	while (r != NULL) {
+		r_tmp = r->list.le_next;
+		/*@ -branchstate -onlytrans TODO wtf */
+		LIST_REMOVE(r, list);
+		/*@ +branchstate +onlytrans */
+		free(r);
+		r = r_tmp;
+	}
+	/*@ -mustfreeonly -immediatetrans TODO wtf */
+	LIST_INIT(&res_head);
+	/*@ +mustfreeonly +immediatetrans */
+	/* Populate msess list from config */
 	for (n = root->children; n != NULL; n = n->next) {
 		/* Begin <probe> loop */
 		if (n->type != XML_ELEMENT_NODE) 
@@ -593,11 +596,12 @@ int client_msess_reconf(char *port, char *cfgpath) {
 		if (strncmp((char *)n->name, XML_NODE, strlen(XML_NODE)) != 0)
 			continue;
 		s = malloc(sizeof s);
+		if (s == NULL) continue;
 		memset(s, 0, sizeof s);
 		/* Get ID */
 		c = xmlGetProp(n, (xmlChar *)"id");
 		if (c != NULL) {
-			s->id = atoi((char *)c);
+			s->id = (uint8_t)atoi((char *)c);
 		} else {
 			syslog(LOG_ERR, "Probe is missing id=");
 			continue;
@@ -607,7 +611,9 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			/* Begin <address/dscp/etc> loop */
 			if (k->type != XML_ELEMENT_NODE) 
 				continue;
+			/*@ -mustfreefresh TODO Doesn't understand xmlFree */
 			c = xmlNodeGetContent(k);
+			/*@ +mustfreefresh */
 			/* Interval */
 			if (strcmp((char *)k->name, "interval") == 0) 
 				s->interval.tv_usec = atoi((char *)c);
@@ -630,7 +636,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			}
 			/* DSCP */
 			if (strcmp((char *)k->name, "dscp") == 0) 
-				s->dscp = atoi((char *)c);
+				s->dscp = (uint8_t)atoi((char *)c);
 			xmlFree(c);
 			/* End <address/dscp/etc> loop */
 		}
@@ -638,9 +644,13 @@ int client_msess_reconf(char *port, char *cfgpath) {
 		LIST_INSERT_HEAD(&msess_head, s, list);
 		/*@ +mustfreeonly +immediatetrans */
 		/* End <probe> loop */
+		/*@ -branchstate -mustfreefresh TODO wtf */
 	}
+	/*@ +branchstate */
+	/*@ -compmempass -nullstate -mustfreefresh xmlFree */
 	xmlFreeDoc(cfgdoc);
 	return 0;
+	/*@ +compmempass +mustfreefresh +nullstate */
 }
 
 /**
@@ -669,11 +679,13 @@ int client_msess_gothello(addr_t *addr) {
  * \param[in] addr The address to look for
  * \return         1 if it was found, otherwise 0
  */
-int client_msess_isaddrtaken(addr_t *addr) {
+int client_msess_isaddrtaken(addr_t *addr, uint16_t id) {
 	struct msess *s;
 	size_t len;
 
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
+		if (s->id == id)
+			continue;
 		if (s->child_pid == 0) 
 			continue;
 		/* compare addresses */

@@ -80,25 +80,6 @@ void diff_ts (/*@out@*/ ts_t *r, ts_t *end, ts_t *beg) {
 	}
 }
 
-/**
- * Calculates the difference between two timeval.
- *
- * Calculates the value \p end - \p beg.
- * 
- * \param[out] r Pointer to timeval where result will be written.
- * \param[in] end Time #1.
- * \param[in] beg Time #2.
- */
-void diff_tv (/*@out@*/ struct timeval *r, struct timeval *end, struct timeval *beg) {
-	if ((end->tv_usec - beg->tv_usec) < 0) {
-		r->tv_sec = end->tv_sec - beg->tv_sec - 1;
-		r->tv_usec = 1000000 + end->tv_usec - beg->tv_usec;
-	} else {
-		r->tv_sec = end->tv_sec - beg->tv_sec;
-		r->tv_usec = end->tv_usec - beg->tv_usec;
-	}
-}
-
 /** 
  * Compare two timespec.
  *

@@ -159,9 +159,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 						syslog(LOG_INFO, "client: Unknown client connected");
 					if (addr2str(&pkt.addr, addrstr) == 0)
 						syslog(LOG_INFO, "client: %s: Connected", addrstr);
-				} else { /* Implicit: type == TYPE_TS */
-					/* Security; make sure type is tstamp; ts is NULL */
-					rx->type = 't';
+				} else if (rx->type == TYPE_TIME) {
 					client_res_update(&pkt.addr.sin6_addr, rx, NULL);
 				}
 			} else {

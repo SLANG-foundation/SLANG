@@ -42,4 +42,4 @@ int select (int mfd, fd_set /*@null@*/ *r, fd_set /*@null@*/ *w,
 #define CLOCK_REALTIME			0
 typedef /*@integraltype@*/ clockid_t; 
 int clock_gettime(clockid_t clk_id, /*@out@*/ struct timespec *tp);
-
+void timersub(struct timeval *a, struct timeval *b, /*@out@*/ struct timeval *r);

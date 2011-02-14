@@ -13,6 +13,9 @@
 #include <string.h>
 #include <errno.h>
 #include <syslog.h>
+#ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
+#include <unistd.h>
+#endif
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
