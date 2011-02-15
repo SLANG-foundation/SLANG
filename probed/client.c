@@ -438,12 +438,11 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 
 	s = malloc(sizeof *s);
 	if (s == NULL) return -1;
-	memset(s, 0, sizeof s);
+	memset(s, 0, sizeof *s);
 	s->id = id;
 	s->dscp = dscp;
 	s->interval.tv_sec = 0;
 	s->interval.tv_usec = wait;
-	s->last_seq = 0;
 	/* Prepare for getaddrinfo */
 	memset(&dst_hints, 0, sizeof dst_hints);
 	dst_hints.ai_family = AF_INET6;
@@ -452,7 +451,6 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 	if (ret < 0) {
 		syslog(LOG_ERR, "Unable to look up hostname %s: %s", a, 
 				gai_strerror(ret));
-		freeaddrinfo(dst_addr);
 		free(s);
 		return -1;
 	}
@@ -604,7 +602,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			continue;
 		s = malloc(sizeof *s);
 		if (s == NULL) continue;
-		memset(s, 0, sizeof s);
+		memset(s, 0, sizeof *s);
 		/* Get ID */
 		c = xmlGetProp(n, (xmlChar *)"id");
 		if (c != NULL) {

@@ -64,13 +64,13 @@ void tstamp_mode_hardware(int sock, char *iface) {
 	
 	slen = (socklen_t)sizeof f;
 	/* STEP 1: ENABLE HW TIMESTAMP ON IFACE IN IOCTL */
-	memset(&dev, 0, sizeof(dev));
+	memset(&dev, 0, sizeof dev);
 	/*@ -mayaliasunique Trust me, iface and dev doesn't share storage */
 	strncpy(dev.ifr_name, iface, sizeof dev.ifr_name);
 	/*@ +mayaliasunique */
 	/*@ -immediatetrans Yes, we might overwrite ifr_data */
 	dev.ifr_data = (void *)&hwcfg;
-	memset(&hwcfg, 0, sizeof &hwcfg); 
+	memset(&hwcfg, 0, sizeof hwcfg); 
 	/*@ +immediatetrans */
 	/* enable tx hw tstamp, ptp style, intel 82580 limit */
 	hwcfg.tx_type = HWTSTAMP_TX_ON; 
@@ -163,8 +163,8 @@ void tstamp_mode_userland(sock) {
 int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 	struct cmsghdr *cmsg;
 	struct scm_timestamping *t;
-	struct timespec *ts_p;
-	memset(ts, 0, sizeof (struct timespec));
+	ts_t *ts_p;
+	memset(ts, 0, sizeof *ts);
 	/*@ -branchstate Don't care about cmsg storage */
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		if (cmsg->cmsg_level == SOL_SOCKET) {
@@ -208,7 +208,7 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 	fd_set fs;
 	struct timeval tv, now, last; /* Timeouts for select and while */
 
-	memset(ts, 0, sizeof (struct timespec));
+	memset(ts, 0, sizeof *ts);
 	/* Wait for TX tstamp during at least 0.1 sec... */ 
 	(void)gettimeofday(&last, 0);
 	(void)gettimeofday(&now, 0);

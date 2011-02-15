@@ -25,9 +25,11 @@ then
 fi
 if [ "$1" = "release" ]
 then
+	rm ../slang.tgz
 	$0 clean
 	$0 install
-	tar -zcf ../slang.tgz .
+	rm -r autom4te.cache
+	tar -C ../ -zcf ../slang.tgz slang 
 	exit 
 fi
 echo "$0 clean | install | lint | release"
