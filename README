@@ -1,0 +1,68 @@
+This is SLA-NG's "probed" application, which can be used as a ping tool
+(a little bit like iperf) or a an SLA daemon collecting statistics for
+many measurement sessions. The authors are of this program is Anders
+Berggren <anders@halon.se> and Lukas Garberg <lukas@spritelink.net>
+working for Tele2 <kll@swip.net>
+
+________________________________________________________________________
+COMPILING
+In order to compile, you need Linux, libxml2, and pkg-config. In Debian, 
+these are installed with (as root)
+
+# apt-get install libxml2-dev pkg-config
+
+You can then compile "probed" (the executable probed/probed) with
+
+$ ./configure
+$ make
+________________________________________________________________________
+RUNNING
+After compiling, the executable "probed" is found in the folder "probed".
+To try it out, start it 
+
+$ probed -c 127.0.0.1 -u
+
+which will use user-land timestamping (-u) to ping itself (-c 127.0.0.1). 
+To ping another machine, start it with as a server with
+
+$ probed -s -u
+
+on one machine, and as a client
+
+$ probed -c name-of-server -u
+
+on the other machine. To try out kernel timestamping, you need a kernel
+compiled with the configuration option CONFIG_NETWORK_PHY_TIMESTAMPING
+and network drivers with timestamp patches. You can do this yourself by
+adding "EXPORT_SYMBOL_GPL(skb_clone_tx_timestamp);" to the Linux file 
+net/core/timestamping.c and "skb_tx_timestamp(skb);" in the beginning
+of the "xmit" function of the driver that you're using. In order to get
+hardware timestamping (very accurate!) to work, buy an Intel 82580 NIC,
+download the latest Linux kernel, compile it (as noted above) with
+CONFIG_NETWORK_PHY_TIMESTAMPING, and check out the Linux netdev thread 
+http://marc.info/?m=129673051106564 if you're using 2.6.37 or older.
+
+________________________________________________________________________
+F.A.Q.
+
+Q: It doesn't compile!
+A: It requires Linux (newer versions), libxml2-dev and pkg-config. If
+   you have, please report compile errors to us.
+
+Q: It crashes!
+A: Please contact us!
+
+Q: It just says "Connecting to..."! 
+A: You need to run probed in server mode (-s) on the other end, and make
+   sure that both TCP and UDP on port 60666 (or whatever you choose with
+   the flag -p) is open. 
+
+Q: I get TX timestamp errors!
+A: You have probably a kernel with CONFIG_NETWORK_PHY_TIMESTAMPING but
+   not patched drivers with skb_tx_timestamp. See "RUNNING". Or, you
+   have an Intel 82580 and would like to use hardware timestamping, but
+   without using a good driver. See http://marc.info/?m=129673051106564.
+   You also need to be root, in order to use hardware timestamping.
+
+Q: I have checked everything, but still get timestamp errors!
+A: Please contact us!
