@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 	char *addr, *iface, *port, *cfgpath, *fifopath, *wait;
 
 	/* Default settings */
-	cfgpath = "cfg.xml";
+	cfgpath = "probed.conf";
 	log = LOG_PERROR; /* Print to stdout */
 	iface = "eth0"; /* Why not, Linux standard */
 	port = "60666"; /* Sexy port */

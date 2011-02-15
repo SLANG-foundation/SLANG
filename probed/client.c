@@ -148,12 +148,17 @@ pid_t client_fork(int pipe, addr_t *server) {
 	if (addr2str(server, addrstr) < 0)
 		return -1;
 	(void)snprintf(log, 100, "client: %s:", addrstr);
+	/* Do not react to SIGCHLD (when a child dies) */
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGCHLD failed", log);
 	/* Create client fork; parent returns */
 	client_pid = fork();
 	if (client_pid != 0) return client_pid;
-	/* We are child */
+	/* We are child, do not react to HUP (reload), INT (print) */
+	if (signal(SIGHUP, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGHUP failed", log);
+	if (signal(SIGINT, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "%s signal: SIG_IGN on SIGINT failed", log);
 	/* Please kill me, I hate myself */
 	(void)prctl(PR_SET_PDEATHSIG, SIGKILL);
 	/* We're going to send a struct packet over the pipe */
@@ -430,6 +435,8 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 	s->id = id;
 	s->dscp = dscp;
 	s->interval.tv_sec = 0;
+	s->interval.tv_usec = wait;
+	s->last_seq = 0;
 	/* Prepare for getaddrinfo */
 	memset(&dst_hints, 0, sizeof dst_hints);
 	dst_hints.ai_family = AF_INET6;
@@ -442,8 +449,6 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
 		free(s);
 		return -1;
 	}
-	/* TODO if we place this line above getaddrinfo, it crashes!! */
-	s->interval.tv_usec = wait;
 	memcpy(&s->dst, dst_addr->ai_addr, sizeof s->dst);
 	freeaddrinfo(dst_addr);
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
@@ -469,7 +474,7 @@ void client_msess_transmit(int s_udp) {
 	struct msess *s;
 	data_t tx;
 	ts_t ts;
-
+	
 	(void)gettimeofday(&now, 0);
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
 		/* Are we connected to server? */

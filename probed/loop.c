@@ -22,10 +22,8 @@
 #include "net.h"
 #include "client.h"
 
-static int server_find_peer_fd(int fd_first, addr_t *peer);
-static void server_kill_peer(int fd);
-static fd_set fs;
-static int fd_max = 0;
+static int server_find_peer_fd(int fd_max, addr_t *peer);
+static void server_kill_peer(fd_set *fs, int *fd_max, int fd);
 
 /**
  * Main SLA-NG 'probed' state machine, handling all client/server stuff
@@ -66,8 +64,9 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	ts_t ts;
 	struct timeval tv;
 	fd_set fs_tmp;
-	int fd, fd_first, i;
+	int fd, i, fd_max = 0;
 	int fd_pipe[2];
+	fd_set fs;
 	socklen_t slen;
 
 	/* IPC for children-to-parent (TCP client to UDP state machine) */
@@ -87,7 +86,6 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	fd_max = MAX(fd_max, s_tcp);
 	fd_max = MAX(fd_max, fd_pipe[0]);
 	fd_max = MAX(fd_max, fd_pipe[1]);
-	fd_first = fd_max;
 	memset(&addr_last, 0, sizeof addr_last);
 	memset(&tx_last, 0, sizeof tx_last);
 	/* Let's loop those sockets! */
@@ -113,10 +111,10 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					/* Send TCP timestamp */
 					tx.t3 = ts;
 					tx.type = TYPE_TIME;
-					fd = server_find_peer_fd(fd_first, &(pkt.addr));
+					fd = server_find_peer_fd(fd_max, &pkt.addr);
 					if (fd < 0) continue;
 					if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
-						server_kill_peer(fd);
+						server_kill_peer(&fs, &fd_max, fd);
 					}
 				} 
 				/* CLIENT: Update results with received UDP PONG */
@@ -144,7 +142,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 				memset(&tx, 0, sizeof tx);
 				tx.type = TYPE_HELO;
 				if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
-					server_kill_peer(fd);
+					server_kill_peer(&fs, &fd_max, fd);
 				}
 			/* CLIENT: PIPE; timestamps from client_fork (TCP) */
 			} else if (unix_fd_isset(fd_pipe[0], &fs_tmp) == 1) {
@@ -165,9 +163,9 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 			} else {
 				/* It's a client. They shouldn't speak, it's probably a
 				 * disconnect. KILL IT. */
-				for (i = (fd_first + 1); i <= fd_max; i++) {
+				for (i = 0; i <= fd_max; i++) {
 					if (unix_fd_isset(i, &fs_tmp) == 1) {
-						server_kill_peer(i);
+						server_kill_peer(&fs, &fd_max, i);
 					}	
 				}
 			}
@@ -179,7 +177,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 			if (cfg.shouldreload == 1) {
 				cfg.shouldreload = 0;
 				(void)client_msess_reconf(port, cfgpath);
-				client_msess_forkall(fd_pipe[0]);
+				client_msess_forkall(fd_pipe[1]);
 			}
 		}
 	}
@@ -193,25 +191,22 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
  * static (listening) fd, in order not to kill them as well. It 
  * modifies the global variable fd_max; the heighest seen fd in fs.
  *
- * \param[in] fd_first The lowest dynamic (client) file descriptor 
+ * \param[in] fd_max   The highest client file descriptor 
  * \param[in] peer     Pointer to IP address to find socket for 
  * \return             File descriptor to client socket of address 'peer'
  */
-static int server_find_peer_fd(int fd_first, addr_t *peer) {
+static int server_find_peer_fd(int fd_max, addr_t *peer) {
 	int i;
 	addr_t tmp;
 	socklen_t slen;
-
-	slen = (socklen_t)sizeof tmp;
-	for (i = (fd_first + 1); i <= fd_max; i++) {
+	size_t len;
+	
+	for (i = 0; i <= fd_max; i++) {
+		slen = (socklen_t)sizeof tmp;
 		if (getpeername(i, (struct sockaddr*)&tmp, &slen) == 0) {
-			if (memcmp(&(peer->sin6_addr), &(tmp.sin6_addr), sizeof
-						tmp.sin6_addr) == 0) {
+			len = sizeof tmp.sin6_addr;
+			if (memcmp(&(peer->sin6_addr), &(tmp.sin6_addr), len) == 0) {
 				return i;
-			}
-		} else {
-			if (errno != EBADF) {
-				server_kill_peer(i);
 			}
 		}
 	}
@@ -222,9 +217,11 @@ static int server_find_peer_fd(int fd_first, addr_t *peer) {
  * The function killing an client peer socket file descriptor, modifies
  * global variables fs; the file descriptor set, and fd_max.
  * 
- * \param[in] fd       The lowest dynamic (client) file descriptor 
+ * \param[out] fs       Pointer to file descriptor set
+ * \param[out] fd_ax    Pointer  to the highest client file descriptor 
+ * \param[in]  fd       Client file descriptor 
  */
-static void server_kill_peer(int fd) {
+static void server_kill_peer(fd_set *fs, int *fd_max, int fd) {
 	char addrstr[INET6_ADDRSTRLEN];
 	addr_t tmp;
 	socklen_t slen;
@@ -241,7 +238,7 @@ static void server_kill_peer(int fd) {
 	/* Close, clear fd set, maybe decrease fd_max */
 	if (close(fd) < 0)
 		syslog(LOG_ERR, "server: close: %s", strerror(errno));
-	unix_fd_clr(fd, &fs);
-	if (fd == fd_max)
-		fd_max--;
+	unix_fd_clr(fd, fs);
+	if (fd == *fd_max)
+		(*fd_max)--;
 }

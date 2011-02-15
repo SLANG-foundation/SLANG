@@ -23,4 +23,11 @@ then
 	splint unix.c   +unixlib
 	exit 
 fi
-echo "$0 clean | install | lint"
+if [ "$1" = "release" ]
+then
+	$0 clean
+	$0 install
+	tar -zcf ../slang.tgz .
+	exit 
+fi
+echo "$0 clean | install | lint | release"
