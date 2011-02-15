@@ -1,3 +1,10 @@
+/* 
+ * Copyright (c) 2011 Anders Berggren, Lukas Garberg, Tele2
+ *
+ * We have not yet decided upon a license, and so far it may only be
+ * used and redistributed with our explicit permission.
+ */ 
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -7,7 +14,6 @@
 #define TYPE_PONG 'o'
 #define TYPE_TIME 't'
 #define TYPE_HELO 'h'
-#define USLEEP 1 /* the read timeout resolution, sets max pps */ 
 #define TMPLEN 512
 
 typedef struct timespec ts_t;

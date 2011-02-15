@@ -1,3 +1,10 @@
+/* 
+ * Copyright (c) 2011 Anders Berggren, Lukas Garberg, Tele2
+ *
+ * We have not yet decided upon a license, and so far it may only be
+ * used and redistributed with our explicit permission.
+ */ 
+
 /**
  * \file   tstamp.c
  * \brief  Timestamp init (ioctl) and extraction (MSG_ERRQUEUE and CMSG)

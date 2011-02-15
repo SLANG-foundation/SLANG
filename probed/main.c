@@ -131,7 +131,7 @@ static void help_and_die(void) {
 	p("\t-d path   Daemon: server and (many) clients, print to FIFO 'path'");
 	p("");
 	p("\t          OPTIONS");
-	p("\t-f path   Daemon only, path to configuration [default: cfg.xml]");
+	p("\t-f path   Daemon only, path to config file [default: probed.conf]");
 	p("\t-w time   Client only, wait time between PINGs [default 500] (ms)");
 	p("\t-i iface  Network interface for hardware timestamps [default: eth0]");
 	p("\t-p port   UDP port, both source and destination [default: 60666]");

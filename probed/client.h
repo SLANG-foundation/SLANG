@@ -1,3 +1,10 @@
+/* 
+ * Copyright (c) 2011 Anders Berggren, Lukas Garberg, Tele2
+ *
+ * We have not yet decided upon a license, and so far it may only be
+ * used and redistributed with our explicit permission.
+ */ 
+
 void client_init(void);
 void client_res_fifo_or_die(char *fifopath);
 void client_res_update(struct in6_addr *a, data_t *d, /*@null@*/ ts_t *ts);
