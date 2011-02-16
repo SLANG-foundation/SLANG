@@ -4,9 +4,15 @@ import logging
 import logging.handlers
 import signal
 import sys
+from optparse import OptionParser
 
 import slang.manager
 import slang.config
+
+# Read parameters
+p = OptionParser()
+p.add_option('-f', dest="cfg_path", default="/etc/slang.conf", help="config file path")
+(options, args) = p.parse_args()
 
 # set up logging
 logger = logging.getLogger()
@@ -27,7 +33,7 @@ logger.addHandler(lc)
 # start up
 logger.debug("Starting up...")
 
-m = slang.manager.Manager('slang.tele2.net')
+m = slang.manager.Manager(options.cfg_path, 'slang.tele2.net')
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)

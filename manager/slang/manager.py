@@ -18,7 +18,7 @@ import remoteproc
 class Manager:
 
     manager_host = None
-    cfg_path = "/etc/slang.conf"
+    cfg_path = None
     probed_cfg_path = "/tmp/probed.conf"
 
     logger = None
@@ -30,7 +30,7 @@ class Manager:
 
     thread_stop = False
 
-    def __init__(self, manager_host):
+    def __init__(self, cfg_path, manager_host):
         """ Constructor """
 
         # reload
@@ -38,6 +38,7 @@ class Manager:
         self.manager_host = manager_host
         self.reload()      
 
+        self.cfg_path = cfg_path
         self.config = config.Config(self.cfg_path)
 
         try:

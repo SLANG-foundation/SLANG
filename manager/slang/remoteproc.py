@@ -20,7 +20,7 @@ class RemoteProc(xmlrpc.XMLRPC):
     def xmlrpc_reload(self):
         """ Reload application """
 
-        self.manager.reload()
+        return self.manager.reload()
 
     def xmlrpc_get_aggregate(self, session_id, aggr_interval, start, end):
         """ Get aggregated data.

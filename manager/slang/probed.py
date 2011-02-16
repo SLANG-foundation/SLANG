@@ -119,7 +119,7 @@ class Probed(threading.Thread):
     def reload(self):
         """ Reload probed application """
 
-        self.probed.signal(signal.SIGHUP)
+        self.probed.send_signal(signal.SIGHUP)
 
     def run(self):
         """
