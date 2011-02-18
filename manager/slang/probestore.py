@@ -37,7 +37,7 @@ class ProbeStore:
 
         # open database connection
         try:
-            self.db = ProbeStoreDB(self.config.get_param("/config/dbpath"))
+            self.db = ProbeStoreDB(self.config.get_param('dbpath'))
             self.db.execute("CREATE TABLE IF NOT EXISTS probes (" + 
                 "session_id INTEGER, " +
                 "seq INTEGER, " + 

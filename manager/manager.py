@@ -11,7 +11,8 @@ import slang.config
 
 # Read parameters
 p = OptionParser()
-p.add_option('-f', dest="cfg_path", default="/etc/slang.conf", help="config file path")
+p.add_option('-f', dest="cfg_path", default="/etc/slang/manager.conf", 
+    help="config file path")
 (options, args) = p.parse_args()
 
 # set up logging
@@ -31,16 +32,14 @@ lc.setFormatter(lformat)
 logger.addHandler(lc)
 
 # start up
-logger.debug("Starting up...")
+logger.debug("Starting up SLA-NG manager...")
 
-m = slang.manager.Manager(options.cfg_path, 'slang.tele2.net')
+m = slang.manager.Manager(options.cfg_path)
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)
-#signal.signal(signal.SIGALRM, m.sighandler)
-#signal.signal(signal.SIGKILL, m.sighandler)
 
 m.run()
-logger.info("run() finished - exiting")
+logger.info("Exiting SLA-NG manager; run() finished")
 
 sys.exit(0)

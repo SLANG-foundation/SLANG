@@ -44,11 +44,11 @@ class Probed(threading.Thread):
     def start_probed(self):
         """ Start probed application """
 
-        probed_args = ['../probed/probed', '-q']
+        probed_args = ['/usr/local/bin/probed', '-q']
 
         # get configuration - port
         try:
-            port = self.config.get_param("/config/port")
+            port = self.config.get_param('port')
         except NotFoundError:
             port = 60666
             self.logger.warning("Port not found in config. Falling back to default (%d)" % port)
@@ -57,7 +57,7 @@ class Probed(threading.Thread):
 
         # FIFO path
         try:
-            fifo_path = self.config.get_param("/config/fifopath")
+            fifo_path = self.config.get_param('fifopath')
         except NotFoundError:
             fifo_path = "/tmp/probed.fifo"
             self.logger.warning("FIFO path not found in config. Falling back to default(%s)" % fifo_path)
@@ -66,7 +66,7 @@ class Probed(threading.Thread):
 
         # timestamping type - hardware is default
         try:
-            tstype = self.config.get_param("/config/timestamp")
+            tstype = self.config.get_param('timestamp')
         except NotFoundError:
             tstype = 'kernel'
             self.logger.info("Timestamping type not found in config. Falling back to default (%s)" & tstype)
@@ -82,7 +82,7 @@ class Probed(threading.Thread):
             # need to be passed to probed. However, it requires the 
             # interface name to enable timestamping for.
             try:
-                ifname = self.config.get_param("/config/interface")
+                ifname = self.config.get_param('interface')
             except NotFoundError:
                 ifname = "eth0"
                 self.logger.info("Interface not found in config. Falling back to default (%s)" % ifname)
@@ -108,7 +108,7 @@ class Probed(threading.Thread):
 
     def open_fifo(self):
         try:
-            self.fifo = open(self.config.get_param("/config/fifopath"), 'r');
+            self.fifo = open(self.config.get_param('fifopath'), 'r');
         except Exception, e:
             self.logger.critical("Unable to open fifo: %s" % e)
 
