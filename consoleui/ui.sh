@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # SUDO ITSELF
 if [ "$1" = "" ]
@@ -9,7 +9,7 @@ fi
 
 ui_printerr()
 {
-	if [ "$?" != "0" ]
+	if [ "$?" -ne 0 ]
 	then
 		dialog --msgbox "`cat /tmp/log.dialog`" 20 70
 	fi
@@ -19,32 +19,32 @@ ui_printerr()
 disk_rw()
 {
 	echo "Mounting R/W..." | dialog --progressbox 3 30
-	fsck -p / &> /tmp/log.dialog
+	fsck -p / > /tmp/log.dialog 2>&1
 	ui_printerr
-	mount -o remount,rw / &> /tmp/log.dialog
+	mount -o remount,rw / > /tmp/log.dialog 2>&1
 	ui_printerr
 }
 
 disk_ro()
 {
 	echo "Mounting R/O..." | dialog --progressbox 3 30
-	mount -o remount,ro / &> /tmp/log.dialog
+	mount -o remount,ro / > /tmp/log.dialog 2>&1
 	ui_printerr
 }
 
 # NETWORK FUNCTIONS
 netconf_restart()
 {
-	ifdown $1 &> /tmp/log.dialog
+	ifdown $1 > /tmp/log.dialog 2>&1
 	ui_printerr
-	ifup $1 &> /tmp/log.dialog
+	ifup $1 > /tmp/log.dialog 2>&1
 	ui_printerr
 }
 
 netconf_restart_quiet()
 {
-	ifdown $1 &> /dev/null 
-	ifup $1 &> /dev/null
+	ifdown $1 > /dev/null 2>&1
+	ifup $1 > /dev/null 2>&1
 }
 
 netconf_remove()
@@ -71,27 +71,27 @@ netconf_static()
 	if [ "$ip" != "" ]
 	then
 		echo "iface $if inet static" >> /etc/network/interfaces
-		echo -e "\taddress $ip" >> /etc/network/interfaces
+		printf "\taddress $ip\n" >> /etc/network/interfaces
 		mask=`sed -n "2p" /tmp/ui.dialog`
-		echo -e "\tnetmask $mask" >> /etc/network/interfaces
+		printf "\tnetmask $mask\n" >> /etc/network/interfaces
 	fi
 	gw=`sed -n "3p" /tmp/ui.dialog`
 	if [ "$gw" != "" ]
 	then
-		echo -e "\tgateway $gw" >> /etc/network/interfaces
+		printf "\tgateway $gw\n" >> /etc/network/interfaces
 	fi
 	ip=`sed -n "4p" /tmp/ui.dialog`
 	if [ "$ip" != "" ]
 	then
-		echo "iface $if inet6 static" >> /etc/network/interfaces
-		echo -e "\taddress $ip" >> /etc/network/interfaces
+		printf "iface $if inet6 static\n" >> /etc/network/interfaces
+		printf "\taddress $ip\n" >> /etc/network/interfaces
 		mask=`sed -n "5p" /tmp/ui.dialog`
-		echo -e "\tnetmask $mask" >> /etc/network/interfaces
+		printf "\tnetmask $mask\n" >> /etc/network/interfaces
 	fi
 	gw=`sed -n "6p" /tmp/ui.dialog`
 	if [ "$gw" != "" ]
 	then
-		echo -e "\tgateway $gw" >> /etc/network/interfaces
+		printf "\tgateway $gw\n" >> /etc/network/interfaces
 	fi
 	disk_ro
 	echo "Restarting $if..." | dialog --progressbox 3 30
@@ -102,17 +102,20 @@ netconf_dhcp()
 {
 	disk_rw
 	netconf_remove $if
+	echo "Adding $if..." | dialog --progressbox 3 30
 	echo "auto $if" >> /etc/network/interfaces
 	echo "iface $if inet dhcp" >> /etc/network/interfaces
 	# Run DHCP client, allow it to write /etc/resolv.conf
-	ifdown $if &> /tmp/log.dialog
+	echo "Request DHCP, R/W..." | dialog --progressbox 3 30
+	ifdown $if > /tmp/log.dialog 2>&1
 	ui_printerr
-	ifup $if &> /tmp/log.dialog
+	ifup $if > /tmp/log.dialog 2>&1
 	dialog --msgbox "`cat /tmp/log.dialog`" 20 70
 	# Kill the DHCP client in order to mount read-only
 	pkill -9 dhclient
 	disk_ro
 	# Now that we are read-only, we can restart dhclient
+	echo "Restart DHCP, R/O..." | dialog --progressbox 3 30
 	netconf_restart_quiet $if
 }
 
@@ -140,14 +143,14 @@ netconf_bring_all_if_up()
 	netconf_get_if_list
 	for i in $if_list
 	do
-		ifconfig $i up 2>&1 > /dev/null
+		ifconfig $i up > /dev/null 2>&1
 	done
 }
 
 netconf_get_if_stat()
 {
 	tmp=`mii-tool $1 2> /dev/null |grep "link ok"`
-	if [ "$?" = "0" ]
+	if [ "$?" -eq 0 ]
 	then
 		if_stat=`mii-tool eth0 2> /dev/null | cut -d ' ' -f3`
 	else
@@ -160,7 +163,7 @@ netconf_get_if_list()
 	if_list=`ip -o link | cut -d':' -f2|tr -d ' '`
 }
 
-# MENU  
+# MENU
 menu_network()
 {
 	while true
@@ -177,9 +180,9 @@ menu_network()
 			"Choose an interface. You probably want an 'eth'." \
 			20 60 13 $if_str \
 			2>/tmp/ui.dialog
-		if [ "$?" -eq 1 ]
+		if [ "$?" -ne 0 ]
 		then
-			break	
+			break
 		fi
 		if="`cat /tmp/ui.dialog`"
 		menu_network_if
@@ -196,7 +199,7 @@ menu_network_if()
 			d "Set Automaic (DHCP) Address Mode" \
 			s "Configure Static IP/IPv6 Addresses" \
 			2>/tmp/ui.dialog
-		if [ "$?" -eq 1 ]
+		if [ "$?" -ne 0 ]
 		then
 			break	
 		fi
@@ -248,7 +251,7 @@ menu_network_if_static()
 		"IPv6 Bitmask" 6  2 "$mask6"  6 20 43 100 \
 		"IPv6 Gateway" 7  2 "$gw6"    7 20 43 100 \
 		2> /tmp/ui.dialog
-	if [ "$?" = "0" ]
+	if [ "$?" -eq 0 ]
 	then
 		netconf_static
 	fi
@@ -270,7 +273,7 @@ menu_dns()
 	"Nameserver #2" 3 2 "$d2" 3 20 40 140 \
 	"Nameserver #3" 4 2 "$d3" 4 20 40 140 \
 	2> /tmp/ui.dialog
-	if [ "$?" = "0" ]
+	if [ "$?" -eq 0 ]
 	then
 		netconf_dns
 	fi
@@ -280,9 +283,12 @@ menu_ping()
 {
 	dialog --inputbox "Type an address to ping" \
 	7 40 www.tele2.se 2> /tmp/ui.dialog
-	ping -c 10 `cat /tmp/ui.dialog` &> /tmp/ui.dialog &
-	dialog --tailbox /tmp/ui.dialog 20 75
-	pkill -9 ping
+	if [ "$?" -eq 0 ]
+	then
+		ping -c 10 `cat /tmp/ui.dialog` > /tmp/ui.dialog 2>&1 &
+		dialog --tailbox /tmp/ui.dialog 20 75
+		pkill -9 ping
+	fi
 }
 
 menu_log()
@@ -313,7 +319,7 @@ do
 		l "SLA-NG Daemon Log" \
 		s "Start Shell (bash)"  \
 		2> /tmp/ui.dialog
-	if [ "$?" -eq 1 ]
+	if [ "$?" -ne 0 ]
 	then
 		exit
 	fi
