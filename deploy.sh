@@ -6,7 +6,9 @@ then
 	rm depcomp configure missing
 	rm Makefile.in probed/Makefile.in 
 	rm install-sh aclocal.m4 
-	rm -r autom4te.cache 
+	rm -r autom4te.cache
+	rm manager/*.pyc
+	rm manager/slang/*.pyc
 	exit 
 fi
 if [ "$1" = "install" ]

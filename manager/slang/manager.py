@@ -30,16 +30,17 @@ class Manager:
 
     thread_stop = False
 
-    def __init__(self, cfg_path, manager_host):
+    def __init__(self, cfg_path):
         """ Constructor """
 
         # reload
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.manager_host = manager_host
-        self.reload()      
 
         self.cfg_path = cfg_path
         self.config = config.Config(self.cfg_path)
+        
+        self.manager_host = self.config.get_param('host') 
+        self.reload()      
 
         try:
             self.pstore = probestore.ProbeStore()
