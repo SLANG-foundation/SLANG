@@ -4,12 +4,14 @@ import time
 #
 # constants
 #
-STATE_PING = 'i'
-STATE_GOT_TS = 't' # Because of Intel RX timestamp bug 
-STATE_GOT_PONG = 'o' # Because of Intel RX timestamp bug 
-STATE_READY = 'r'
-STATE_TSERROR = 'e' # Missing timestamp (Intel...?)
-STATE_TIMEOUT = 't'
+STATE_PING = 'i'     # PING, the initial state */ 
+STATE_GOT_TS = 't'   # PING->TS, ability to detect PONG loss */ 
+STATE_GOT_PONG = 'o' # PING->PONG, ability to detect TS errors */ 
+STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
+STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
+STATE_PONGLOSS = 'l' # Ready, but timeout, got only TS, lost PONG */ 
+STATE_READY = 'r'    # Ready, got both PONG and valid TS */ 
+STATE_DUP = 'd'      # Got a PONG we didn't recognize, DUP? */ 
 
 def from_struct(structdata):
     """ Create a probe from the struct data """

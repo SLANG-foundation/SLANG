@@ -8,7 +8,7 @@ import config
 class Maintainer(threading.Thread):
     """ Performs maintenance operations at regular intervals. """
 
-    flush_interval = 10
+    flush_interval = 1
     delete_interval = 600
     
     logger = None

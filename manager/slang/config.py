@@ -49,7 +49,7 @@ class Config:
         if param == 'fifopath':
             return '/tmp/probed.fifo' 
         if param == 'dbpath':
-            return '/tmp/probed.db' 
+            return ':memory:' 
         raise ConfigError("Invalid config parameter")
 
     def get_path(self):

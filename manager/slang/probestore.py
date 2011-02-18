@@ -257,8 +257,11 @@ class ProbeStore:
 
         retdata = {
             'total': 0,
-            'lost': 0,
             'success': 0,
+            'timestamperror': 0,
+            'pongloss': 0,
+            'timeout': 0,
+            'dup': 0,
             'rtt_max': 0,
             'rtt_min': 0,
             'rtt_avg': 0,        
@@ -288,21 +291,36 @@ class ProbeStore:
 #        self.logger.debug("Aggregating session %d from %d to %d, %d rows" % (session_id, start, end, retdata['total'], ))
 
         # get percentages
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS lost FROM PROBES WHERE state = ? AND " + where
+        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
         res = self.db.select(sql, (probe.STATE_TIMEOUT, ) + whereargs)
         for row in res:
-            retdata['loss'] = row['lost']
+            retdata['timeout'] = row['c']
 
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS success FROM PROBES WHERE state = ? AND " + where
+        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
         res = self.db.select(sql, (probe.STATE_READY, ) + whereargs)
         for row in res:
-            retdata['success'] = row['success']
+            retdata['success'] = row['c']
+
+        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
+        res = self.db.select(sql, (probe.STATE_DUP, ) + whereargs)
+        for row in res:
+            retdata['dup'] = row['c']
+
+        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
+        res = self.db.select(sql, (probe.STATE_TSERROR, ) + whereargs)
+        for row in res:
+            retdata['timestamperror'] = row['c']
+
+        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
+        res = self.db.select(sql, (probe.STATE_PONGLOSS, ) + whereargs)
+        for row in res:
+            retdata['pongloss'] = row['c']
 
 
         # get max, min and average
         sql = ("SELECT MAX(rtt) AS max, MIN(rtt) AS min, " + 
             "AVG(rtt) AS avg FROM probes " + 
-            "WHERE rtt IS NOT NULL AND " + where)
+            "WHERE rtt IS NOT NULL AND state = 'r' AND " + where)
         res = self.db.select(sql, whereargs)
         for row in res:
 #            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
@@ -312,7 +330,7 @@ class ProbeStore:
 
         sql = ("SELECT MAX(delayvar) AS max, MIN(delayvar) AS min, " + 
             "AVG(delayvar) AS avg FROM probes " + 
-            "WHERE delayvar IS NOT NULL AND " + where)
+            "WHERE delayvar IS NOT NULL AND state = 'r' AND " + where)
         res = self.db.select(sql, whereargs)
         for row in res:
 #            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
@@ -345,7 +363,7 @@ class ProbeStore:
         where = "session_id = ? AND created >= ? AND created < ? AND state = ?"
         whereargs = (session_id, start, end, probe.STATE_READY)
 
-        sql = "SELECT COUNT(*) AS count FROM probes WHERE " + where
+        sql = "SELECT COUNT(*) AS count FROM probes WHERE state = 'r' AND " + where
         res = self.db.select(sql, whereargs)
         for row in res:
             nrows = row['count']
