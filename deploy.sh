@@ -9,11 +9,22 @@ then
 	rm -r autom4te.cache
 	rm manager/*.pyc
 	rm manager/slang/*.pyc
+	rm sla-ng.deb
 	exit 
 fi
 if [ "$1" = "install" ]
 then
 	autoreconf --install
+	./configure
+	make
+	exit
+fi
+if [ "$1" = "debian" ]
+then
+	$0 install
+	cp probed/probed debian/usr/bin
+	fakeroot dpkg-deb --build debian
+	mv debian.deb sla-ng.deb
 	exit
 fi
 if [ "$1" = "lint" ]
