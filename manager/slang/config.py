@@ -47,7 +47,7 @@ class Config:
         if param == 'interface':
             return lines[4].strip()
         if param == 'fifopath':
-            return '/tmp/probed.fifo' 
+            return '/tmp/probed.fifo'
         if param == 'dbpath':
             return ':memory:' 
         raise ConfigError("Invalid config parameter")
