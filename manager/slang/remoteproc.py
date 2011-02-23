@@ -1,6 +1,7 @@
 from twisted.web import xmlrpc, server
 import logging
 import time
+import xmlrpclib
 
 class RemoteProc(xmlrpc.XMLRPC):
     """ Remote procedures """
@@ -20,7 +21,24 @@ class RemoteProc(xmlrpc.XMLRPC):
     def xmlrpc_reload(self):
         """ Reload application """
 
-        return self.manager.reload()
+        try:
+            self.manager.reload()
+        except ManagerError, e:
+            return xmlrpclib.Fault(1100, str(e))
+
+        return True
+
+
+    def xmlrpc_recv_config(self, cfg):
+        """ Receive a new config, reload application. """
+
+        try:
+            self.manager.recv_config(cfg)
+        except ManagerError, e:
+            return xmlrpclib.Fault(1100, str(e))
+
+        return True
+
 
     def xmlrpc_get_aggregate(self, session_id, aggr_interval, start, end):
         """ Get aggregated data.
@@ -45,7 +63,6 @@ class RemoteProc(xmlrpc.XMLRPC):
         aggr_times.append(end)
 
         for i in range(0, len(aggr_times) - 1):
-#            t = time.time()
             r = self.pstore.get_aggregate(session_id, aggr_times[i]*1000000000, aggr_times[i+1]*1000000000)
             r['start'] = aggr_times[i]
 
@@ -55,14 +72,9 @@ class RemoteProc(xmlrpc.XMLRPC):
                     r[k] = 0
 
             result.append(r)
-#            print "iteration %d finished in %f seconds" % (i, time.time() - t)
-
-#        for a in result:
-#            self.logger.debug("Aggregated data:")
-#            for k, v in a.items():
-#                self.logger.debug("%s: %s" % (k, v))
 
         return result
+
 
     def xmlrpc_get_raw(self, session_id, start, end):
         """ Get raw data.
