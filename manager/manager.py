@@ -17,7 +17,7 @@ p.add_option('-f', dest="cfg_path", default="/etc/slang/manager.conf",
 
 # set up logging
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 lformat = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
 
@@ -25,11 +25,6 @@ ls = logging.handlers.SysLogHandler(address='/dev/log')
 ls.setFormatter(lformat)
 ls.setLevel(logging.DEBUG)
 logger.addHandler(ls)
-
-lc = logging.StreamHandler()
-lc.setLevel(logging.DEBUG)
-lc.setFormatter(lformat)
-logger.addHandler(lc)
 
 # start up
 logger.debug("Starting up SLA-NG manager...")
