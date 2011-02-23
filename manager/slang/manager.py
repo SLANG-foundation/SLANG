@@ -106,7 +106,7 @@ class Manager:
     def sighandler(self, signum, frame):
         """ Signal handler. """
 
-        if signum == signal.SIGINT or signum == signal.SIGALRM or signum == signal.SIGTERM:
+        if signum == signal.SIGINT or signum == signal.SIGTERM:
             self.stop()
 
 
