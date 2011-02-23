@@ -3,7 +3,8 @@ Version: 0.2-1
 Section: net
 Priority: optional
 Architecture: amd64
-Depends: zlib1g (>= 1:1.2.3.4.dfsg-3), libxml2 (>= 2.7.8.dfsg-2)
+Depends: zlib1g (>= 1:1.2.3.4.dfsg-3), libxml2 (>= 2.7.8.dfsg-2),
+  python2.6 (>= 2.6.6-8+b1), python-twisted-web (>= 10.1.0-1)
 Maintainer: Anders Beggren <anders@halon.se>, Lukas Garberg (lukas@spritelink.net)
 Description: SLA-NG is a hardware timestamp "ping"
   It uses the new SO_TIMESTAMPING API in Linux, and has support for kernel

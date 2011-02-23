@@ -55,6 +55,7 @@ class Manager:
             self.logger.critical("Cannot start: %s" % e)
             self.stop()
 
+
     def reload(self):
         """ Reload 
 
@@ -63,7 +64,7 @@ class Manager:
            the configuration.
         """
 
-        self.logger.info("Reloading probed...")
+        self.logger.info("received reload request")
 
         # fetch probed config
         conn = httplib.HTTPConnection(self.manager_host)
@@ -74,20 +75,40 @@ class Manager:
         cfg_data = response.read()
 
         # write to disk
-        probed_cfg_file = open(self.probed_cfg_path, "w")
-        probed_cfg_file.write(cfg_data)
+        try:
+            probed_cfg_file = open(self.probed_cfg_path, "w")
+            probed_cfg_file.write(cfg_data)
+        except IOError, e:
+            raise ManagerError("Unable to write config file: %s" % str(e))
 
         # send SIGHUP
         if self.probed is not None:
             self.probed.reload()
 
-        return 1;
+    
+    def recv_config(self, cfg):
+        """ Save config 'cfg' to disk and reload application. """
 
+        self.logger.info("received configuration")
+
+        # write to disk
+        try:
+            probed_cfg_file = open(self.probed_cfg_path, "w")
+            probed_cfg_file.write(cfg_data)
+        except IOError, e:
+            raise ManagerError("Unable to write config file: %s" % str(e))
+
+        # send SIGHUP
+        if self.probed is not None:
+            self.probed.reload()
+
+    
     def sighandler(self, signum, frame):
         """ Signal handler. """
 
-        if signum == signal.SIGINT or signum == signal.SIGALRM or signum == signal.SIGTERM:
+        if signum == signal.SIGINT or signum == signal.SIGTERM:
             self.stop()
+
 
     def stop(self):
         """ Stop everything """
@@ -131,6 +152,7 @@ class Manager:
 
         self.logger.debug("Probed done.")
 
+
     def run(self):
         """ Start the application """
 
@@ -146,6 +168,7 @@ class Manager:
         reactor.run()
 
         self.logger.info("Exiting...")
+
 
 class ManagerError(Exception):
     pass

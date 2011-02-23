@@ -44,7 +44,7 @@ class Probed(threading.Thread):
     def start_probed(self):
         """ Start probed application """
 
-        probed_args = ['/usr/local/bin/probed', '-q']
+        probed_args = ['/usr/bin/probed', '-q']
 
         # get configuration - port
         try:
@@ -68,7 +68,7 @@ class Probed(threading.Thread):
         try:
             tstype = self.config.get_param('timestamp')
         except NotFoundError:
-            tstype = 'kernel'
+            tstype = 'userland'
             self.logger.info("Timestamping type not found in config. Falling back to default (%s)" & tstype)
 
         if tstype == 'kernel':
@@ -106,27 +106,29 @@ class Probed(threading.Thread):
             self.logger.error("Probed not running after 1 second. args: %s" % str(probed_args))
             raise ProbedError("Probed not running after 1 second")
 
+
     def open_fifo(self):
         try:
             self.fifo = open(self.config.get_param('fifopath'), 'r');
         except Exception, e:
             self.logger.critical("Unable to open fifo: %s" % e)
 
+
     def stop(self):
         """ Stop thread execution """
         self.thread_stop = True
+
 
     def reload(self):
         """ Reload probed application """
 
         self.probed.send_signal(signal.SIGHUP)
 
-    def run(self):
-        """
-        Function which is run when thread is started.
-        
-        Will infinitely read from fifo. 
 
+    def run(self):
+        """ Function which is run when thread is started.
+        
+            Will infinitely read from fifo. 
         """
         
         while True:
@@ -167,6 +169,7 @@ class Probed(threading.Thread):
             except Exception, e:
                 self.logger.error("Unable to add probe, got %s: %s" % (e.__class__.__name__, e, ))
 
+        self.probed.terminate()
         self.fifo.close()
 
 class ProbedError(Exception):

@@ -22,7 +22,12 @@ fi
 if [ "$1" = "debian" ]
 then
 	$0 install
+	rm -r debian/usr/
+	mkdir -p debian/usr/lib/python2.6/dist-packages
+	mkdir -p debian/usr/bin
 	cp probed/probed debian/usr/bin
+	cp manager/manager.py debian/usr/bin/sla-ng-manager
+	cp -r manager/slang debian/usr/lib/python2.6/dist-packages
 	fakeroot dpkg-deb --build debian
 	mv debian.deb sla-ng.deb
 	exit

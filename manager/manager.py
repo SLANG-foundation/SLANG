@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#!/usr/bin/python
 
 import logging
 import logging.handlers
@@ -38,8 +38,10 @@ m = slang.manager.Manager(options.cfg_path)
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)
+signal.signal(signal.SIGTERM, m.sighandler)
 
 m.run()
+m.stop()
 logger.info("Exiting SLA-NG manager; run() finished")
 
 sys.exit(0)
