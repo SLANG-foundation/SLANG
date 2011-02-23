@@ -44,7 +44,7 @@ class Probed(threading.Thread):
     def start_probed(self):
         """ Start probed application """
 
-        probed_args = ['/usr/local/bin/probed', '-q']
+        probed_args = ['/usr/bin/probed', '-q']
 
         # get configuration - port
         try:
@@ -68,7 +68,7 @@ class Probed(threading.Thread):
         try:
             tstype = self.config.get_param('timestamp')
         except NotFoundError:
-            tstype = 'kernel'
+            tstype = 'userland'
             self.logger.info("Timestamping type not found in config. Falling back to default (%s)" & tstype)
 
         if tstype == 'kernel':
