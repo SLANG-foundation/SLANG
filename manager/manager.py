@@ -19,7 +19,7 @@ p.add_option('-f', dest="cfg_path", default="/etc/sla-ng/manager.conf",
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-lformat = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+lformat = logging.Formatter('manager: %(name)s: %(message)s')
 
 ls = logging.handlers.SysLogHandler(address='/dev/log')
 ls.setFormatter(lformat)

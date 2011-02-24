@@ -279,18 +279,6 @@ menu_dns()
 	fi
 }
 
-menu_ping()
-{
-	dialog --inputbox "Type an address to ping" \
-	7 40 www.tele2.se 2> /tmp/ui.dialog
-	if [ "$?" -eq 0 ]
-	then
-		ping -c 10 `cat /tmp/ui.dialog` > /tmp/ui.dialog 2>&1 &
-		dialog --tailbox /tmp/ui.dialog 20 75
-		pkill -9 ping
-	fi
-}
-
 menu_cfg()
 {
 	c1=`sed -n "1p" /etc/sla-ng/manager.conf`
@@ -303,7 +291,7 @@ menu_cfg()
 	management server, via an XML-RPM API. The settings below\
 	specify how to communicate with the SLA-NG manager. If you\
 	like to edit the 'probed' configuration manually, you find\
-	it in /etc/slang/probed.conf (by default)." 17 71 5 \
+	it in /tmp/probed.conf by default." 17 71 5 \
 	"Manager XML-RPC URL"    1 2 "$c1" 1 30 35 210 \
 	"Manager shared secret"  2 2 "$c2" 2 30 35 210 \
 	"Probe TCP/UDP port"     3 2 "$c3" 3 30 35 210 \
@@ -322,6 +310,31 @@ menu_cfg()
 menu_log()
 {
 	dialog --tailbox /var/log/messages 20 75
+}
+
+menu_view()
+{
+	dialog --inputbox "Type a measurement session ID, or -1  to show\
+	all results, irrespective of session ID." \
+	9 40 "-1" 2> /tmp/ui.dialog
+	if [ "$?" -eq 0 ]
+	then
+		sla-ng-view -i `cat /tmp/ui.dialog` > /tmp/ui.dialog 2>&1 &
+		dialog --tailbox /tmp/ui.dialog 20 75
+		pkill -9 -f sla-ng-view
+	fi
+}
+
+menu_ping()
+{
+	dialog --inputbox "Type an address to ping" \
+	7 40 www.tele2.se 2> /tmp/ui.dialog
+	if [ "$?" -eq 0 ]
+	then
+		ping -c 10 `cat /tmp/ui.dialog` > /tmp/ui.dialog 2>&1 &
+		dialog --tailbox /tmp/ui.dialog 20 75
+		pkill -9 ping
+	fi
 }
 
 menu_shell()
@@ -343,6 +356,7 @@ do
 		d "DNS Settings" \
 		c "SLA-NG Configuration" \
 		l "SLA-NG Log" \
+		v "SLA-NG Probe Viewer" \
 		p "Ping Host" \
 		s "Start Shell (bash)"  \
 		2> /tmp/ui.dialog
@@ -365,6 +379,10 @@ do
 	if [ "`cat /tmp/ui.dialog`" = "l" ]
 	then
 		menu_log
+	fi
+	if [ "`cat /tmp/ui.dialog`" = "v" ]
+	then
+		menu_view
 	fi
 	if [ "`cat /tmp/ui.dialog`" = "p" ]
 	then

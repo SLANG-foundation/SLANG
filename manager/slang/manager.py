@@ -1,5 +1,6 @@
 #! /usr/bin/python
 
+import urllib2
 import sys
 import os
 import logging
@@ -98,7 +99,7 @@ class Manager:
             probed_cfg_file.write(cfg_data)
             probed_cfg_file.close()
 
-        except (URLError, IOError), e:
+        except (urllib2.URLError, IOError), e:
             estr = str("unable to fetch probed config (%s): %s" % (e.__class__.__name__, str(e)))
             self.logger.critical(estr)
             raise ManagerError(estr)
