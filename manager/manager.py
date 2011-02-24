@@ -11,7 +11,7 @@ import slang.config
 
 # Read parameters
 p = OptionParser()
-p.add_option('-f', dest="cfg_path", default="/etc/slang/manager.conf", 
+p.add_option('-f', dest="cfg_path", default="/etc/sla-ng/manager.conf", 
     help="config file path")
 (options, args) = p.parse_args()
 

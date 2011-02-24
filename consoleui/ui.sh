@@ -293,18 +293,18 @@ menu_ping()
 
 menu_cfg()
 {
-	c1=`sed -n "1p" /etc/slang/manager.conf`
-	c2=`sed -n "2p" /etc/slang/manager.conf`
-	c3=`sed -n "3p" /etc/slang/manager.conf`
-	c4=`sed -n "4p" /etc/slang/manager.conf`
-	c5=`sed -n "5p" /etc/slang/manager.conf`
+	c1=`sed -n "1p" /etc/sla-ng/manager.conf`
+	c2=`sed -n "2p" /etc/sla-ng/manager.conf`
+	c3=`sed -n "3p" /etc/sla-ng/manager.conf`
+	c4=`sed -n "4p" /etc/sla-ng/manager.conf`
+	c5=`sed -n "5p" /etc/sla-ng/manager.conf`
 	dialog --form "The actual 'probed' configuration (containing the\
 	measurement sessions; 'pings') is downloaded from an SLA-NG\
 	management server, via an XML-RPM API. The settings below\
 	specify how to communicate with the SLA-NG manager. If you\
 	like to edit the 'probed' configuration manually, you find\
 	it in /etc/slang/probed.conf (by default)." 17 71 5 \
-	"Manager XML-RPC host"   1 2 "$c1" 1 30 35 210 \
+	"Manager XML-RPC URL"    1 2 "$c1" 1 30 35 210 \
 	"Manager shared secret"  2 2 "$c2" 2 30 35 210 \
 	"Probe TCP/UDP port"     3 2 "$c3" 3 30 35 210 \
 	"Probe timestamp type"   4 2 "$c4" 4 30 35 210 \
@@ -312,9 +312,9 @@ menu_cfg()
 	2> /tmp/ui.dialog
 	if [ "$?" -eq 0 ]
 	then
-		mount_rw
-		cp /tmp/dialog.ui /etc/slang/manager.conf
-		mount_ro
+		disk_rw
+		cp /tmp/ui.dialog /etc/sla-ng/manager.conf
+		disk_ro
 	fi
 }
 
