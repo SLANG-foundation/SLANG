@@ -38,9 +38,30 @@ class Manager:
 
         self.cfg_path = cfg_path
         self.config = config.Config(self.cfg_path)
-        
-        self.manager_host = self.config.get_param('host') 
-        self.reload()      
+        try:
+            self.config_url = self.config.get_param('config_url') 
+        except config.ConfigError, e:
+            raise ManagerError()
+
+        # fetch configuration
+        try:
+            self.reload()      
+
+        except ManagerError, e:
+
+            # if there is an existing config file, use it
+            if os.path.isfile(self.probed_cfg_path):
+                self.logger.info("using existing config")
+
+            else:
+                # Otherwise, try to write an empty one for probed
+                self.logger.warning("writing empty config")
+                try:
+                    f = open(self.probed_cfg_path, "w")
+                    f.write("<config></config>")
+                    f.close()
+                except IOError, e:
+                    self.logger.critical("unable to write empty config: %s" % str(e))
 
         try:
             self.pstore = probestore.ProbeStore()
@@ -66,20 +87,20 @@ class Manager:
 
         self.logger.info("received reload request")
 
-        # fetch probed config
-        conn = httplib.HTTPConnection(self.manager_host)
-        conn.request("GET", "/cfg.php")
-        response = conn.getresponse()
-        if response.status != 200:
-            raise ManagerError("Unable to fetch configuration: %s %s" % (response.status, response.reason))
-        cfg_data = response.read()
-
-        # write to disk
         try:
+            # fetch probed config
+            f_cfg = urllib2.urlopen(self.config_url, timeout=5)
+            cfg_data = f_cfg.read()
+
+            # write to disk
             probed_cfg_file = open(self.probed_cfg_path, "w")
             probed_cfg_file.write(cfg_data)
-        except IOError, e:
-            raise ManagerError("Unable to write config file: %s" % str(e))
+            probed_cfg_file.close()
+
+        except (URLError, IOError), e:
+            estr = str("unable to fetch probed config (%s): %s" % (e.__class__.__name__, str(e)))
+            self.logger.critical(estr)
+            raise ManagerError(estr)
 
         # send SIGHUP
         if self.probed is not None:
@@ -95,8 +116,11 @@ class Manager:
         try:
             probed_cfg_file = open(self.probed_cfg_path, "w")
             probed_cfg_file.write(cfg_data)
+            probed_cfg_file.close()
         except IOError, e:
-            raise ManagerError("Unable to write config file: %s" % str(e))
+            estr = str("Unable to write config file: %s" % str(e))
+            self.logger.critical(estr)
+            raise ManagerError(estr)
 
         # send SIGHUP
         if self.probed is not None:

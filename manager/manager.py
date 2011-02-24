@@ -29,7 +29,11 @@ logger.addHandler(ls)
 # start up
 logger.debug("Starting up SLA-NG manager...")
 
-m = slang.manager.Manager(options.cfg_path)
+try:
+    m = slang.manager.Manager(options.cfg_path)
+except slang.manager.ManagerError:
+    print "Cannot start manager. Exiting."
+    sys.exit(0)
 
 # set signal handlers
 signal.signal(signal.SIGINT, m.sighandler)

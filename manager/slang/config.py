@@ -32,11 +32,17 @@ class Config:
                 Returns a string containing the value for config 
                 patameter param.
         """
-        f = open(self.filename, 'r')
-        lines = f.readlines()
+        try:
+            f = open(self.filename, 'r')
+            lines = f.readlines()
+        except IOError, e:
+            estr = "Unable to read manager config: %s" % str(e)
+            self.logger.critical(estr)
+            raise ConfigError(estr)
+
         if len(lines) < 5:
             raise ConfigError("Invalid configuration file")
-        if param == 'host':
+        if param == 'config_url':
             return lines[0].strip()
         if param == 'secret':
             return lines[1].strip()
