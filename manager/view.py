@@ -7,16 +7,17 @@ from optparse import OptionParser
 o = OptionParser()
 o.add_option('-f', dest='cfg_path', default='/etc/sla-ng/manager.conf')
 o.add_option('-i', dest='sessid', default=-1)
-o.add_option('-m', dest='mode', default='probes')
+o.add_option('-m', dest='mode', default='ping')
 o.add_option('-t', dest='interval', default='300')
 (options, args) = o.parse_args()
 
-if options.mode == 'probes':
+if options.mode == 'ping':
     import slang.probe
     import slang.config
     # Open FIFO
     config = slang.config.Config(options.cfg_path)
-    print 'Starting SLA-NG probe viewer, connecting to FIFO...'
+    print 'Starting SLA-NG ping viewer, connecting to FIFO...'
+    sys.stdout.flush()
     fifo = open(config.get_param('fifopath'), 'r');
 
     while True:
@@ -30,12 +31,16 @@ if options.mode == 'probes':
         print p
         sys.stdout.flush()
 
-if options.mode == 'averages':
+if options.mode == 'aggr':
     import time
     import xmlrpclib
+    print 'Starting SLA-NG aggr data viewer, connecting to RPC...'
+    sys.stdout.flush()
     s = xmlrpclib.ServerProxy('http://127.0.0.1:8000/RPC2')
     while True:
         # fetch data
+        print 'Calculating aggregated values...'
+        sys.stdout.flush()
         a = s.get_aggregate(int(options.sessid), int(options.interval), 
             int(time.time()-int(options.interval)), int(time.time()))
 

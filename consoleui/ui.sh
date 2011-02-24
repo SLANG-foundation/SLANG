@@ -324,6 +324,21 @@ menu_view()
 		pkill -9 -f sla-ng-view
 	fi
 }
+menu_aggr()
+{
+	dialog --inputbox "Type a measurement session ID." \
+	9 40 "1" 2> /tmp/ui.dialog
+	id=`cat /tmp/ui.dialog`
+	dialog --inputbox "Type an aggregation time." \
+	9 40 "300" 2> /tmp/ui.dialog
+	if [ "$?" -eq 0 ]
+	then
+		sla-ng-view -m aggr -i $id -t `cat /tmp/ui.dialog`\
+			 > /tmp/ui.dialog 2>&1 &
+		dialog --tailbox /tmp/ui.dialog 20 75
+		pkill -9 -f sla-ng-view
+	fi
+}
 
 menu_ping()
 {
@@ -354,9 +369,10 @@ do
 		15 50 10 \
 		n "Network Interface Settings" \
 		d "DNS Settings" \
-		c "SLA-NG Configuration" \
-		l "SLA-NG Log" \
-		v "SLA-NG Probe Viewer" \
+		c "Configure SLA-NG" \
+		l "Show SLA-NG Log" \
+		v "Show SLA-NG Pings" \
+		a "Show SLA-NG Aggregate" \
 		p "Ping Host" \
 		s "Start Shell (bash)"  \
 		2> /tmp/ui.dialog
@@ -383,6 +399,10 @@ do
 	if [ "`cat /tmp/ui.dialog`" = "v" ]
 	then
 		menu_view
+	fi
+	if [ "`cat /tmp/ui.dialog`" = "a" ]
+	then
+		menu_aggr
 	fi
 	if [ "`cat /tmp/ui.dialog`" = "p" ]
 	then
