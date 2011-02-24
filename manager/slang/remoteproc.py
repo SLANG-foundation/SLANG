@@ -30,6 +30,8 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         return True
 
+    xmlrpc_reload.signature = [ ['integer', ], ]
+
 
     def xmlrpc_recv_config(self, cfg):
         """ Receive a new config, reload application. """
@@ -40,6 +42,8 @@ class RemoteProc(xmlrpc.XMLRPC):
             return xmlrpclib.Fault(1100, str(e))
 
         return True
+
+    xmlrpc_recv_config.signature = [ [ 'integer', 'string' ], ]
 
 
     def xmlrpc_get_aggregate(self, session_id, aggr_interval, start, end):
@@ -65,7 +69,8 @@ class RemoteProc(xmlrpc.XMLRPC):
         aggr_times.append(end)
 
         for i in range(0, len(aggr_times) - 1):
-            r = self.pstore.get_aggregate(session_id, aggr_times[i]*1000000000, aggr_times[i+1]*1000000000)
+            r = self.pstore.get_aggregate(session_id, 
+                aggr_times[i]*1000000000, aggr_times[i+1]*1000000000)
             r['start'] = aggr_times[i]
 
             # set null values to zero before we send them over XML-RPC
@@ -76,6 +81,8 @@ class RemoteProc(xmlrpc.XMLRPC):
             result.append(r)
 
         return result
+
+    xmlrpc_get_aggregate.signature = [ ['array', 'integer', 'integer', 'integer', 'integer'], ]
 
 
     def xmlrpc_get_raw(self, session_id, start, end):
@@ -96,6 +103,8 @@ class RemoteProc(xmlrpc.XMLRPC):
             pdlist.append(p.toDict)
 
         return pd_list
+
+    xmlrpc_get_raw.signature = [ [ 'array', 'integer', 'integer', 'integer' ], ]
     
     def xmlrpc_get_raw_interval(self, session_id, start = 0, end = 300):
         """ Get raw data within a time interval
@@ -118,12 +127,19 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         return pd_list
 
+    xmlrpc_get_raw_interval.signature = [ [ 'array', 'integer', 'integer', 'integer' ], ]
+
     def xmlrpc_get_current_sessions(self):
         """ Get current measurement sessions there is data for. """
 
         return self.pstore.current_sessions()
 
+    xmlrpc_get_current_sessions.signature = [ [ 'array' ], ]
+
+
     def xmlrpc_get_storage_statistics(self):
         """ Get some statistics from the probe storage. """
         
         return self.pstore.get_storage_statistics()
+
+    xmlrpc_get_storage_statistics.signature = [ [ 'struct' ], ]
