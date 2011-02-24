@@ -33,6 +33,7 @@ then
 	cp probed/probed debian/usr/bin
 	cp consoleui/ui.sh debian/usr/bin/
 	cp manager/manager.py debian/usr/bin/sla-ng-manager
+	cp manager/view.py debian/usr/bin/sla-ng-view
 	cp manager/manager.conf debian/etc/sla-ng
 	cp -r manager/slang debian/usr/lib/python2.6/dist-packages
 	fakeroot dpkg-deb --build debian

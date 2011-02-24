@@ -5,8 +5,6 @@ import time
 # constants
 #
 STATE_PING = 'i'     # PING, the initial state */ 
-STATE_GOT_TS = 't'   # PING->TS, ability to detect PONG loss */ 
-STATE_GOT_PONG = 'o' # PING->PONG, ability to detect TS errors */ 
 STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
 STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
 STATE_PONGLOSS = 'l' # Ready, but timeout, got only TS, lost PONG */ 
@@ -74,6 +72,22 @@ class Probe:
 
         if self.rtt is None:
           self.rtt = self.getRtt()
+    def __str__(self):
+        if self.state == STATE_READY:
+            return str('Response %5d from %d in %d ns' % 
+                (self.seq, self.session_id, self.rtt))
+        if self.state == STATE_TSERROR:
+            return str('Error    %5d from %d (missing T2/T3)' % 
+                (self.seq, self.session_id))
+        if self.state == STATE_PONGLOSS:
+            return str('Timeout  %5d from %d (missing PONG)' % 
+                (self.seq, self.session_id))
+        if self.state == STATE_TIMEOUT:
+            return str('Timeout  %5d from %d (missing all)' % 
+                (self.seq, self.session_id))
+        if self.state == STATE_DUP:
+            return str('Unknown  %5d from %d (probably DUP)' % 
+                (self.seq, self.session_id))
 
     def getRtt(self):
         """ Calculates the rtt of the probe. """
