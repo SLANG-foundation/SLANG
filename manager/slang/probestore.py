@@ -457,7 +457,7 @@ class ProbeStoreDB(threading.Thread):
             # commit?
             if req == '--commit--':
                 conn.commit()
-                self.logger.info("Committing %d queries." % exec_c)
+                self.logger.debug("Committing %d queries." % exec_c)
                 exec_c = 0
                 continue
 

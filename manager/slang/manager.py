@@ -107,8 +107,8 @@ class Manager:
             self.probed.reload()
 
     
-    def recv_config(self, cfg):
-        """ Save config 'cfg' to disk and reload application. """
+    def recv_config(self, cfg_data):
+        """ Save config 'cfg_data' to disk and reload application. """
 
         self.logger.info("received configuration")
 

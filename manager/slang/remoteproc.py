@@ -3,6 +3,8 @@ import logging
 import time
 import xmlrpclib
 
+import manager
+
 class RemoteProc(xmlrpc.XMLRPC):
     """ Remote procedures """
 
@@ -23,7 +25,7 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         try:
             self.manager.reload()
-        except ManagerError, e:
+        except manager.ManagerError, e:
             return xmlrpclib.Fault(1100, str(e))
 
         return True
@@ -34,7 +36,7 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         try:
             self.manager.recv_config(cfg)
-        except ManagerError, e:
+        except manager.ManagerError, e:
             return xmlrpclib.Fault(1100, str(e))
 
         return True

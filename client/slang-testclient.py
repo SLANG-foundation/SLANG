@@ -12,7 +12,7 @@ while True:
     t_start = time.time()
 
     # fetch data
-    aggr_list = s.get_aggregate(1, 1, int(time.time()-20), int(time.time()-19))
+    aggr_list = s.get_aggregate(2, 1800, int(time.time()-3600*2), int(time.time()))
     t_total = time.time() - t_start
 
     for aggr in aggr_list:
