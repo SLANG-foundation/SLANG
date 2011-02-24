@@ -303,7 +303,7 @@ menu_cfg()
 	management server, via an XML-RPM API. The settings below\
 	specify how to communicate with the SLA-NG manager. If you\
 	like to edit the 'probed' configuration manually, you find\
-	it in /etc/slang/probed.conf (by default)." 17 71 5 \
+	it in /tmp/probed.conf by default." 17 71 5 \
 	"Manager XML-RPC URL"    1 2 "$c1" 1 30 35 210 \
 	"Manager shared secret"  2 2 "$c2" 2 30 35 210 \
 	"Probe TCP/UDP port"     3 2 "$c3" 3 30 35 210 \
