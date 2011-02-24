@@ -71,6 +71,7 @@ class Manager:
 
             # Create XML-RPC server
             self.xmlrpc = remoteproc.RemoteProc(self.pstore, self)
+            xmlrpc.addIntrospection(self.xmlrpc)
             reactor.listenTCP(8000, server.Site(self.xmlrpc))
 
         except Exception, e:
