@@ -1,0 +1,33 @@
+#!/bin/sh
+# Start/stop the SLA-NG manager daemon.
+#
+### BEGIN INIT INFO
+# Provides:          sla-ng
+# Required-Start:    $syslog  
+# Required-Stop:     $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      1 6
+# Short-Description: SLA-NG hardware ping management daemon 
+### END INIT INFO
+
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
+NAME="sla-ng-manager"
+DESC="SLA-NG Manager Daemon"
+DAEMON="/usr/bin/$NAME"
+
+case "$1" in
+start)
+	echo "Starting $DESC" "$NAME"
+	pkill -9 -f sla-ng-manager
+	$DAEMON &
+	;;
+restart)
+	echo "Restarting $DESC" "$NAME"
+	pkill -9 -f $NAME
+	$DAEMON
+	;;
+stop)
+	echo "Stopping $DESC" "$NAME"
+	pkill -9 -f $NAME
+	;;
+esac

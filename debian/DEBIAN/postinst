@@ -1,0 +1,2 @@
+#!/bin/sh
+update-rc.d sla-ng start 20 2 3 4 5 . stop 0 1 6 .

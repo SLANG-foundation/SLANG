@@ -27,17 +27,17 @@ then
 		make
 	fi
 	rm -r debian/usr/
+	rm -r debian/etc/sla-ng
 	mkdir -p debian/usr/lib/python2.6/dist-packages
 	mkdir -p debian/usr/bin
 	mkdir -p debian/etc/sla-ng
 	cp probed/probed debian/usr/bin
-	cp consoleui/ui.sh debian/usr/bin/
+	cp appliance/ui.sh debian/usr/bin/
 	cp manager/manager.py debian/usr/bin/sla-ng-manager
 	cp manager/view.py debian/usr/bin/sla-ng-view
 	cp manager/manager.conf debian/etc/sla-ng
 	cp -r manager/slang debian/usr/lib/python2.6/dist-packages
-	fakeroot dpkg-deb --build debian
-	mv debian.deb sla-ng.deb
+	fakeroot dpkg-deb --build debian sla-ng.deb
 	exit
 fi
 if [ "$1" = "lint" ]

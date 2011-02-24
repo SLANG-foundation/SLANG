@@ -367,8 +367,8 @@ do
 	dialog  --title "SLA-NG Configuration Console" \
 		--menu "Welcome! Navigate using arrow keys and TAB." \
 		15 50 10 \
-		n "Network Interface Settings" \
-		d "DNS Settings" \
+		n "Configure Network Interfaces" \
+		d "Configure DNS" \
 		c "Configure SLA-NG" \
 		l "Show SLA-NG Log" \
 		v "Show SLA-NG Pings" \
