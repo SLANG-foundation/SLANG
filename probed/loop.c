@@ -6,7 +6,7 @@
  */ 
 
 /**
- * \file   mainloop.c
+ * \file   loop.c
  * \brief  The main loop for SLA-NG, handling client/server operations
  * \author Anders Berggren <anders@halon.se>
  * \author Lukas Garberg <lukas@spritelink.net>
@@ -126,7 +126,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 				} 
 				/* CLIENT: Update results with received UDP PONG */
 				if (pkt.data[0] == TYPE_PONG) {
-					client_res_update(&pkt.addr.sin6_addr, rx, &pkt.ts);
+					client_res_update(&pkt.addr, rx, &pkt.ts, pkt.dscp);
 				} 
 			/* SERVER: TCP socket, accept timestamp connection */
 			} else if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
@@ -165,7 +165,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					if (addr2str(&pkt.addr, addrstr) == 0)
 						syslog(LOG_INFO, "client: %s: Connected", addrstr);
 				} else if (rx->type == TYPE_TIME) {
-					client_res_update(&pkt.addr.sin6_addr, rx, NULL);
+					client_res_update(&pkt.addr, rx, NULL, -1);
 				}
 			} else {
 				/* It's a client. They shouldn't speak, it's probably a

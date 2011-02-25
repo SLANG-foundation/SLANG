@@ -9,12 +9,13 @@
 #include <netinet/in.h>
 
 #define APP_AND_VERSION "SLA-NG probed 0.1"
+#define TIMEOUT 10
+#define TMPLEN 512
 #define DATALEN 48
 #define TYPE_PING 'i'
 #define TYPE_PONG 'o'
 #define TYPE_TIME 't'
 #define TYPE_HELO 'h'
-#define TMPLEN 512
 
 typedef struct timespec ts_t;
 typedef struct sockaddr_in6 addr_t;

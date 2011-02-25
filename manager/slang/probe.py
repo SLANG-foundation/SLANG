@@ -4,12 +4,12 @@ import time
 #
 # constants
 #
-STATE_PING = 'i'     # PING, the initial state */ 
+STATE_OK = 'o'       # Ready, got both PONG and valid TS */ 
 STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
-STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
+STATE_DSERROR = 'd'  # Ready, but invalid traffic class */ 
 STATE_PONGLOSS = 'l' # Ready, but timeout, got only TS, lost PONG */ 
-STATE_READY = 'r'    # Ready, got both PONG and valid TS */ 
-STATE_DUP = 'd'      # Got a PONG we didn't recognize, DUP? */ 
+STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
+STATE_DUP = 'u'      # Got a PONG we didn't recognize, DUP? */ 
 
 def from_struct(structdata):
     """ Create a probe from the struct data """
@@ -73,8 +73,11 @@ class Probe:
         if self.rtt is None:
           self.rtt = self.getRtt()
     def __str__(self):
-        if self.state == STATE_READY:
+        if self.state == STATE_OK:
             return str('Response %5d from %d in %d ns' % 
+                (self.seq, self.session_id, self.rtt))
+        if self.state == STATE_DSERROR:
+            return str('Error    %5d from %d in %d ns (invalid DSCP)' % 
                 (self.seq, self.session_id, self.rtt))
         if self.state == STATE_TSERROR:
             return str('Error    %5d from %d (missing T2/T3)' % 
@@ -125,7 +128,7 @@ class Probe:
     def successful(self):
         """ Do we have all timestamp? """
 
-        return self.state == STATE_READY
+        return self.state == STATE_OK
 
     def set_prev_probe(self, prev_probe):
         """ Perform calculations which require previous probe.
