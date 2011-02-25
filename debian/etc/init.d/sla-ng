@@ -15,20 +15,31 @@ NAME="sla-ng-manager"
 DESC="SLA-NG Manager Daemon"
 DAEMON="/usr/bin/$NAME"
 
+killhard()
+{
+	pkill -f $NAME
+	sleep 3
+	pkill -9 -f $NAME
+	pkill -9 -f probed 
+}
+
+starthard()
+{
+	killhard
+	$DAEMON
+}
+
 case "$1" in
 start)
 	echo "Starting $DESC" "$NAME"
-	pkill -9 -f sla-ng-manager
-	$DAEMON &
+	starthard
 	;;
 restart)
 	echo "Restarting $DESC" "$NAME"
-	pkill -f $NAME
-	sleep 3
-	$DAEMON
+	starthard
 	;;
 stop)
 	echo "Stopping $DESC" "$NAME"
-	pkill -f $NAME
+	killhard
 	;;
 esac
