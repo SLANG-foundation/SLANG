@@ -23,11 +23,12 @@ start)
 	;;
 restart)
 	echo "Restarting $DESC" "$NAME"
-	pkill -9 -f $NAME
+	pkill -f $NAME
+	sleep 3
 	$DAEMON
 	;;
 stop)
 	echo "Stopping $DESC" "$NAME"
-	pkill -9 -f $NAME
+	pkill -f $NAME
 	;;
 esac
