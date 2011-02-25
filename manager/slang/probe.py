@@ -44,6 +44,7 @@ class Probe:
     rtt = None
     delay_variation = None
     in_order = None
+    dups = None
 
     addr = None
     session_id = None
@@ -66,12 +67,15 @@ class Probe:
         self.in_order = data[9]
         self.rtt = data[10]
         self.delay_variation = data[11]
+        self.dups = 0
 
         self.has_given = False
         self.has_gotten = False
 
         if self.rtt is None:
           self.rtt = self.getRtt()
+
+
     def __str__(self):
         if self.state == STATE_OK:
             return str('Response %5d from %d in %d ns' % 
@@ -93,6 +97,7 @@ class Probe:
                 (self.seq, self.session_id))
         return 'Unable to parse' + self.state
 
+
     def getRtt(self):
         """ Calculates the rtt of the probe. """
 
@@ -100,6 +105,7 @@ class Probe:
             return (self.t4 - self.t1) - (self.t3 - self.t2)
         else:
             return None
+
 
     def toDict(self):
         """ Returns data as a dict.
@@ -121,15 +127,18 @@ class Probe:
             'delayvar': self.delay_variation
         }
 
+
     def lost(self):
         """ Was the packet lost? """
         
         return self.state == STATE_TIMEOUT
 
+
     def successful(self):
         """ Do we have all timestamp? """
 
         return self.state == STATE_OK or self.state == STATE_DSERROR
+
 
     def set_prev_probe(self, prev_probe):
         """ Perform calculations which require previous probe.
@@ -142,6 +151,7 @@ class Probe:
 
         self.has_gotten = True
         prev_probe.has_given = True
+
 
 class ProbeSet(list):
     """ A set of probes. """

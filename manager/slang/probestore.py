@@ -106,6 +106,24 @@ class ProbeStore:
 
         """
 
+        # duplicate packet?
+        if p.state == 'd':
+            
+            # Do we have session in list? If not, discard.
+            if p.session_id not in self.probes:
+                return
+
+            # Do we have the sequence number in list?
+            # If not, the result has pobably been written to database already.
+            if p.seq in self.probes[p.session_id]:
+                self.probes[p.session_id][p.seq].dups += 1
+            else:
+                sql = ("UPDATE probes SET duplicates = duplicates + 1 " +
+                    "WHERE session_id = ? AND seq = ?")
+                self.db.execute(sql, (p.session_id, p.seq))
+
+            return
+
         if not p.session_id in self.max_seq:
             # No max sequence number for current measurement session.
             # Probably new session. Add packet and mark as has gotten delay variation.
@@ -170,7 +188,7 @@ class ProbeStore:
                     (p.session_id, p.seq, p.state, p.created,
                      p.t1, p.t2, p.t2, p.t4, 
                      p.rtt, dv,
-                     p.in_order, 0
+                     p.in_order, p.dups
                     ),
             )
                       
@@ -324,7 +342,7 @@ class ProbeStore:
 
 
         where = "session_id = ? AND created >= ? AND created < ? AND (state = ?  OR state = ? )"
-        whereargs = (session_id, start, end, STATE_OK, STATE_DSERROR)
+        whereargs = (session_id, start, end, probe.STATE_OK, probe.STATE_DSERROR)
         # get max, min and average
         sql = ("SELECT MAX(rtt) AS max, MIN(rtt) AS min, " + 
             "AVG(rtt) AS avg FROM probes " + 
@@ -368,11 +386,12 @@ class ProbeStore:
         else:
             return None
 
-        where = "session_id = ? AND created >= ? AND created < ? (AND state = ?  OR state = ?)"
+        where = "session_id = ? AND created >= ? AND created < ? AND (state = ?  OR state = ?)"
         whereargs = (session_id, start, end, probe.STATE_OK, probe.STATE_DSERROR)
 
         sql = "SELECT COUNT(*) AS count FROM probes WHERE " + where
         res = self.db.select(sql, whereargs)
+	nrows = 0
         for row in res:
             nrows = row['count']
 
