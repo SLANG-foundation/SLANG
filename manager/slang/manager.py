@@ -18,9 +18,7 @@ import remoteproc
 
 class Manager:
 
-    manager_host = None
     cfg_path = None
-    probed_cfg_path = "/tmp/probed.conf"
 
     logger = None
     config = None
@@ -39,10 +37,6 @@ class Manager:
 
         self.cfg_path = cfg_path
         self.config = config.Config(self.cfg_path)
-        try:
-            self.config_url = self.config.get_param('config_url') 
-        except config.ConfigError, e:
-            raise ManagerError()
 
         # fetch configuration
         try:
@@ -51,28 +45,28 @@ class Manager:
         except ManagerError, e:
 
             # if there is an existing config file, use it
-            if os.path.isfile(self.probed_cfg_path):
-                self.logger.info("using existing config")
+            if os.path.isfile(self.config.get('probed_cfg')):
+                self.logger.info("Using existing config")
 
             else:
                 # Otherwise, try to write an empty one for probed
-                self.logger.warning("writing empty config")
+                self.logger.warning("Writing empty config")
                 try:
-                    f = open(self.probed_cfg_path, "w")
+                    f = open(self.config.get('probed_cfg'), 'w')
                     f.write("<config></config>")
                     f.close()
                 except IOError, e:
-                    self.logger.critical("unable to write empty config: %s" % str(e))
+                    self.logger.critical("Unable to write cfg: %s" % str(e))
 
         try:
             self.pstore = probestore.ProbeStore()
-            self.maintainer = maintainer.Maintainer(self.pstore)
-            self.probed = probed.Probed(self.pstore, self.probed_cfg_path)
+            self.maintainer = maintainer.Maintainer(self.pstore, self)
+            self.probed = probed.Probed(self.pstore)
 
             # Create XML-RPC server
-            self.xmlrpc = remoteproc.RemoteProc(self.pstore, self)
-            xmlrpc.addIntrospection(self.xmlrpc)
-            reactor.listenTCP(8000, server.Site(self.xmlrpc))
+            rpc = remoteproc.RemoteProc(self.pstore, self)
+            xmlrpc.addIntrospection(rpc)
+            reactor.listenTCP(int(self.config.get('rpcport')), server.Site(rpc))
 
         except Exception, e:
             self.logger.critical("Cannot start: %s" % e)
@@ -87,36 +81,35 @@ class Manager:
            the configuration.
         """
 
-        self.logger.info("received reload request")
+        self.logger.info('Reloading configuration...')
 
         try:
             # fetch probed config
-            f_cfg = urllib2.urlopen(self.config_url, timeout=5)
+            f_cfg = urllib2.urlopen(self.config.get('configurl'), timeout=5)
             cfg_data = f_cfg.read()
+            self.write_config(cfg_data)
 
-            # write to disk
-            probed_cfg_file = open(self.probed_cfg_path, "w")
-            probed_cfg_file.write(cfg_data)
-            probed_cfg_file.close()
-
-        except (urllib2.URLError, IOError), e:
-            estr = str("unable to fetch probed config (%s): %s" % (e.__class__.__name__, str(e)))
+        except urllib2.URLError, e:
+            estr = str('Config fetch error: %s' % str(e))
             self.logger.critical(estr)
             raise ManagerError(estr)
-
-        # send SIGHUP
-        if self.probed is not None:
-            self.probed.reload()
-
     
-    def recv_config(self, cfg_data):
+    def write_config(self, cfg_data):
         """ Save config 'cfg_data' to disk and reload application. """
 
-        self.logger.info("received configuration")
+        self.logger.info('Writing "probed" configuration...')
 
         # write to disk
         try:
-            probed_cfg_file = open(self.probed_cfg_path, "w")
+            # diff files
+            probed_cfg_file = open(self.config.get('probed_cfg'), 'r')
+            current_cfg_data = probed_cfg_file.read()
+            probed_cfg_file.close()
+            if current_cfg_data == cfg_data:
+                self.logger.info('Config unchanged, not touched')
+                return
+
+            probed_cfg_file = open(self.config.get('probed_cfg'), "w")
             probed_cfg_file.write(cfg_data)
             probed_cfg_file.close()
         except IOError, e:

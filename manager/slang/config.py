@@ -5,6 +5,7 @@ import logging
 class Config:
 
     filename = None
+    lines = None
     __shared_state = {}
     
     def __init__(self, filename=None):
@@ -20,42 +21,44 @@ class Config:
             raise ConfigError("No config file chosen")
 
         elif len(self.__shared_state) == 0:
-            
             # creating a brand new instance
             self.filename = filename
             self.logger = logging.getLogger(self.__class__.__name__)
-            self.logger.debug("Initializing configuration module.")
+            self.logger.debug('Initializinging configuration module')
+            try:
+                f = open(self.filename, 'r')
+                self.lines = f.readlines()
+            except IOError, e:
+                estr = "Unable to read manager config: %s" % str(e)
+                self.logger.critical(estr)
+                raise ConfigError(estr)
+        if len(self.lines) < 5:
+            raise ConfigError('Invalid configuration file')
 
-    def get_param(self, param):
+    def get(self, param):
         """ Get a config parameter
                 
                 Returns a string containing the value for config 
                 patameter param.
         """
-        try:
-            f = open(self.filename, 'r')
-            lines = f.readlines()
-        except IOError, e:
-            estr = "Unable to read manager config: %s" % str(e)
-            self.logger.critical(estr)
-            raise ConfigError(estr)
-
-        if len(lines) < 5:
-            raise ConfigError("Invalid configuration file")
-        if param == 'config_url':
-            return lines[0].strip()
-        if param == 'secret':
-            return lines[1].strip()
-        if param == 'port':
-            return lines[2].strip()
-        if param == 'timestamp':
-            return lines[3].strip()
-        if param == 'interface':
-            return lines[4].strip()
         if param == 'fifopath':
             return '/tmp/probed.fifo'
         if param == 'dbpath':
             return ':memory:' 
+        if param == 'rpcport':
+            return '8000' 
+        if param == 'probed_cfg':
+            return '/tmp/probed.conf' 
+        if param == 'configurl':
+            return self.lines[0].strip()
+        if param == 'secret':
+            return self.lines[1].strip()
+        if param == 'port':
+            return self.lines[2].strip()
+        if param == 'timestamp':
+            return self.lines[3].strip()
+        if param == 'interface':
+            return self.lines[4].strip()
         raise ConfigError("Invalid config parameter")
 
     def get_path(self):

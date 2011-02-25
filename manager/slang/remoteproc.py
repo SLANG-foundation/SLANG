@@ -37,7 +37,7 @@ class RemoteProc(xmlrpc.XMLRPC):
         """ Receive a new config, reload application. """
 
         try:
-            self.manager.recv_config(cfg)
+            self.manager.write_config(cfg)
         except manager.ManagerError, e:
             return xmlrpclib.Fault(1100, str(e))
 

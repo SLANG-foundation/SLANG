@@ -10,20 +10,24 @@ class Maintainer(threading.Thread):
 
     flush_interval = 1
     delete_interval = 600
+    reload_interval = 3600
     
     logger = None
     pstore = None
+    manager = None
     thread_stop = False
 
     last_flush = None
     last_delete = None
+    last_reload = None
 
-    def __init__(self, pstore):
+    def __init__(self, pstore, manager):
 
         threading.Thread.__init__(self, name=self.__class__.__name__)
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
+        self.manager = manager
         
         # save ProbeStorage instance
         self.pstore = pstore
@@ -31,6 +35,7 @@ class Maintainer(threading.Thread):
         # initialize time tracking instance variables
         self.last_flush = time()
         self.last_delete = time()
+        self.last_reload = time()
         
 
     def run(self):
@@ -39,18 +44,19 @@ class Maintainer(threading.Thread):
         while True:
 
             if self.thread_stop:
-                self.logger.info("Stopping thread...")
                 break
             
             if (time() - self.last_flush) >= self.flush_interval:
-                #self.logger.debug("Starting flush...")
                 self.pstore.flush()
                 self.last_flush = time()
 
             if (time() - self.last_delete) >= self.delete_interval:
-                self.logger.debug("Starting delete...")
                 self.pstore.delete(7200)
                 self.last_delete = time()
+            
+            if (time() - self.last_reload) >= self.reload_interval:
+                self.manager.reload()
+                self.last_reload = time()
 
             sleep(1)
             

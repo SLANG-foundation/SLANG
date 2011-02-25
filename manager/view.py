@@ -18,7 +18,7 @@ if options.mode == 'ping':
     config = slang.config.Config(options.cfg_path)
     print 'Starting SLA-NG ping viewer, connecting to FIFO...'
     sys.stdout.flush()
-    fifo = open(config.get_param('fifopath'), 'r');
+    fifo = open(config.get('fifopath'), 'r');
 
     while True:
         data = fifo.read(128)

@@ -37,26 +37,31 @@ def daemonize (stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
      
 # Read parameters
 p = OptionParser()
-p.add_option('-f', dest="cfg_path", default="/etc/sla-ng/manager.conf", 
-    help="config file path")
+p.add_option('-f', dest='cfg_path', default='/etc/sla-ng/manager.conf')
+p.add_option('-m', dest='mode', default='bg')
 (options, args) = p.parse_args()
 
-# daemonize
-daemonize()
 
 # set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+lformat = logging.Formatter('sla-ng-manager: %(name)s: %(message)s')
 
-lformat = logging.Formatter('manager: %(name)s: %(message)s')
-
-ls = logging.handlers.SysLogHandler(address='/dev/log')
-ls.setFormatter(lformat)
-ls.setLevel(logging.DEBUG)
-logger.addHandler(ls)
+# daemonize
+if options.mode == 'bg':
+    daemonize()
+    ls = logging.handlers.SysLogHandler(address='/dev/log')
+    ls.setFormatter(lformat)
+    ls.setLevel(logging.INFO)
+    logger.addHandler(ls)
+else:
+    lc = logging.StreamHandler()
+    lc.setLevel(logging.INFO)
+    lc.setFormatter(lformat)
+    logger.addHandler(lc)
 
 # start up
-logger.debug("Starting up SLA-NG manager...")
+logger.info("Starting up SLA-NG manager...")
 
 try:
     m = slang.manager.Manager(options.cfg_path)
