@@ -107,7 +107,7 @@ class ProbeStore:
         """
 
         # duplicate packet?
-        if p.state == 'd':
+        if p.state == probe.STATE_DUP:
             
             # Do we have session in list? If not, discard.
             if p.session_id not in self.probes:
