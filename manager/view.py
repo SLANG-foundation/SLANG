@@ -49,7 +49,7 @@ if options.mode == 'aggr':
                 (
                     aggr['success'],
                     aggr['timestamperror'],
-                    aggr['dscploss'],
+                    aggr['dscperror'],
                     aggr['pongloss'],
                     aggr['timeout'],
                     aggr['dup'],

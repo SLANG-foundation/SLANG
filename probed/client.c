@@ -45,12 +45,13 @@
 #define MASK_DONE 7 /* Got everything */
 #define MASK_DSCP 8 /* DSCP error occured */
 
-#define STATE_TSERROR 'e'  /* Ready, but invalid timestamps */
-#define STATE_DSERROR 'd'  /* Ready, but invalid TOS/traffic class */
-#define STATE_TIMEOUT 't'  /* Ready, but timeout, got neither PONG or TS */
-#define STATE_PONGLOSS 'l' /* Ready, but timeout, got only TS, lost PONG */
 #define STATE_OK 'o'       /* Ready, got both PONG and valid TS */
+#define STATE_DSERROR 'd'  /* Ready, but invalid TOS/traffic class */
+#define STATE_TSERROR 'e'  /* Ready, but invalid timestamps */
+#define STATE_PONGLOSS 'l' /* Ready, but timeout, got only TS, lost PONG */
+#define STATE_TIMEOUT 't'  /* Ready, but timeout, got neither PONG or TS */
 #define STATE_DUP 'u'      /* Got a PONG we didn't recognize, DUP? */
+
 #define XML_NODE "probe"
 
 /* List of probe results */
@@ -85,6 +86,7 @@ static int res_ok = 0;
 static int res_timeout = 0;
 static int res_pongloss = 0;
 static int res_tserror = 0;
+static int res_dserror = 0;
 static int res_dup = 0;
 static long long res_rtt_total = 0;
 static ts_t res_rtt_min, res_rtt_max;
@@ -302,7 +304,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 		}
 		/* For all packets; update the status mask to status codes */
 		/* Done, we have received a response! */
-		if (r->state & MASK_DONE) {
+		if ((r->state & MASK_DONE) == MASK_DONE) {
 			/* Check for DSCP error */
 			if (r->state & MASK_DSCP)
 				r->state = STATE_DSERROR;
@@ -350,13 +352,13 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
-			if (cfg.op == CLIENT) { 
+			if (cfg.op == CLIENT) {
 				if (r->state == STATE_TSERROR) {
 					res_tserror++;
 					printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
 							(int)r->seq, (int)r->id, (int)diff.tv_sec);
 				} else if (r->state == STATE_DSERROR) {
-					res_pongloss++;
+					res_dserror++;
 					printf("Error    %4d from %d in %d sec (invalid DSCP)\n", 
 							(int)r->seq, (int)r->id, (int)diff.tv_sec);
 				} else if (r->state == STATE_PONGLOSS) {
@@ -422,13 +424,16 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 
 void client_res_summary(/*@unused@*/ int sig) {
 	float loss;
+	long long total;
 
-	loss = (float)(res_timeout + res_pongloss) / 
-			(float)(res_ok + res_tserror + res_timeout + res_pongloss);
+	total = (res_ok + res_dserror + res_tserror + res_timeout + res_pongloss);
+	loss = (float)(res_timeout + res_pongloss) / (float)total;
 	loss = loss * 100;
 	printf("\n");
-	printf("%d ok, %d ts err, %d lost pong, %d timeout, %d dup, %f%% loss\n", 
-			res_ok, res_tserror, res_pongloss, res_timeout, res_dup, loss);
+	printf("%d ok, %d dscp errors, %d ts errors, %d unknown/dups\n", 
+			res_ok, res_dserror, res_tserror, res_dup);
+	printf("%d lost pongs, %d timeouts, %f%% loss\n", 
+			res_pongloss, res_timeout, loss);
 	if (res_rtt_max.tv_sec > 0)
 		printf("max: %ld.%09ld", res_rtt_max.tv_sec, res_rtt_max.tv_nsec);
 	else 

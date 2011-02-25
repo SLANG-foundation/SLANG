@@ -5,8 +5,8 @@ import time
 # constants
 #
 STATE_OK = 'o'       # Ready, got both PONG and valid TS */ 
-STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
 STATE_DSERROR = 'd'  # Ready, but invalid traffic class */ 
+STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
 STATE_PONGLOSS = 'l' # Ready, but timeout, got only TS, lost PONG */ 
 STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
 STATE_DUP = 'u'      # Got a PONG we didn't recognize, DUP? */ 
@@ -91,6 +91,7 @@ class Probe:
         if self.state == STATE_DUP:
             return str('Unknown  %5d from %d (probably DUP)' % 
                 (self.seq, self.session_id))
+        return 'Unable to parse' + self.state
 
     def getRtt(self):
         """ Calculates the rtt of the probe. """
@@ -128,7 +129,7 @@ class Probe:
     def successful(self):
         """ Do we have all timestamp? """
 
-        return self.state == STATE_OK
+        return self.state == STATE_OK or self.state == STATE_DSERROR
 
     def set_prev_probe(self, prev_probe):
         """ Perform calculations which require previous probe.

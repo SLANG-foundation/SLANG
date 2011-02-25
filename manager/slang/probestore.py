@@ -323,8 +323,7 @@ class ProbeStore:
             retdata['dscperror'] = row['c']
 
 
-        where = "session_id = ? AND created >= ? AND created < ? " +
-            "AND (state = ?  OR state = ? )"
+        where = "session_id = ? AND created >= ? AND created < ? AND (state = ?  OR state = ? )"
         whereargs = (session_id, start, end, STATE_OK, STATE_DSERROR)
         # get max, min and average
         sql = ("SELECT MAX(rtt) AS max, MIN(rtt) AS min, " + 
