@@ -70,7 +70,7 @@ struct res {
  * Struct for storing configuration for one measurement session.
  */
 struct msess {
-	uint16_t id; /**< Measurement session ID */
+	num_t id; /**< Measurement session ID */
 	struct sockaddr_in6 dst; /**< Destination address and port */
 	struct timeval interval; /**< Probe interval */
 	int timeout; /**< Timeout for PING */
@@ -93,7 +93,7 @@ static ts_t res_rtt_min, res_rtt_max;
 
 static void client_res_insert(addr_t *a, data_t *d, ts_t *ts);
 static pid_t client_fork(int pipe, addr_t *server);
-static int client_msess_isaddrtaken(addr_t *addr, uint16_t id);
+static int client_msess_isaddrtaken(addr_t *addr, num_t id);
 
 /**
  * Initializes global variables
@@ -407,7 +407,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 		memset(&r_stat, 0, sizeof r_stat);
 		(void)clock_gettime(CLOCK_REALTIME, &r_stat.created);
 		r_stat.state = STATE_DUP;
-		memcpy(&r_stat.addr, a, sizeof r->addr);
+		memcpy(&r_stat.addr, a, sizeof r_stat.addr);
 		r_stat.id = d->id;
 		r_stat.seq = d->seq;
 		if (cfg.op == DAEMON) 
@@ -456,7 +456,7 @@ void client_res_summary(/*@unused@*/ int sig) {
  *
  * \return 0 on success, otherwise -1
  */
-int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id) {
+int client_msess_add(char *port, char *a, uint8_t dscp, int wait, num_t id) {
 	int ret;
 	struct msess *s;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
@@ -563,7 +563,7 @@ void client_msess_forkall(int pipe) {
  * \return            0 on success, -1 on error
  */
 int client_msess_reconf(char *port, char *cfgpath) {
-	int ret = 0;
+	int ok, ret = 0;
 	struct msess *s, *s_tmp;
 	struct res *r, *r_tmp;
 	struct addrinfo /*@dependent@*/ dst_hints, *dst_addr;
@@ -625,18 +625,19 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			continue;
 		if (strncmp((char *)n->name, XML_NODE, strlen(XML_NODE)) != 0)
 			continue;
-		s = malloc(sizeof *s);
-		if (s == NULL) continue;
-		memset(s, 0, sizeof *s);
 		/* Get ID */
 		c = xmlGetProp(n, (xmlChar *)"id");
-		if (c != NULL) {
-			s->id = (uint8_t)atoi((char *)c);
-		} else {
+		if (c == NULL) {
 			syslog(LOG_ERR, "Probe is missing id=");
 			continue;
 		}
+		s = malloc(sizeof *s);
+		if (s == NULL) continue;
+		s->id = (num_t)atoi((char *)c);
 		xmlFree(c);
+		memset(s, 0, sizeof *s);
+		s->interval.tv_usec = 10000;
+		ok = 0;
 		for (k = n->children; k != NULL; k = k->next) {
 			/* Begin <address/dscp/etc> loop */
 			if (k->type != XML_ELEMENT_NODE) 
@@ -657,8 +658,8 @@ int client_msess_reconf(char *port, char *cfgpath) {
 				if (ret < 0) {
 					syslog(LOG_ERR, "Probe hostname %s: %s", (char *)c, 
 							gai_strerror(ret));
-					freeaddrinfo(dst_addr);
 				} else {
+					ok = 1;
 					memcpy(&s->dst, dst_addr->ai_addr, sizeof s->dst);
 					freeaddrinfo(dst_addr);
 				}
@@ -671,7 +672,10 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			/* End <address/dscp/etc> loop */
 		}
 		/*@ -mustfreeonly -immediatetrans TODO wtf */
-		LIST_INSERT_HEAD(&msess_head, s, list);
+		if (ok == 1)
+			LIST_INSERT_HEAD(&msess_head, s, list);
+		else
+			free(s);
 		/*@ +mustfreeonly +immediatetrans */
 		/* End <probe> loop */
 		/*@ -branchstate -mustfreefresh TODO wtf */
@@ -709,7 +713,7 @@ int client_msess_gothello(addr_t *addr) {
  * \param[in] addr The address to look for
  * \return         1 if it was found, otherwise 0
  */
-int client_msess_isaddrtaken(addr_t *addr, uint16_t id) {
+int client_msess_isaddrtaken(addr_t *addr, num_t id) {
 	struct msess *s;
 	size_t len;
 

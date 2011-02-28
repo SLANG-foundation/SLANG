@@ -143,7 +143,7 @@ netconf_bring_all_if_up()
 	netconf_get_if_list
 	for i in $if_list
 	do
-		ifconfig $i up > /dev/null 2>&1
+		ip link set $i up > /dev/null 2>&1
 	done
 }
 
@@ -152,7 +152,7 @@ netconf_get_if_stat()
 	tmp=`mii-tool $1 2> /dev/null |grep "link ok"`
 	if [ "$?" -eq 0 ]
 	then
-		if_stat=`mii-tool eth0 2> /dev/null | cut -d ' ' -f3`
+		if_stat=`mii-tool $1 2> /dev/null | cut -d ' ' -f3`
 	else
 		if_stat="no-link"
 	fi
@@ -160,7 +160,7 @@ netconf_get_if_stat()
 
 netconf_get_if_list()
 {
-	if_list=`ip -o link | cut -d':' -f2|tr -d ' '`
+	if_list=`ip -o link | grep -v "1: lo:" | cut -d':' -f2|tr -d ' '`
 }
 
 # MENU

@@ -12,5 +12,5 @@ void client_res_summary(/*@unused@*/ int sig);
 void client_msess_transmit(int s_udp);
 void client_msess_forkall(int pipe);
 int client_msess_reconf(char *port, char *cfgpath);
-int client_msess_add(char *port, char *a, uint8_t dscp, int wait, uint16_t id);
+int client_msess_add(char *port, char *a, uint8_t dscp, int wait, num_t id);
 int client_msess_gothello(addr_t *addr);
