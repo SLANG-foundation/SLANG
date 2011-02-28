@@ -99,16 +99,19 @@ class Manager:
 
         self.logger.info('Writing "probed" configuration...')
 
-        # write to disk
+        # diff files
         try:
-            # diff files
             probed_cfg_file = open(self.config.get('probed_cfg'), 'r')
             current_cfg_data = probed_cfg_file.read()
             probed_cfg_file.close()
             if current_cfg_data == cfg_data:
                 self.logger.info('Config unchanged, not touched')
                 return
+        except IOError, e:
+	    pass
 
+        # write to disk
+        try:
             probed_cfg_file = open(self.config.get('probed_cfg'), "w")
             probed_cfg_file.write(cfg_data)
             probed_cfg_file.close()

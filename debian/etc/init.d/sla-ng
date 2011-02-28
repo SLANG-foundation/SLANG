@@ -15,19 +15,36 @@ NAME="sla-ng-manager"
 DESC="SLA-NG Manager Daemon"
 DAEMON="/usr/bin/$NAME"
 
+. /lib/lsb/init-functions
+
+killhard()
+{
+	pkill -f $NAME
+	sleep 3
+	pkill -9 -f $NAME
+	pkill -9 -f probed 
+}
+
+starthard()
+{
+	killhard
+	$DAEMON
+}
+
 case "$1" in
 start)
-	echo "Starting $DESC" "$NAME"
-	pkill -9 -f sla-ng-manager
-	$DAEMON &
+	log_daemon_msg "Starting $DESC" "$NAME"
+	starthard
+	log_end_msg 0
 	;;
 restart)
-	echo "Restarting $DESC" "$NAME"
-	pkill -9 -f $NAME
-	$DAEMON
+	log_daemon_msg "Restarting $DESC" "$NAME"
+	starthard
+	log_end_msg 0
 	;;
 stop)
-	echo "Stopping $DESC" "$NAME"
-	pkill -9 -f $NAME
+	log_daemon_msg "Stopping $DESC" "$NAME"
+	killhard
+	log_end_msg 0
 	;;
 esac

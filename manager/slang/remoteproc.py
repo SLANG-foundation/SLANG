@@ -85,6 +85,28 @@ class RemoteProc(xmlrpc.XMLRPC):
     xmlrpc_get_aggregate.signature = [ ['array', 'integer', 'integer', 'integer', 'integer'], ]
 
 
+    def xmlrpc_get_last_dyn_aggregate(self, session_id, num = 1):
+        """ Get last precomputed aggregate data.
+
+            Returns precomputed aggregates (300 seconds) for session 'id'.
+            In case of interesting event during the interval (values higher 
+            than the baseline), higher resolution data is returned for an 
+            interval around the interesting event.
+        """
+
+        data = self.pstore.get_last_dyn_aggregate(session_id, num)
+
+        for row in data:
+            # Clean up timestamps.
+            r = row
+            r['start'] = r['created'] / 1000000000
+            del r['created']
+
+        return data
+
+    xmlrpc_get_last_dyn_aggregate.signature = [ [ 'array', 'integer' ], ]
+
+
     def xmlrpc_get_raw(self, session_id, start, end):
         """ Get raw data.
 
@@ -116,8 +138,8 @@ class RemoteProc(xmlrpc.XMLRPC):
         stop -- The length of the interval, in seconds.
 
         """
-        start = time.time() - start;
-        end = time.time() - end;
+        start = time.time() - start
+        end = time.time() - end
 
         pset = self.pstore.get_raw(session_id, start, end)
         

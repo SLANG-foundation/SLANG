@@ -45,10 +45,11 @@ if options.mode == 'aggr':
             int(time.time()-int(options.interval)), int(time.time()))
 
         for aggr in a:
-            print "OK: %d, Error: %d, Pongloss: %d, Timeout: %d, DUPs: %d\nRTT: %.3f / %.3f / %.3f / %.3f / %.3f\nJitter: %.3f / %.3f / %.3f / %.3f / %.3f" % \
+            print "OK: %d, Err: %d, DSCP-loss: %d, Pongloss: %d, Loss: %d, DUPs: %d\nRTT: %.3f / %.3f / %.3f / %.3f / %.3f\nJitter: %.3f / %.3f / %.3f / %.3f / %.3f" % \
                 (
                     aggr['success'],
                     aggr['timestamperror'],
+                    aggr['dscperror'],
                     aggr['pongloss'],
                     aggr['timeout'],
                     aggr['dup'],

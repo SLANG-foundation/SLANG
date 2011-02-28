@@ -67,14 +67,11 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	} else {
 		/* OK, we got a packet */
 		if ((flags & MSG_ERRQUEUE) != 0) {
-
 			/* THIS IS A TX TIMESTAMP: store tx tstamp */
 			if (tstamp_extract(msg, &pkt->ts) < 0) 
 				return -1;
 			return 0;
-
 		} else {
-
 			/* THIS IS NORMAL PACKET: store rx tstamp and DSCP */
 			if (tstamp_extract(msg, &pkt->ts) < 0)
 				syslog(LOG_ERR, "recv_w_ts: RX timestamp error");
@@ -253,8 +250,7 @@ static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 		}
 		if (cmsg->cmsg_level == IPPROTO_IPV6 && 
 			cmsg->cmsg_type == IPV6_TCLASS) { 
-			/* Fetch TOS value and extract DSCP by
-			 * discarding the two righmost bits (ECN) */
+			/* Fetch TCLASS value (DSCP) */ 
 			ptr = (int *)CMSG_DATA(cmsg);
 			tclass = (int)*ptr;
 			*dscp_out = (uint8_t)tclass;

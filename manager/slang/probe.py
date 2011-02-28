@@ -4,12 +4,12 @@ import time
 #
 # constants
 #
-STATE_PING = 'i'     # PING, the initial state */ 
+STATE_OK = 'o'       # Ready, got both PONG and valid TS */ 
+STATE_DSERROR = 'd'  # Ready, but invalid traffic class */ 
 STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
-STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
 STATE_PONGLOSS = 'l' # Ready, but timeout, got only TS, lost PONG */ 
-STATE_READY = 'r'    # Ready, got both PONG and valid TS */ 
-STATE_DUP = 'd'      # Got a PONG we didn't recognize, DUP? */ 
+STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
+STATE_DUP = 'u'      # Got a PONG we didn't recognize, DUP? */ 
 
 def from_struct(structdata):
     """ Create a probe from the struct data """
@@ -44,6 +44,7 @@ class Probe:
     rtt = None
     delay_variation = None
     in_order = None
+    dups = None
 
     addr = None
     session_id = None
@@ -66,15 +67,21 @@ class Probe:
         self.in_order = data[9]
         self.rtt = data[10]
         self.delay_variation = data[11]
+        self.dups = 0
 
         self.has_given = False
         self.has_gotten = False
 
         if self.rtt is None:
           self.rtt = self.getRtt()
+
+
     def __str__(self):
-        if self.state == STATE_READY:
+        if self.state == STATE_OK:
             return str('Response %5d from %d in %d ns' % 
+                (self.seq, self.session_id, self.rtt))
+        if self.state == STATE_DSERROR:
+            return str('Error    %5d from %d in %d ns (invalid DSCP)' % 
                 (self.seq, self.session_id, self.rtt))
         if self.state == STATE_TSERROR:
             return str('Error    %5d from %d (missing T2/T3)' % 
@@ -88,6 +95,8 @@ class Probe:
         if self.state == STATE_DUP:
             return str('Unknown  %5d from %d (probably DUP)' % 
                 (self.seq, self.session_id))
+        return 'Unable to parse' + self.state
+
 
     def getRtt(self):
         """ Calculates the rtt of the probe. """
@@ -96,6 +105,7 @@ class Probe:
             return (self.t4 - self.t1) - (self.t3 - self.t2)
         else:
             return None
+
 
     def toDict(self):
         """ Returns data as a dict.
@@ -117,15 +127,18 @@ class Probe:
             'delayvar': self.delay_variation
         }
 
+
     def lost(self):
         """ Was the packet lost? """
         
         return self.state == STATE_TIMEOUT
 
+
     def successful(self):
         """ Do we have all timestamp? """
 
-        return self.state == STATE_READY
+        return self.state == STATE_OK or self.state == STATE_DSERROR
+
 
     def set_prev_probe(self, prev_probe):
         """ Perform calculations which require previous probe.
@@ -138,6 +151,7 @@ class Probe:
 
         self.has_gotten = True
         prev_probe.has_given = True
+
 
 class ProbeSet(list):
     """ A set of probes. """

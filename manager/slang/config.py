@@ -3,6 +3,11 @@
 import logging
 
 class Config:
+    """ Configuration for SLA-NG manager.
+    
+        The configuration file path does only need to be passed to the 
+        constructor the first time in is instanciated. 
+    """
 
     filename = None
     lines = None
@@ -26,12 +31,13 @@ class Config:
             self.logger = logging.getLogger(self.__class__.__name__)
             self.logger.debug('Initializinging configuration module')
             try:
-                f = open(self.filename, 'r')
-                self.lines = f.readlines()
+                fh = open(self.filename, 'r')
+                self.lines = fh.readlines()
             except IOError, e:
                 estr = "Unable to read manager config: %s" % str(e)
                 self.logger.critical(estr)
                 raise ConfigError(estr)
+
         if len(self.lines) < 5:
             raise ConfigError('Invalid configuration file')
 
@@ -66,7 +72,9 @@ class Config:
         return self.filename
 
 class ConfigError(Exception):
+    """ Config base exception class. """
     pass
 
 class NotFoundError(ConfigError):
+    """ Unknown config key. """
     pass
