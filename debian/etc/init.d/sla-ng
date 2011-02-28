@@ -31,15 +31,15 @@ starthard()
 
 case "$1" in
 start)
-	echo "Starting $DESC" "$NAME"
+	log_daemon_msg "Starting $DESC" "$NAME"
 	starthard
 	;;
 restart)
-	echo "Restarting $DESC" "$NAME"
+	log_daemon_msg "Restarting $DESC" "$NAME"
 	starthard
 	;;
 stop)
-	echo "Stopping $DESC" "$NAME"
+	log_daemon_msg "Stopping $DESC" "$NAME"
 	killhard
 	;;
 esac
