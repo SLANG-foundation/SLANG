@@ -2,7 +2,6 @@ import threading
 from time import time, sleep
 import logging
 
-import probestore
 import config
 
 class Maintainer(threading.Thread):
@@ -36,6 +35,8 @@ class Maintainer(threading.Thread):
         self.last_flush = time()
         self.last_delete = time()
         self.last_reload = time()
+        self.last_pstore_aggr = ((int(time()) / self.pstore.aggr_db_time) * 
+            self.pstore.aggr_db_time + 2*self.pstore.aggr_db_time)
         
 
     def run(self):
@@ -46,22 +47,40 @@ class Maintainer(threading.Thread):
             if self.thread_stop:
                 break
             
+            # flush (commit) to database
             if (time() - self.last_flush) >= self.flush_interval:
                 self.pstore.flush()
                 self.last_flush = time()
 
+            # remove old data from database
             if (time() - self.last_delete) >= self.delete_interval:
                 self.pstore.delete(7200)
                 self.last_delete = time()
             
+            # reload every hour
             if (time() - self.last_reload) >= self.reload_interval:
                 try:
                     self.manager.reload()
                 except Exception, e:
-                    self.logger.error("Maintenace reload operation failed: %s" % str(e))
+                    self.logger.error("Maintenace reload operation failed: %s"
+                        % str(e))
                 self.last_reload = time()
 
+            # save precalculated aggregates to database
+            if (time() - self.last_pstore_aggr) >= self.pstore.aggr_db_time:
+
+                start = self.last_pstore_aggr
+
+                # perform operation for each session we have data for
+                sesss = self.pstore.current_sessions()
+                for sess in sesss:
+                    self.pstore.aggregate(sess, start*1000000000)
+
+                self.last_pstore_aggr = ((int(time()) / self.pstore.aggr_db_time) * 
+                    self.pstore.aggr_db_time)
+
             sleep(1)
+
             
     def stop(self):
         """ Stop thread """

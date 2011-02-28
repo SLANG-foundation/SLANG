@@ -23,6 +23,8 @@ class ProbeStore:
     probes = None
     max_seq = None
 
+    aggr_db_time = 60
+
     def __init__(self):
         """Constructor """
 
@@ -38,6 +40,8 @@ class ProbeStore:
         # open database connection
         try:
             self.db = ProbeStoreDB(self.config.get('dbpath'))
+
+            # create probe table
             self.db.execute("CREATE TABLE IF NOT EXISTS probes (" + 
                 "session_id INTEGER, " +
                 "seq INTEGER, " + 
@@ -52,16 +56,43 @@ class ProbeStore:
                 "in_order INTEGER, " +
                 "state TEXT " + 
                 ");")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx_session_id ON probes(session_id)")
-#            self.db.execute("CREATE INDEX IF NOT EXISTS idx_state ON probes(state)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id ON probes(session_id)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__state ON probes(session_id, created, state)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__rtt ON probes(session_id, created, rtt)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__rtt ON probes(rtt)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes(created)")
+
+            # create aggregate database
+            self.db.execute("CREATE TABLE IF NOT EXISTS probes_aggregate (" + 
+                "session_id INTEGER, " +
+                "aggr_interval INTEGER, " + 
+                "created INTEGER, " +
+                "total INTEGER, " +
+                "success INTEGER, " +
+                "timestamperror INTEGER, " +
+                "pongloss INTEGER, " +
+                "timeout INTEGER, " +
+                "dup INTEGER, " +
+                "rtt_min INTEGER, " + 
+                "rtt_med INTEGER, " + 
+                "rtt_avg INTEGER, " + 
+                "rtt_max INTEGER, " + 
+                "rtt_95th INTEGER, " + 
+                "delayvar_min INTEGER, " + 
+                "delayvar_med INTEGER, " + 
+                "delayvar_avg INTEGER, " + 
+                "delayvar_max INTEGER, " + 
+                "delayvar_95th INTEGER " + 
+                ");")
+
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id ON probes_aggregate(session_id)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes_aggregate(created)")
             
         except Exception, e:
-            self.logger.critical("Unable to open database: %s" % e)
-            raise ProbeStoreError("Unable to open database: %s" % e)
+            estr = "Unable to initialize database: %s" % str(e)
+            self.logger.critical(estr)
+            raise ProbeStoreError(estr)
+
 
     def stop(self):
         """ Close down ProbeStore """
@@ -70,6 +101,7 @@ class ProbeStore:
         self.logger.debug("Waiting for db to die...")
         self.db.join()
         self.logger.debug("db dead.")
+
 
     def add(self, p):
         """ Add probe to ProbeStore 
@@ -196,12 +228,14 @@ class ProbeStore:
         except Exception, e:
             self.logger.error("Unable to flush probe to database: %s: " % e)
 
+
     def flush(self):
         """ Requesting commit """    
 
         self.logger.debug("Requesting commit")
 
         self.db.commit()
+
 
     def delete(self, age):
         """ Deletes saved data of age 'age' and older. """
@@ -211,10 +245,46 @@ class ProbeStore:
         now = int(time.time())
 
         sql = "DELETE FROM probes WHERE created < ?"
-        try:
-            self.db.execute(sql, ((now - age)*1000000000, ))
-        except Exception, e:
-            self.logger.error("Unable to delete old data: %s" % e)
+        self.db.execute(sql, ((now - age)*1000000000, ))
+
+        sql = "DELETE FROM probes_aggregate WHERE created < ?"
+        self.db.execute(sql, ((now - age)*1000000000, ))
+
+
+    def aggregate(self, sess_id, start):
+        """ Aggregates self.aggr_db_time seconds worth of data. 
+        
+            Starts att time 'start'. The result will be written to the
+            database.
+        """
+
+        self.logger.debug("aggregating session %d from %d, %d seconds interval" % 
+            (sess_id, start, self.aggr_db_time))
+
+        # get aggregated data
+        data = self.get_aggregate(sess_id, 
+            start, 
+            start + (self.aggr_db_time)*1000000000)
+
+        sql = ("INSERT INTO probes_aggregate " +
+            "(session_id, aggr_interval, created, total, " +
+            "success, timestamperror, pongloss, timeout, " +
+            "dup, rtt_min, rtt_med, rtt_avg, rtt_max, " +
+            "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
+            "delayvar_max, delayvar_95th) VALUES " +
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
+        params = (
+            sess_id, self.aggr_db_time, start, data['total'], data['success'],
+            data['timestamperror'], data['pongloss'], data['timeout'], 
+            data['dup'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
+            data['rtt_max'], data['rtt_95th'], data['delayvar_min'], 
+            data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'], 
+            data['delayvar_95th'])
+
+        self.db.execute(sql, params)
+
+        # compare aggregated data to previous data to find interesting events
+
 
 
     ###################################################################
@@ -265,6 +335,66 @@ class ProbeStore:
             pset.append(Probe(pdlist))
 
         return pset
+
+    
+    def get_last_dyn_aggregate(self, session_id, num = 1):
+        """ Get last precomputed aggregate data.
+
+            Returns precomputed aggregates (300 seconds) for session 'id'.
+            In case of interesting event during the interval (values higher 
+            than the baseline), higher resolution data is returned for an 
+            interval around the interesting event.
+        """
+
+        start = (int(time.time()) / self.aggr_db_time - num) * self.aggr_db_time * 1000000000
+        sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
+            "created >= ?")
+        res = self.db.select(sql, (session_id, start))
+
+        ret = list()
+        for row in res:
+            ret.append(dict(row))
+
+        #
+        # How to check for interesting events?
+        #
+        # We have a few metrics:
+        # rtt
+        # delay variation 
+        # packet loss (pongloss, timeouts)
+        # DSCP errors
+        # 
+        # What conditions of the metrics above indicates an interesting 
+        # event (not necessarily an error)?
+        # * changed RTT (new route)
+        #  - What to look at? max/avg/min/95th? MIN interesting!
+        # 
+        # * changed delay variation 
+        #  - What to look for here? 
+        # 
+        # * packet loss
+        #  - Always interesting, should not happen very often...
+        # 
+        # * DSCP? When instant change?
+        #
+        # Let's start with:
+        # RTT:
+        #  * abs(avg(rtt_min last X periods) - rtt_min) > 10% of avg(rtt_min last X periods) 
+        #
+        # Delay variation:
+        #  * 
+        #
+        # Packet loss:
+        #  * 
+        #
+        #
+        #
+        #
+        #
+        #
+
+        return ret
+
 
     def get_aggregate(self, session_id, start, end):
         """ Get round-trip time
@@ -391,7 +521,7 @@ class ProbeStore:
 
         sql = "SELECT COUNT(*) AS count FROM probes WHERE " + where
         res = self.db.select(sql, whereargs)
-	nrows = 0
+        nrows = 0
         for row in res:
             nrows = row['count']
 
@@ -411,7 +541,7 @@ class ProbeStore:
 
 
     def get_storage_statistics(self):
-        """ Get database statistics """
+        """ Get storage statistics """
 
         retval = {}
 
@@ -419,7 +549,12 @@ class ProbeStore:
         sql = "SELECT COUNT(*) AS c FROM probes"
         res = self.db.select(sql)
         for row in res:
-            retval['db_numrows'] = row['c']
+            retval['db_numrows_probes'] = row['c']
+
+        sql = "SELECT COUNT(*) AS c FROM probes_aggregate"
+        res = self.db.select(sql)
+        for row in res:
+            retval['db_numrows_probes_aggregate'] = row['c']
         
         # number of sessions in state dict
         retval['state_numsessions'] = len(self.probes)
@@ -451,14 +586,14 @@ class ProbeStoreDB(threading.Thread):
         self.logger.debug("Starting database thread...")
 
         while True:
-          try:
-              conn = sqlite3.connect(self.db) 
-              conn.row_factory = sqlite3.Row
-              curs = conn.cursor()
-              break
-          except Exception, e:
-              self.logger.error("Unable to establish database connection: %s. Retrying." % e)
-              time.sleep(1)
+            try:
+                conn = sqlite3.connect(self.db) 
+                conn.row_factory = sqlite3.Row
+                curs = conn.cursor()
+                break
+            except Exception, e:
+                self.logger.error("Unable to establish database connection: %s. Retrying." % e)
+                time.sleep(1)
 
         # Possible fix to get rid of commit for each line:
         # Use self.reqs.get() with a timeout, and when a timeout 
@@ -512,17 +647,17 @@ class ProbeStoreDB(threading.Thread):
         conn.commit()
         conn.close()
 
-    def execute(self, req, arg=None, res=None):
+    def execute(self, req, arg = None, res = None):
         """ "Execute" by pushing query to queue """
 
         self.reqs.put((req, arg or tuple(), res))
 
-    def select(self, req, arg=None):
-        res=Queue()
+    def select(self, req, arg = None):
+        res = Queue()
         self.execute(req, arg, res)
         while True:
-            rec=res.get()
-            if rec=='--no more--': break
+            rec = res.get()
+            if rec == '--no more--': break
             yield rec
 
     def close(self):
