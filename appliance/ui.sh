@@ -279,6 +279,13 @@ menu_dns()
 	fi
 }
 
+menu_timezone()
+{
+	disk_rw
+	dpkg-reconfigure tzdata
+	disk_ro
+}
+
 menu_cfg()
 {
 	c1=`sed -n "1p" /etc/sla-ng/manager.conf`
@@ -366,9 +373,10 @@ while true
 do
 	dialog  --title "SLA-NG Configuration Console" \
 		--menu "Welcome! Navigate using arrow keys and TAB." \
-		15 50 10 \
+		16 50 11 \
 		n "Configure Network Interfaces" \
 		d "Configure DNS" \
+		t "Configure Timezone" \
 		c "Configure SLA-NG" \
 		l "Show SLA-NG Log" \
 		v "Show SLA-NG Pings" \
@@ -387,6 +395,10 @@ do
 	if [ "`cat /tmp/ui.dialog`" = "d" ]	
 	then
 		menu_dns
+	fi
+	if [ "`cat /tmp/ui.dialog`" = "t" ]
+	then
+		menu_timezone
 	fi
 	if [ "`cat /tmp/ui.dialog`" = "c" ]
 	then
