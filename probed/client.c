@@ -349,6 +349,8 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 			r->state == STATE_PONGLOSS) {
 			/* Pipe (daemon) output */
 			if (cfg.op == DAEMON) 
+				printf("CP %c %4d from %d in %d nsec\n", 
+						r->state, (int)r->seq, (int)r->id, (int)diff.tv_nsec);
 				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
@@ -633,9 +635,9 @@ int client_msess_reconf(char *port, char *cfgpath) {
 		}
 		s = malloc(sizeof *s);
 		if (s == NULL) continue;
+		memset(s, 0, sizeof *s);
 		s->id = (num_t)atoi((char *)c);
 		xmlFree(c);
-		memset(s, 0, sizeof *s);
 		s->interval.tv_usec = 10000;
 		ok = 0;
 		for (k = n->children; k != NULL; k = k->next) {
