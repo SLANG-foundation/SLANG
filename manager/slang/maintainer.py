@@ -55,7 +55,10 @@ class Maintainer(threading.Thread):
                 self.last_delete = time()
             
             if (time() - self.last_reload) >= self.reload_interval:
-                self.manager.reload()
+                try:
+                    self.manager.reload()
+                except Exception, e:
+                    self.logger.error("Maintenace reload operation failed: %s" % str(e))
                 self.last_reload = time()
 
             sleep(1)
