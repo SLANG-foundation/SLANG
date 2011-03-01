@@ -696,14 +696,17 @@ int client_msess_reconf(char *port, char *cfgpath) {
 int client_msess_gothello(addr_t *addr) {
 	size_t slen;
 	struct msess *s;
+	int ok = 0;
 
 	slen = sizeof s->dst.sin6_addr;
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
 		if (memcmp(&addr->sin6_addr, &s->dst.sin6_addr, slen) == 0) {
 			s->got_hello = 1;
-			return 0;
+			ok = 1;
 		}
 	}
+	if (ok == 1)
+		return 0;
 	return -1;
 }
 
