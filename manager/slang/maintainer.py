@@ -35,8 +35,8 @@ class Maintainer(threading.Thread):
         self.last_flush = time()
         self.last_delete = time()
         self.last_reload = time()
-        self.last_pstore_aggr = ((int(time()) / self.pstore.aggr_db_time) * 
-            self.pstore.aggr_db_time + 2*self.pstore.aggr_db_time)
+        self.last_pstore_aggr = ((int(time()) / self.pstore.AGGR_DB_LOWRES) * 
+            self.pstore.AGGR_DB_LOWRES + 3*self.pstore.AGGR_DB_LOWRES)
         
 
     def run(self):
@@ -67,17 +67,22 @@ class Maintainer(threading.Thread):
                 self.last_reload = time()
 
             # save precalculated aggregates to database
-            if (time() - self.last_pstore_aggr) >= self.pstore.aggr_db_time:
+            if (time() - self.last_pstore_aggr) >= self.pstore.AGGR_DB_LOWRES:
 
                 start = self.last_pstore_aggr
 
                 # perform operation for each session we have data for
                 sesss = self.pstore.current_sessions()
-                for sess in sesss:
-                    self.pstore.aggregate(sess, start*1000000000)
 
-                self.last_pstore_aggr = ((int(time()) / self.pstore.aggr_db_time) * 
-                    self.pstore.aggr_db_time)
+                for sess in sesss:
+                    try:
+                        self.pstore.aggregate(sess, (start - self.pstore.AGGR_DB_LOWRES)*1000000000)
+                    except Exception, e:
+                        self.logger.error("aggregation failed: %s. Missing valid measurement data?" % str(e))
+                        continue
+
+                self.last_pstore_aggr = ((int(time()) / self.pstore.AGGR_DB_LOWRES) * 
+                    self.pstore.AGGR_DB_LOWRES)
 
             sleep(1)
 

@@ -184,8 +184,9 @@ class Manager:
         try:
             self.probed.start()
             self.maintainer.start()
-        except:
-            self.logger.error("Unable to start threads.")
+        except Exception, e:
+            self.logger.error("Unable to start threads: %s" % str(e))
+            self.stop()
 
         reactor.run()
 

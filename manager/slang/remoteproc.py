@@ -8,6 +8,7 @@ import manager
 class RemoteProc(xmlrpc.XMLRPC):
     """ Remote procedures """
 
+    allow_none = True
     pstore = None
     manager = None
     logging = None
@@ -15,6 +16,7 @@ class RemoteProc(xmlrpc.XMLRPC):
     def __init__(self, pstore, manager):
         """ Constructor """
         xmlrpc.XMLRPC.__init__(self)
+        self.allowNone = True
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.manager = manager
