@@ -24,14 +24,14 @@ class ProbeStore:
     max_seq = None
 
     # Low resolution aggretation interval
-    AGGR_DB_LOWRES = 15
+    AGGR_DB_LOWRES = 300
 
     # High resolution aggregation interval, used when errors occur
     AGGR_DB_HIGHRES = 1
     
     # How long time, in seconds, before and after interesting event to
     # store hugh resolution data.
-    HIGHRES_INTERVAL = 5
+    HIGHRES_INTERVAL = 10
 
     def __init__(self):
         """Constructor """
