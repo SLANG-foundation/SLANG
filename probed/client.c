@@ -349,8 +349,6 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 			r->state == STATE_PONGLOSS) {
 			/* Pipe (daemon) output */
 			if (cfg.op == DAEMON) 
-				printf("CP %c %4d from %d in %d nsec\n", 
-						r->state, (int)r->seq, (int)r->id, (int)diff.tv_nsec);
 				if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
 					syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 			/* Client output */
