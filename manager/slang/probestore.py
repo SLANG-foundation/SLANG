@@ -355,28 +355,28 @@ class ProbeStore:
             # go through higher resolution data, find where interesting event occurred.
             # Skip first part as it is outside the current interval
             idx_to_examine = list()
-            for i in range(int(self.HIGHRES_INTERVAL/self.AGGR_DB_HIGHRES), len(highres) - 1):
+            for i in range(int(self.HIGHRES_INTERVAL/self.AGGR_DB_HIGHRES) , len(highres) - int(self.HIGHRES_INTERVAL/self.AGGR_DB_HIGHRES)):
 
                 # was there an error in the interval? If so, add index to list.
                 if highres[i]['timeout'] > 0 or highres[i]['pongloss'] > 0:
                     idx_to_examine.append(i)
 
-            self.logger.debug("Will examine %d records deeper..." % len(idx_to_examine))
+#            self.logger.debug("will examine %d records deeper (%s)" % (len(idx_to_examine), idx_to_examine))
 
             # append interesting records to list of records to save
             highres_save = list()
-            idx_per_second = 1/self.AGGR_DB_HIGHRES
+            idx_per_second = 1/float(self.AGGR_DB_HIGHRES)
             for i in range(0, len(idx_to_examine) - 1):
 
-                low = idx_to_examine[i] - idx_per_second * self.HIGHRES_INTERVAL
-                high = idx_to_examine[i] + idx_per_second * self.HIGHRES_INTERVAL
+                low = idx_to_examine[i] - int(idx_per_second * self.HIGHRES_INTERVAL)
+                high = idx_to_examine[i] + int(idx_per_second * self.HIGHRES_INTERVAL) + 1
 
                 # if there is a previous row, make sure we do not overlap
                 # Might we have some rounding issues here?
                 if i != 0:
-                    prev_high = idx_to_examine[i-1] + idx_per_second * self.HIGHRES_INTERVAL
-                    if prev_high >= low:
-                        low = prev_high + 1
+                    prev_top_elem = idx_to_examine[i-1] + int(idx_per_second * self.HIGHRES_INTERVAL) 
+                    if prev_top_elem >= low:
+                        low = prev_top_elem + 1
 
                 # make sure we do not walk outside out list
                 if high > len(highres) - 1:
@@ -464,17 +464,16 @@ class ProbeStore:
             interesting event.
         """
 
-        start = (int(time.time()) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES * 1000000000
-        end = (int(time.time()) / self.AGGR_DB_LOWRES - 1) * self.AGGR_DB_LOWRES * 1000000000
-        self.logger.debug("Getting last_dyn_aggregate for id %d from %d to %d; now: %d" % (session_id, start/1000000000, end/1000000000, int(time.time())))
+        start = ((int(time.time()) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL) * 1000000000
+#        end = ((int(time.time()) / self.AGGR_DB_LOWRES - 1) * self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL + 1) * 1000000000
+        self.logger.debug("Getting last_dyn_aggregate for id %d from %d now: %d" % (session_id, start/1000000000, int(time.time())))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
-            "created >= ? AND created < ?")
-        res = self.db.select(sql, (session_id, start, end))
+            "created >= ?")
+        res = self.db.select(sql, (session_id, start))
 
         ret = list()
         for row in res:
             ret.append(dict(row))
-
 
         return ret
 
