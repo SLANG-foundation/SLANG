@@ -23,7 +23,15 @@ class ProbeStore:
     probes = None
     max_seq = None
 
-    aggr_db_time = 60
+    # Low resolution aggretation interval
+    AGGR_DB_LOWRES = 300
+
+    # High resolution aggregation interval, used when errors occur
+    AGGR_DB_HIGHRES = 1
+    
+    # How long time, in seconds, before and after interesting event to
+    # store hugh resolution data.
+    HIGHRES_INTERVAL = 10
 
     def __init__(self):
         """Constructor """
@@ -59,6 +67,7 @@ class ProbeStore:
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id ON probes(session_id)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__state ON probes(session_id, created, state)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__rtt ON probes(session_id, created, rtt)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__in_order ON probes(session_id, created, in_order)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__rtt ON probes(rtt)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes(created)")
 
@@ -73,6 +82,7 @@ class ProbeStore:
                 "pongloss INTEGER, " +
                 "timeout INTEGER, " +
                 "dup INTEGER, " +
+                "reordered INTEGER, " +
                 "rtt_min INTEGER, " + 
                 "rtt_med INTEGER, " + 
                 "rtt_avg INTEGER, " + 
@@ -87,6 +97,7 @@ class ProbeStore:
 
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id ON probes_aggregate(session_id)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes_aggregate(created)")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx__sesson_id__idx__created ON probes_aggregate(session_id, created)")
             
         except Exception, e:
             estr = "Unable to initialize database: %s" % str(e)
@@ -252,39 +263,148 @@ class ProbeStore:
 
 
     def aggregate(self, sess_id, start):
-        """ Aggregates self.aggr_db_time seconds worth of data. 
+        """ Aggregates self.AGGR_DB_LOWRES seconds worth of data. 
         
             Starts att time 'start'. The result will be written to the
             database.
         """
 
         self.logger.debug("aggregating session %d from %d, %d seconds interval" % 
-            (sess_id, start, self.aggr_db_time))
+            (sess_id, start, self.AGGR_DB_LOWRES))
 
         # get aggregated data
         data = self.get_aggregate(sess_id, 
             start, 
-            start + (self.aggr_db_time)*1000000000)
+            start + self.AGGR_DB_LOWRES * 1000000000)
 
+        # insert into database
         sql = ("INSERT INTO probes_aggregate " +
             "(session_id, aggr_interval, created, total, " +
             "success, timestamperror, pongloss, timeout, " +
-            "dup, rtt_min, rtt_med, rtt_avg, rtt_max, " +
+            "dup, reordered, rtt_min, rtt_med, rtt_avg, rtt_max, " +
             "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
             "delayvar_max, delayvar_95th) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
         params = (
-            sess_id, self.aggr_db_time, start, data['total'], data['success'],
+            sess_id, self.AGGR_DB_LOWRES, start, data['total'], data['success'],
             data['timestamperror'], data['pongloss'], data['timeout'], 
-            data['dup'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
+            data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
             data['rtt_max'], data['rtt_95th'], data['delayvar_min'], 
             data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'], 
             data['delayvar_95th'])
 
         self.db.execute(sql, params)
 
+        #
         # compare aggregated data to previous data to find interesting events
+        #
+        # How to check for interesting events?
+        #
+        # We have a few metrics:
+        # rtt
+        # delay variation 
+        # packet loss (pongloss, timeouts)
+        # DSCP errors
+        # 
+        # What conditions of the metrics above indicates an interesting 
+        # event (not necessarily an error)?
+        # * changed RTT (new route)
+        #  - What to look at? max/avg/min/95th? MIN interesting!
+        # 
+        # * changed delay variation 
+        #  - What to look for here? 
+        # 
+        # * packet loss
+        #  - Always interesting, should not happen very often...
+        # 
+        # * DSCP? When instant change?
+        #
+        # Let's start with:
+        # RTT: - SKIPPED!
+        #  * abs(avg(rtt_min last X periods) - rtt_min) > 10% of avg(rtt_min last X periods) 
+        #
+        # Packet loss:
+        #  * _any_ packet loss (pongloss, timeout) is interesting.
+        #
 
+        # Look for packet loss in aggregated data
+        if data['timeout'] > 0 or data['pongloss'] > 0:
+
+            self.logger.debug( ("Got interesting event: sess_id: %d " +
+                "timeout: %d pongloss: %d") % 
+                (sess_id, data['timeout'], data['pongloss']))
+
+            # Something happened. Get higher resolution data with some
+            # overlap to always be able to present a full interval around an 
+            # error. Begin with calculating intervals.
+            ctime = start - self.HIGHRES_INTERVAL * 1000000000
+            aggr_times = list()
+            while ctime < start + (self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL) * 1000000000:
+                aggr_times.append(ctime)
+                ctime += self.AGGR_DB_HIGHRES * 1000000000
+
+            aggr_times.append(start + (self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL) * 1000000000)
+    
+            # fetch data for intervals
+            highres = list()
+            for i in range(0, len(aggr_times) - 1):
+                r = self.get_aggregate(sess_id, aggr_times[i], aggr_times[i+1])
+                r['start'] = aggr_times[i]
+                highres.append(r)
+
+            # go through higher resolution data, find where interesting event occurred.
+            # Skip first part as it is outside the current interval
+            idx_to_examine = list()
+            for i in range(int(self.HIGHRES_INTERVAL/self.AGGR_DB_HIGHRES), len(highres) - 1):
+
+                # was there an error in the interval? If so, add index to list.
+                if highres[i]['timeout'] > 0 or highres[i]['pongloss'] > 0:
+                    idx_to_examine.append(i)
+
+            self.logger.debug("Will examine %d records deeper..." % len(idx_to_examine))
+
+            # append interesting records to list of records to save
+            highres_save = list()
+            idx_per_second = 1/self.AGGR_DB_HIGHRES
+            for i in range(0, len(idx_to_examine) - 1):
+
+                low = idx_to_examine[i] - idx_per_second * self.HIGHRES_INTERVAL
+                high = idx_to_examine[i] + idx_per_second * self.HIGHRES_INTERVAL
+
+                # if there is a previous row, make sure we do not overlap
+                # Might we have some rounding issues here?
+                if i != 0:
+                    prev_high = idx_to_examine[i-1] + idx_per_second * self.HIGHRES_INTERVAL
+                    if prev_high >= low:
+                        low = prev_high + 1
+
+                # make sure we do not walk outside out list
+                if high > len(highres) - 1:
+                    high = len(highres) - 1
+
+                highres_save += highres[low:high]
+
+            self.logger.debug("Will write %d extra rows to database" % len(highres_save))
+                    
+            # save data
+            for row in highres_save:
+                sql = ("INSERT INTO probes_aggregate " +
+                    "(session_id, aggr_interval, created, total, " +
+                    "success, timestamperror, pongloss, timeout, " +
+                    "dup, reordered, rtt_min, rtt_med, rtt_avg, rtt_max, " +
+                    "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
+                    "delayvar_max, delayvar_95th) VALUES " +
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
+
+                params = (sess_id, self.AGGR_DB_HIGHRES, row['start'], 
+                    row['total'], row['success'], row['timestamperror'], 
+                    row['pongloss'], row['timeout'], row['dup'], row['reordered'], 
+                    row['rtt_min'], row['rtt_med'], row['rtt_avg'], row['rtt_max'], 
+                    row['rtt_95th'], row['delayvar_min'], row['delayvar_med'], 
+                    row['delayvar_avg'], row['delayvar_max'], 
+                    row['delayvar_95th'])
+        
+                self.db.execute(sql, params)
 
 
     ###################################################################
@@ -320,8 +440,6 @@ class ProbeStore:
         if end is None:
             end = int(time.Time())
 
-        #self.logger.debug("Getting raw data for id %d start %d end %d" % (session_id, start, end))
-
         sql = "SELECT * FROM probes WHERE session_id = ? AND created > ? AND created < ?"
         res = self.db.select(sql, (session_id, start, end))
 
@@ -341,57 +459,22 @@ class ProbeStore:
         """ Get last precomputed aggregate data.
 
             Returns precomputed aggregates (300 seconds) for session 'id'.
-            In case of interesting event during the interval (values higher 
-            than the baseline), higher resolution data is returned for an 
-            interval around the interesting event.
+            In case of interesting event during the interval (packet loss)
+            higher resolution data is returned for an interval around the 
+            interesting event.
         """
 
-        start = (int(time.time()) / self.aggr_db_time - num) * self.aggr_db_time * 1000000000
+        start = (int(time.time()) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES * 1000000000
+        end = (int(time.time()) / self.AGGR_DB_LOWRES - 1) * self.AGGR_DB_LOWRES * 1000000000
+        self.logger.debug("Getting last_dyn_aggregate for id %d from %d to %d; now: %d" % (session_id, start/1000000000, end/1000000000, int(time.time())))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
-            "created >= ?")
-        res = self.db.select(sql, (session_id, start))
+            "created >= ? AND created < ?")
+        res = self.db.select(sql, (session_id, start, end))
 
         ret = list()
         for row in res:
             ret.append(dict(row))
 
-        #
-        # How to check for interesting events?
-        #
-        # We have a few metrics:
-        # rtt
-        # delay variation 
-        # packet loss (pongloss, timeouts)
-        # DSCP errors
-        # 
-        # What conditions of the metrics above indicates an interesting 
-        # event (not necessarily an error)?
-        # * changed RTT (new route)
-        #  - What to look at? max/avg/min/95th? MIN interesting!
-        # 
-        # * changed delay variation 
-        #  - What to look for here? 
-        # 
-        # * packet loss
-        #  - Always interesting, should not happen very often...
-        # 
-        # * DSCP? When instant change?
-        #
-        # Let's start with:
-        # RTT:
-        #  * abs(avg(rtt_min last X periods) - rtt_min) > 10% of avg(rtt_min last X periods) 
-        #
-        # Delay variation:
-        #  * 
-        #
-        # Packet loss:
-        #  * 
-        #
-        #
-        #
-        #
-        #
-        #
 
         return ret
 
@@ -411,6 +494,7 @@ class ProbeStore:
             'dscperror': 0,
             'timeout': 0,
             'dup': 0,
+            'reordered': 0,
             'rtt_max': 0,
             'rtt_min': 0,
             'rtt_avg': 0,        
@@ -470,6 +554,10 @@ class ProbeStore:
         for row in res:
             retdata['dscperror'] = row['c']
 
+        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE in_order != 1 AND " + where
+        res = self.db.select(sql, whereargs)
+        for row in res:
+            retdata['reordered'] = row['c']
 
         where = "session_id = ? AND created >= ? AND created < ? AND (state = ?  OR state = ? )"
         whereargs = (session_id, start, end, probe.STATE_OK, probe.STATE_DSERROR)
