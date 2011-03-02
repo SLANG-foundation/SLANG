@@ -286,6 +286,19 @@ menu_timezone()
 	disk_ro
 }
 
+menu_hostname()
+{
+	dialog --inputbox "Type a host name (not FQDN)." \
+	9 40 "`cat /etc/hostname`" 2> /tmp/ui.dialog
+	if [ "$?" -eq 0 ]
+	then
+		disk_rw
+		cp /tmp/ui.dialog /etc/hostname
+		hostname "`cat /etc/hostname`"
+		disk_ro
+	fi
+}
+
 menu_cfg()
 {
 	c1=`sed -n "1p" /etc/sla-ng/manager.conf`
@@ -373,10 +386,11 @@ while true
 do
 	dialog  --title "SLA-NG Configuration Console" \
 		--menu "Welcome! Navigate using arrow keys and TAB." \
-		16 50 11 \
+		17 50 12 \
 		n "Configure Network Interfaces" \
 		d "Configure DNS" \
 		t "Configure Timezone" \
+		h "Configure Host Name" \
 		c "Configure SLA-NG" \
 		l "Show SLA-NG Log" \
 		v "Show SLA-NG Pings" \
@@ -399,6 +413,10 @@ do
 	if [ "`cat /tmp/ui.dialog`" = "t" ]
 	then
 		menu_timezone
+	fi
+	if [ "`cat /tmp/ui.dialog`" = "h" ]
+	then
+		menu_hostname
 	fi
 	if [ "`cat /tmp/ui.dialog`" = "c" ]
 	then
