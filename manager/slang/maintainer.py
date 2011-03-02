@@ -54,7 +54,7 @@ class Maintainer(threading.Thread):
 
             # remove old data from database
             if (time() - self.last_delete) >= self.delete_interval:
-                self.pstore.delete(7200)
+                self.pstore.delete(1800)
                 self.last_delete = time()
             
             # reload every hour
