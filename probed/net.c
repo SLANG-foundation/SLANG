@@ -115,6 +115,11 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	if (cfg.ts != USERLAND) { 
 		if (tstamp_fetch_tx(sock, ts) < 0) {
 			syslog(LOG_ERR, "send_w_ts: TX timestamp error");
+			/* We've noticed that it sometimes help to restart
+			 * in order to fix TX timestamp errrors, so for now,
+			 * let's do that. Die, and let sla-ng-mananger restart */
+			syslog(LOG_CRIT, "send_w_ts: Exiting; check your kernel/hardware");
+			exit(1);
 			return -1;
 		}
 	}
