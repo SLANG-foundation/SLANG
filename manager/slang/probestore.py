@@ -79,6 +79,7 @@ class ProbeStore:
                 "total INTEGER, " +
                 "success INTEGER, " +
                 "timestamperror INTEGER, " +
+                "dscperror INTEGER, " +
                 "pongloss INTEGER, " +
                 "timeout INTEGER, " +
                 "dup INTEGER, " +
@@ -280,14 +281,14 @@ class ProbeStore:
         # insert into database
         sql = ("INSERT INTO probes_aggregate " +
             "(session_id, aggr_interval, created, total, " +
-            "success, timestamperror, pongloss, timeout, " +
+            "success, timestamperror, dscperror, pongloss, timeout, " +
             "dup, reordered, rtt_min, rtt_med, rtt_avg, rtt_max, " +
             "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
             "delayvar_max, delayvar_95th) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
         params = (
             sess_id, self.AGGR_DB_LOWRES, start, data['total'], data['success'],
-            data['timestamperror'], data['pongloss'], data['timeout'], 
+            data['timestamperror'], data['dscperror'], data['pongloss'], data['timeout'], 
             data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
             data['rtt_max'], data['rtt_95th'], data['delayvar_min'], 
             data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'], 
