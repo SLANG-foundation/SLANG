@@ -6,13 +6,13 @@
 import time
 import xmlrpclib
 
-s = xmlrpclib.ServerProxy('http://127.0.0.1:8000/RPC2')
+s = xmlrpclib.ServerProxy('http://lab-slang-1.tele2.net:8000/RPC2')
 
 while True:
     t_start = time.time()
 
     # fetch data
-    aggr_list = s.get_aggregate(2, 1800, int(time.time()-3600*2), int(time.time()))
+    aggr_list = s.get_aggregate(251, 10, int(time.time()-10), int(time.time()))
     t_total = time.time() - t_start
 
     for aggr in aggr_list:
