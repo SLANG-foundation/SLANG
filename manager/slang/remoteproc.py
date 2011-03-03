@@ -167,3 +167,11 @@ class RemoteProc(xmlrpc.XMLRPC):
         return self.pstore.get_storage_statistics()
 
     xmlrpc_get_storage_statistics.signature = [ [ 'struct' ], ]
+
+    def xmlrpc_flush_queue(self):
+        """ Flush probe queue. """
+
+        self.pstore.flush_queue()
+        return True
+
+    xmlrpc_get_storage_statistics.signature = [ [ 'boolean' ], ]

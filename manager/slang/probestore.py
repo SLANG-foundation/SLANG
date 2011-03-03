@@ -15,13 +15,12 @@ import probe
 class ProbeStore:
     """ Probe storage """
 
-    lock_db = None
-    lock_buf = None
     logger = None
     config = None
     db = None
     probes = None
     max_seq = None
+    flag_flush_queue = False
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300
@@ -38,12 +37,11 @@ class ProbeStore:
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
-        self.lock_buf = threading.Lock()
 
         self.probes = dict()
         self.max_seq = dict()
 
-        self.logger.debug("Created instance")
+        self.logger.debug("created instance")
 
         # open database connection
         try:
@@ -105,6 +103,11 @@ class ProbeStore:
             self.logger.critical(estr)
             raise ProbeStoreError(estr)
 
+    def flush_queue(self):
+        """ Schedule a probe queue flush. """
+
+        self.flag_flush_queue = True
+
 
     def stop(self):
         """ Close down ProbeStore """
@@ -150,6 +153,12 @@ class ProbeStore:
 
         """
 
+        # Should queue be flushed?
+        if self.flag_flush_queue:
+            self.probes = dict()
+            self.max_seq = dict()
+            self.flag_flush_queue = False
+
         # duplicate packet?
         if p.state == probe.STATE_DUP:
             
@@ -158,7 +167,7 @@ class ProbeStore:
                 return
 
             # Do we have the sequence number in list?
-            # If not, the result has pobably been written to database already.
+            # If not, the result has probably been written to database already.
             if p.seq in self.probes[p.session_id]:
                 self.probes[p.session_id][p.seq].dups += 1
             else:
@@ -183,7 +192,13 @@ class ProbeStore:
             p.in_order = True
             self.max_seq[p.session_id] = p.seq
         else:
-            p.in_order = False
+            # if the difference is too big, a counter probably
+            # flipped over
+            if self.max_seq[p.session_id] - p.seq > 1000000:
+                p.in_order = True
+                self.max_seq[p.session_id] = p.seq
+            else:
+                p.in_order = False
         
         # check for previous packet
         try:
