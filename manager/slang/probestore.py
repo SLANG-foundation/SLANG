@@ -15,13 +15,12 @@ import probe
 class ProbeStore:
     """ Probe storage """
 
-    lock_db = None
-    lock_buf = None
     logger = None
     config = None
     db = None
     probes = None
     max_seq = None
+    flag_flush_queue = False
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300
@@ -38,12 +37,11 @@ class ProbeStore:
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
-        self.lock_buf = threading.Lock()
 
         self.probes = dict()
         self.max_seq = dict()
 
-        self.logger.debug("Created instance")
+        self.logger.debug("created instance")
 
         # open database connection
         try:
@@ -105,6 +103,11 @@ class ProbeStore:
             self.logger.critical(estr)
             raise ProbeStoreError(estr)
 
+    def flush_queue(self):
+        """ Schedule a probe queue flush. """
+
+        self.flag_flush_queue = True
+
 
     def stop(self):
         """ Close down ProbeStore """
@@ -150,6 +153,12 @@ class ProbeStore:
 
         """
 
+        # Should queue be flushed?
+        if self.flag_flush_queue:
+            self.probes = dict()
+            self.max_seq = dict()
+            self.flag_flush_queue = False
+
         # duplicate packet?
         if p.state == probe.STATE_DUP:
             
@@ -158,7 +167,7 @@ class ProbeStore:
                 return
 
             # Do we have the sequence number in list?
-            # If not, the result has pobably been written to database already.
+            # If not, the result has probably been written to database already.
             if p.seq in self.probes[p.session_id]:
                 self.probes[p.session_id][p.seq].dups += 1
             else:
@@ -183,7 +192,13 @@ class ProbeStore:
             p.in_order = True
             self.max_seq[p.session_id] = p.seq
         else:
-            p.in_order = False
+            # if the difference is too big, a counter probably
+            # flipped over
+            if self.max_seq[p.session_id] - p.seq > 1000000:
+                p.in_order = True
+                self.max_seq[p.session_id] = p.seq
+            else:
+                p.in_order = False
         
         # check for previous packet
         try:
@@ -249,7 +264,7 @@ class ProbeStore:
         self.db.commit()
 
 
-    def delete(self, age):
+    def delete(self, age, age_lowres):
         """ Deletes saved data of age 'age' and older. """
     
         self.logger.info("Deleting old data from database.")
@@ -259,8 +274,11 @@ class ProbeStore:
         sql = "DELETE FROM probes WHERE created < ?"
         self.db.execute(sql, ((now - age)*1000000000, ))
 
+        sql = "DELETE FROM probes_aggregate WHERE created < ? AND aggr_interval = ?"
+        self.db.execute(sql, ((now - age)*1000000000, self.AGGR_DB_HIGHRES))
+
         sql = "DELETE FROM probes_aggregate WHERE created < ?"
-        self.db.execute(sql, ((now - age)*1000000000, ))
+        self.db.execute(sql, ((now - age_lowres)*1000000000, ))
 
 
     def aggregate(self, sess_id, start):
@@ -454,6 +472,27 @@ class ProbeStore:
             pset.append(Probe(pdlist))
 
         return pset
+
+    def get_last_lowres_aggregate(self, session_id, num = 1):
+        """ Get last precomputed aggregate data.
+
+            Returns precomputed aggregates (300 seconds) for session 'id'.
+            In case of interesting event during the interval (packet loss)
+            higher resolution data is returned for an interval around the 
+            interesting event.
+        """
+
+        start = ((int(time.time()) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL) * 1000000000
+        self.logger.debug("Getting last_dyn_aggregate for id %d from %d now: %d" % (session_id, start/1000000000, int(time.time())))
+        sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
+            "created >= ? AND aggr_interval = ?")
+        res = self.db.select(sql, (session_id, start, self.AGGR_DB_LOWRES))
+
+        ret = list()
+        for row in res:
+            ret.append(dict(row))
+
+        return ret
 
     
     def get_last_dyn_aggregate(self, session_id, num = 1):

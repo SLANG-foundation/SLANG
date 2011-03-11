@@ -95,6 +95,7 @@ class Probed(threading.Thread):
         """ Reload probed application """
 
         self.probed.send_signal(signal.SIGHUP)
+        self.pstore.flush_queue()
 
 
     def run(self):
@@ -113,6 +114,7 @@ class Probed(threading.Thread):
                 self.logger.warning('probed not running!')
                 self.fifo.close()
                 self.start_probed()
+                self.pstore.flush_queue()
                 continue
 
             if self.fifo.closed:

@@ -45,14 +45,15 @@ if options.mode == 'aggr':
             int(time.time()-int(options.interval)), int(time.time()))
 
         for aggr in a:
-            print "OK: %d, Err: %d, DSCP-loss: %d, Pongloss: %d, Loss: %d, DUPs: %d\nRTT: %.3f / %.3f / %.3f / %.3f / %.3f\nJitter: %.3f / %.3f / %.3f / %.3f / %.3f" % \
+            print "OK: %.0f, LOSS: Ping: %.0f, Pong: %.0f, DSCP: %.0f, TS: %.0f, DUP: %.0f, OOO: %.0f\nRTT: %.3f / %.3f / %.3f / %.3f / %.3f\nJitter: %.3f / %.3f / %.3f / %.3f / %.3f" % \
                 (
-                    aggr['success'],
-                    aggr['timestamperror'],
-                    aggr['dscperror'],
-                    aggr['pongloss'],
-                    aggr['timeout'],
-                    aggr['dup'],
+                    float(aggr['success']),
+                    float(aggr['timeout']),
+                    float(aggr['pongloss']),
+                    float(aggr['dscperror']),
+                    float(aggr['timestamperror']),
+                    float(aggr['dup']),
+                    float(aggr['reordered']),
                     float(aggr['rtt_max']) / float(1000), 
                     float(aggr['rtt_avg']) / float(1000), 
                     float(aggr['rtt_med']) / float(1000), 

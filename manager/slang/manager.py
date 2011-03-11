@@ -93,6 +93,11 @@ class Manager:
             estr = str('Config fetch error: %s' % str(e))
             self.logger.critical(estr)
             raise ManagerError(estr)
+
+        # send SIGHUP
+        if self.probed is not None:
+            self.probed.reload()
+
     
     def write_config(self, cfg_data):
         """ Save config 'cfg_data' to disk and reload application. """
