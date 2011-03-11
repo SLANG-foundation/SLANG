@@ -473,6 +473,27 @@ class ProbeStore:
 
         return pset
 
+    def get_last_lowres_aggregate(self, session_id, num = 1):
+        """ Get last precomputed aggregate data.
+
+            Returns precomputed aggregates (300 seconds) for session 'id'.
+            In case of interesting event during the interval (packet loss)
+            higher resolution data is returned for an interval around the 
+            interesting event.
+        """
+
+        start = ((int(time.time()) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL) * 1000000000
+        self.logger.debug("Getting last_dyn_aggregate for id %d from %d now: %d" % (session_id, start/1000000000, int(time.time())))
+        sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
+            "created >= ? AND aggr_interval = ?")
+        res = self.db.select(sql, (session_id, start, self.AGGR_DB_LOWRES))
+
+        ret = list()
+        for row in res:
+            ret.append(dict(row))
+
+        return ret
+
     
     def get_last_dyn_aggregate(self, session_id, num = 1):
         """ Get last precomputed aggregate data.
