@@ -264,7 +264,7 @@ class ProbeStore:
         self.db.commit()
 
 
-    def delete(self, age):
+    def delete(self, age, age_lowres):
         """ Deletes saved data of age 'age' and older. """
     
         self.logger.info("Deleting old data from database.")
@@ -274,8 +274,11 @@ class ProbeStore:
         sql = "DELETE FROM probes WHERE created < ?"
         self.db.execute(sql, ((now - age)*1000000000, ))
 
+        sql = "DELETE FROM probes_aggregate WHERE created < ? AND aggr_interval = ?"
+        self.db.execute(sql, ((now - age)*1000000000, self.AGGR_DB_HIGHRES))
+
         sql = "DELETE FROM probes_aggregate WHERE created < ?"
-        self.db.execute(sql, ((now - age)*1000000000, ))
+        self.db.execute(sql, ((now - age_lowres)*1000000000, ))
 
 
     def aggregate(self, sess_id, start):

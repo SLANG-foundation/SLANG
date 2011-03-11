@@ -52,9 +52,9 @@ class Maintainer(threading.Thread):
                 self.pstore.flush()
                 self.last_flush = time()
 
-            # remove old data from database
+            # remove old data from database, 30min HIGHRES and 24h LOWRES
             if (time() - self.last_delete) >= self.delete_interval:
-                self.pstore.delete(1800)
+                self.pstore.delete(1800, 3600*24)
                 self.last_delete = time()
             
             # reload every hour
