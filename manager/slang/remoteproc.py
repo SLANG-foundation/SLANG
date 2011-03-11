@@ -78,7 +78,9 @@ class RemoteProc(xmlrpc.XMLRPC):
             # set null values to zero before we send them over XML-RPC
             for k, v in r.items():
                 if v == None:
-                    r[k] = 0
+                    r[k] = str(0)
+                else:
+                    r[k] = str(v)
 
             result.append(r)
 
@@ -103,6 +105,12 @@ class RemoteProc(xmlrpc.XMLRPC):
             r = row
             r['start'] = r['created'] / 1000000000
             del r['created']
+            # set null values to zero before we send them over XML-RPC
+            for k, v in r.items():
+                if v == None:
+                    r[k] = str(0)
+                else:
+                    r[k] = str(v)
 
         return data
 
