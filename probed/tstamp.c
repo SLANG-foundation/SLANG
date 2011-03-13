@@ -206,16 +206,16 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 	pkt_t pkt;
 	fd_set fs;
-	struct timeval tv, now, last; /* Timeouts for select and while */
+	struct timeval tv, now, last, tmp; /* Timeouts for select and while */
 
 	memset(ts, 0, sizeof *ts);
-	/* Wait for TX tstamp during at least 0.1 sec... */ 
+	/* Wait for TX tstamp */
 	(void)gettimeofday(&last, 0);
 	(void)gettimeofday(&now, 0);
-	/* ...and at most 2 sec */
-	while (now.tv_sec - last.tv_sec < 2) {
-		tv.tv_sec = 1; 
-		tv.tv_usec = 0;
+	tv.tv_sec = 0;
+	tv.tv_usec = 10000;
+	timersub(&now, &last, &tmp);
+	while (timercmp(&tmp, &tv, <) != 0) {
 		unix_fd_zero(&fs);
 		unix_fd_set(sock, &fs);
 		if (select(sock + 1, &fs, NULL, NULL, &tv) > 0) {
@@ -227,7 +227,10 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 				return 0;
 			}
 		}
+		tv.tv_sec = 0;
+		tv.tv_usec = 10000;
 		(void)gettimeofday(&now, 0);
+		timersub(&now, &last, &tmp);
 	}
 	return -1;
 }
