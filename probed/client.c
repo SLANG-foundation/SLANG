@@ -512,15 +512,14 @@ void client_msess_transmit(int s_udp) {
 			continue;
 		timersub(&now, &s->last_sent, &tmp);
 		/* time to send new packet? */
-		if (cmp_tv(&tmp, &s->interval) == 1) {
+		if (timercmp(&tmp, &s->interval, >) != 0) {
 			memset(&tx, 0, sizeof tx);
 			tx.type = TYPE_PING;
 			tx.id = s->id;
 			s->last_seq++;
 			tx.seq = s->last_seq;
 			(void)dscp_set(s_udp, s->dscp);
-			if (send_w_ts(s_udp, &s->dst, (char*)&tx, &ts) < 0)
-				continue;
+			(void)send_w_ts(s_udp, &s->dst, (char*)&tx, &ts);
 			client_res_insert(&s->dst, &tx, &ts);
 			memcpy(&s->last_sent, &now, sizeof now);
 		}
