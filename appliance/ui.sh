@@ -244,12 +244,12 @@ menu_network_if_static()
 	gw6=`grep "gateway " /tmp/net2 | cut -d' ' -f2`
 	dialog --form "Type the addresses. Leave fields empty to omit them." \
 		14 70 7 \
-		"IP Address"   1  2 "$ip"     1 20 43 100 \
-		"IP Netmask"   2  2 "$mask"   2 20 43 100 \
-		"IP Gateway"   3  2 "$gw"     3 20 43 100 \
-		"IPv6 Address" 5  2 "$ip6"    5 20 43 100 \
-		"IPv6 Bitmask" 6  2 "$mask6"  6 20 43 100 \
-		"IPv6 Gateway" 7  2 "$gw6"    7 20 43 100 \
+		"IP Address"     1  2 "$ip"     1 20 43 100 \
+		"IP Netmask"     2  2 "$mask"   2 20 43 100 \
+		"IP Gateway"     3  2 "$gw"     3 20 43 100 \
+		"IPv6 Address"   5  2 "$ip6"    5 20 43 100 \
+		"IPv6 Prefixlen" 6  2 "$mask6"  6 20 43 100 \
+		"IPv6 Gateway"   7  2 "$gw6"    7 20 43 100 \
 		2> /tmp/ui.dialog
 	if [ "$?" -eq 0 ]
 	then

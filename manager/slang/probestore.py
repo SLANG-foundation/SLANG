@@ -188,17 +188,20 @@ class ProbeStore:
             return
 
         # Reordered?
-        if  p.seq > self.max_seq[p.session_id]:
-            p.in_order = True
-            self.max_seq[p.session_id] = p.seq
-        else:
-            # if the difference is too big, a counter probably
-            # flipped over
-            if self.max_seq[p.session_id] - p.seq > 1000000:
+        if p.state == probe.STATE_OK:
+            if p.seq > self.max_seq[p.session_id]:
                 p.in_order = True
                 self.max_seq[p.session_id] = p.seq
             else:
-                p.in_order = False
+                # if the difference is too big, a counter probably
+                # flipped over
+                if self.max_seq[p.session_id] - p.seq > 1000000:
+                    p.in_order = True
+                    self.max_seq[p.session_id] = p.seq
+                else:
+                    p.in_order = False
+        else:
+            p.in_order = True
         
         # check for previous packet
         try:
@@ -502,14 +505,20 @@ class ProbeStore:
             In case of interesting event during the interval (packet loss)
             higher resolution data is returned for an interval around the 
             interesting event.
+            Zib-delux funktion.
         """
-
-        start = ((int(time.time()) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL) * 1000000000
-#        end = ((int(time.time()) / self.AGGR_DB_LOWRES - 1) * self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL + 1) * 1000000000
+        # the +10 is for ASM that always starts asking 00:00:00 etc, and
+        # therefore it's a risk that we "averages" the time into the same 
+        # 5-min interval two times in a row. for example:
+        # requests 00:40:00 and 00:44:59 = will end up in the same interval.
+        # That's what makes this API (get_last_dyn_aggregate) so bad. Crappy
+        # crappy crappy :)
+        start = ((int(time.time() + 10) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)     * 1000000000
+        end =   ((int(time.time() + 10) / self.AGGR_DB_LOWRES - 1)       * self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL + 1) * 1000000000
         self.logger.debug("Getting last_dyn_aggregate for id %d from %d now: %d" % (session_id, start/1000000000, int(time.time())))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
-            "created >= ?")
-        res = self.db.select(sql, (session_id, start))
+            "created >= ? AND created < ?")
+        res = self.db.select(sql, (session_id, start, end))
 
         ret = list()
         for row in res:

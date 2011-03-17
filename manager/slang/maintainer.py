@@ -67,7 +67,8 @@ class Maintainer(threading.Thread):
                 self.last_reload = time()
 
             # save precalculated aggregates to database
-            if (time() - self.last_pstore_aggr) >= self.pstore.AGGR_DB_LOWRES:
+            if ((time() - self.last_pstore_aggr) >= self.pstore.AGGR_DB_LOWRES
+                + self.pstore.HIGHRES_INTERVAL):
 
                 start = self.last_pstore_aggr
 
@@ -76,7 +77,7 @@ class Maintainer(threading.Thread):
 
                 for sess in sesss:
                     try:
-                        self.pstore.aggregate(sess, (start - self.pstore.AGGR_DB_LOWRES)*1000000000)
+                        self.pstore.aggregate(sess, start*1000000000)
                     except Exception, e:
                         self.logger.error("aggregation failed: %s. Missing valid measurement data?" % str(e))
                         continue
