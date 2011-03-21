@@ -113,7 +113,10 @@ class Probed(threading.Thread):
             if self.probed.poll() != None:
                 self.logger.warning('probed not running!')
                 self.fifo.close()
-                self.start_probed()
+                try:
+                    self.start_probed()
+                except Exception, e:
+                  pass
                 self.pstore.flush_queue()
                 continue
 

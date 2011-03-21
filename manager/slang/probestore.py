@@ -513,8 +513,8 @@ class ProbeStore:
         # requests 00:40:00 and 00:44:59 = will end up in the same interval.
         # That's what makes this API (get_last_dyn_aggregate) so bad. Crappy
         # crappy crappy :)
-        start = ((int(time.time() + 10) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)     * 1000000000
-        end =   ((int(time.time() + 10) / self.AGGR_DB_LOWRES - 1)       * self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL + 1) * 1000000000
+        start = ((int(time.time() + 10) / self.AGGR_DB_LOWRES - num - 1) * self.AGGR_DB_LOWRES) * 1000000000
+        end =   ((int(time.time() + 10) / self.AGGR_DB_LOWRES - 1)       * self.AGGR_DB_LOWRES) * 1000000000
         self.logger.debug("Getting last_dyn_aggregate for id %d from %d now: %d" % (session_id, start/1000000000, int(time.time())))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
             "created >= ? AND created < ?")
