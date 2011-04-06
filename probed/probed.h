@@ -9,7 +9,7 @@
 #include <netinet/in.h>
 
 #define APP_AND_VERSION "SLA-NG probed 0.1"
-#define TIMEOUT 1
+#define TIMEOUT 10
 #define TMPLEN 512
 #define DATALEN 48
 #define TYPE_PING 'i'

@@ -55,7 +55,6 @@
 #define XML_NODE "probe"
 
 /* List of probe results */
-static LIST_HEAD(msess_listhead, msess) msess_head;
 struct res {
 	/*@dependent@*/ ts_t created;
 	int state;
@@ -63,13 +62,14 @@ struct res {
 	num_t id;
 	num_t seq;
 	/*@dependent@*/ ts_t ts[4];
-	LIST_ENTRY(res) list;
+	TAILQ_ENTRY(res) list;
 };
 
 struct res_fifo {
 	uint32_t id;
 	uint32_t seq;
 	uint32_t state;
+	uint32_t created_sec;
 	uint32_t rtt_sec;
 	uint32_t rtt_nsec;
 };
@@ -79,8 +79,8 @@ struct res_fifo {
  */
 struct msess {
 	num_t id; /**< Measurement session ID */
-	LIST_HEAD(res_listhead, res) res_head;
-	struct sockaddr_in6 dst; /**< Destination address and port */
+	TAILQ_HEAD(res_listhead, res) res_head;
+	addr_t dst; /**< Destination address and port */
 	int msec_interval; /**< Probe interval */
 	int timeout; /**< Timeout for PING */
 	int got_hello; /**< Are we connected with server? */ 
@@ -89,6 +89,7 @@ struct msess {
 	uint32_t last_seq; /**< Last sequence number sent */
 	LIST_ENTRY(msess) list;
 };
+static LIST_HEAD(msess_listhead, msess) msess_head;
 /* Client mode statistics */
 static int res_ok = 0;
 static int res_timeout = 0;
@@ -261,10 +262,8 @@ void client_res_insert(addr_t *a, data_t *d, ts_t *ts) {
 	r->seq = d->seq;
 	r->ts[0] = *ts;
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
-	LIST_INSERT_HEAD(&s2->res_head, r, list);
+	TAILQ_INSERT_HEAD(&s2->res_head, r, list);
 	/*@ +mustfreeonly +immediatetrans */
-	/* Only for clean-up purposes; timeout even if we get no PONGS */
-	client_res_update(a, d, ts, -1);
 	/*@ -compmempass TODO wtf? */
 	return;
 	/*@ +compmempass */
@@ -283,32 +282,32 @@ void client_res_insert(addr_t *a, data_t *d, ts_t *ts) {
  * \warning  We wait until the next timestamp arrives, before printing
  */
 void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
-	struct res *r, *r_tmp, r_stat;
+	struct res *r;
 	struct msess *s;
 	struct res_fifo r_fifo;
 	ts_t now, diff, rtt;
 	int i;
-	int found = 0;
 
 	r = NULL;
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next)
-		if (s->id == d->id) r = s->res_head.lh_first;
+		if (s->id == d->id)
+			break;
+	if (s == NULL) 
+		return;
+	r = s->res_head.tqh_first;
 	while (r != NULL) {
 		/* If match; update */
 		if (r->id == d->id &&
 			r->seq == d->seq &&
 			memcmp(&r->addr, &a->sin6_addr, sizeof r->addr) == 0) {
-			found = 1;
 			if (d->type == TYPE_PONG) {
 				r->state |= MASK_PONG;
 				/* Save T4 timestamp */
 				if (ts != NULL) 
 					r->ts[3] = *ts;
 				/* DSCP failure status */
-				for (s = msess_head.lh_first; s != NULL; s = s->list.le_next)
-					if (s->id == r->id)
-						if (s->dscp != (uint8_t)dscp)
-							r->state |= MASK_DSCP;
+				if (s->dscp != (uint8_t)dscp)
+					r->state |= MASK_DSCP;
 			} else if (d->type == TYPE_TIME) {
 				r->state |= MASK_TIME;
 				r->ts[1] = d->t2;
@@ -318,6 +317,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 			if ((r->state & MASK_DONE) == MASK_DONE) {
 				r_fifo.id = (uint32_t)r->id;
 				r_fifo.seq = (uint32_t)r->seq;
+				r_fifo.created_sec = (uint32_t)r->created.tv_sec;
 				/* Check for DSCP error */
 				if (r->state & MASK_DSCP)
 					r_fifo.state = STATE_DS_ERR;
@@ -337,18 +337,18 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				/* Check that all timestamps are present */
 				for (i = 0; i < 4; i++)
 					if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) 
-						r_fifo = STATE_TS_ERR;
+						r_fifo.state = STATE_TS_ERR;
 				/* Pipe (daemon) output */
 				if (cfg.op == DAEMON) 
 					if (write(cfg.fifo, (char *)&r_fifo, sizeof r_fifo) == -1)
 						syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 				/* Client output */
 				if (cfg.op == CLIENT) {
-					if (r_fifo.state == STATE_DS_ERROR) {
+					if (r_fifo.state == STATE_DS_ERR) {
 						res_dserror++;
 						printf("Error    %4d from %d in %d sec (invalid DSCP)\n", 
 								(int)r->seq, (int)r->id, (int)diff.tv_sec);
-					} else { /* STATE_OK implicit */
+					} else { /* STATE_SUCCESS implicit */
 						res_ok++;
 						diff_ts(&diff, &r->ts[3], &r->ts[0]);
 						diff_ts(&now, &r->ts[2], &r->ts[1]);
@@ -369,44 +369,37 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 						res_rtt_total = res_rtt_total + rtt.tv_nsec;
 					}
 				}
-				/* Ready, timeout or error; safe removal */
-				r_tmp = r->list.le_next;
 				/*@ -branchstate -onlytrans TODO wtf */
-				LIST_REMOVE(r, list);
+				TAILQ_REMOVE(&s->res_head, r, list);
 				/*@ +branchstate +onlytrans */
 				free(r);
-				r = r_tmp;
-				continue;
 			}
-		}
-		/* Done, we have received a response! */
-		/* Print */
-		if (r->state == STATE_OK ||
-			r->state == STATE_TSERROR ||
-			r->state == STATE_DSERROR ||
-			r->state == STATE_TIMEOUT ||
-			r->state == STATE_PONGLOSS) {
+			return;
 		}
 		/* Alright, next entry */
-		r = r->list.le_next;
+		r = r->list.tqe_next;
 	}
-	/* Didn't find PING, probably removed. DUP! */
-	if (found == 0 && d->type == TYPE_PONG) {
-		memset(&r_stat, 0, sizeof r_stat);
-		(void)clock_gettime(CLOCK_REALTIME, &r_stat.created);
-		r_stat.state = STATE_DUP;
-		memcpy(&r_stat.addr, a, sizeof r_stat.addr);
-		r_stat.id = d->id;
-		r_stat.seq = d->seq;
-		if (cfg.op == DAEMON) 
-			if (write(cfg.fifo, (char*)&r_stat, sizeof r_stat) == -1)
-				syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
-		/* Client output */
-		if (cfg.op == CLIENT) { 
-			res_dup++;
-			printf("Unknown  %4d from %d (probably DUP)\n", 
-					(int)d->seq, (int)d->id);
-		}
+	/* Didn't find PING. DUP! */
+	i = 0;
+	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next)
+		if (memcmp(&s->dst.sin6_addr, &a->sin6_addr, sizeof r->addr) == 0)
+			if (d->type == TYPE_PONG)
+				if (s->id == d->id)
+					i = 1;
+	if (i == 0) return;
+	memset(&r_fifo, 0, sizeof r_fifo);
+	(void)clock_gettime(CLOCK_REALTIME, &now);
+	r_fifo.state = STATE_DUP;
+	r_fifo.id = (uint32_t)r->id;
+	r_fifo.seq = (uint32_t)r->seq;
+	r_fifo.created_sec = (uint32_t)now.tv_sec;
+	if (cfg.op == DAEMON)
+		if (write(cfg.fifo, (char*)&r_fifo, sizeof r_fifo) == -1)
+			syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+	if (cfg.op == CLIENT) {
+		res_dup++;
+		printf("Unknown  %4d from %d (probably DUP)\n",
+				(int)d->seq, (int)d->id);
 	}
 }
 
@@ -440,16 +433,26 @@ void client_res_clear_timeouts(void) {
 	struct res_fifo r_fifo;
 	struct msess *s;
 	ts_t now, diff;
+	int fisk, fisk2;
 
 	(void)clock_gettime(CLOCK_REALTIME, &now);
 	r = NULL;
 	/* For each mesasurement sesion */
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
-		/* For each probee */
-		r = s->res_head.lh_first;
+		/* For each probe, in reverse order */
+		if ((&s->res_head)->tqh_last == NULL)
+			continue;
+		r = *(((struct res_listhead *)((&s->res_head)->tqh_last))->tqh_last);
+		fisk = 0;
+		fisk2 = 0;
 		while (r != NULL) {
+			fisk++;
 			diff_ts(&diff, &now, &r->created);
-			if (diff.tv_sec > TIMEOUT) {
+			if (diff.tv_sec <= TIMEOUT) {
+				/* We have reached young probes; stop looking */
+				break;
+			} else {
+				fisk2++;
 				/* 
 				 * Define three states: 
 				 * PONGLOSS, we have a TCP timestamp, but no pong
@@ -462,47 +465,45 @@ void client_res_clear_timeouts(void) {
 				else if (r->state & MASK_PONG)
 				   	r_fifo.state = STATE_TS_ERR;
 				else /* MASK_PING implicit */
-					r->state = STATE_TIMEOUT;
-				if (r->state == STATE_TSERROR ||
-					r->state == STATE_TIMEOUT ||
-					r->state == STATE_PONGLOSS) {
-					/* Pipe (daemon) output */
-					if (cfg.op == DAEMON) 
-						if (write(cfg.fifo, (char*)r, sizeof *r) == -1)
-							syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
-					/* Client output */
-					if (cfg.op == CLIENT) {
-						if (r->state == STATE_TSERROR) {
-							res_tserror++;
-							printf("Error    %4d from %d in %d sec (missing T2/T3)\n", 
-									(int)r->seq, (int)r->id, (int)diff.tv_sec);
-						} else if (r->state == STATE_PONGLOSS) {
-							res_pongloss++;
-							printf("Timeout  %4d from %d in %d sec (missing PONG)\n", 
-									(int)r->seq, (int)r->id, (int)diff.tv_sec);
-						} else if (r->state == STATE_TIMEOUT) {
-							res_timeout++;
-							printf("Timeout  %4d from %d in %d sec (missing all)\n", 
-									(int)r->seq, (int)r->id, (int)diff.tv_sec);
-						} else { /* STATE_OK implicit */
-							printf("Error    %4d from %d (unknown error)\n", 
-									(int)r->seq, (int)r->id);
-						}
+					r_fifo.state = STATE_TIMEOUT;
+				r_fifo.id = (uint32_t)r->id;
+				r_fifo.seq = (uint32_t)r->seq;
+				r_fifo.created_sec = (uint32_t)r->created.tv_sec;
+				if (cfg.op == DAEMON)
+					if (write(cfg.fifo, (char *)&r_fifo, sizeof r_fifo) == -1)
+						syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+				/* Client output */
+				if (cfg.op == CLIENT) {
+					if (r_fifo.state == STATE_TS_ERR) {
+						res_tserror++;
+						printf("Error    %4d from %d in %d sec (missing T2/T3)\n",
+								(int)r->seq, (int)r->id, (int)diff.tv_sec);
+					} else if (r_fifo.state == STATE_PONGLOSS) {
+						res_pongloss++;
+						printf("Timeout  %4d from %d in %d sec (missing PONG)\n",
+								(int)r->seq, (int)r->id, (int)diff.tv_sec);
+					} else if (r_fifo.state == STATE_TIMEOUT) {
+						res_timeout++;
+						printf("Timeout  %4d from %d in %d sec (missing all)\n",
+								(int)r->seq, (int)r->id, (int)diff.tv_sec);
+					} else {
+						printf("Error    %4d from %d (unknown error)\n",
+								(int)r->seq, (int)r->id);
 					}
-					/* Ready, timeout or error; safe removal */
-					r_tmp = r->list.le_next;
-					/*@ -branchstate -onlytrans TODO wtf */
-					LIST_REMOVE(r, list);
-					/*@ +branchstate +onlytrans */
-					free(r);
-					r = r_tmp;
-					continue;
 				}
+				/* Ready, timeout or error; safe removal */
+				r_tmp = *(((struct res_listhead *)(r->list.tqe_prev))->tqh_last);
+				/*@ -branchstate -onlytrans TODO wtf */
+				TAILQ_REMOVE(&s->res_head, r, list);
+				/*@ +branchstate +onlytrans */
+				free(r);
+				r = r_tmp;
+				continue;
 			}
-			r = r->list.le_next;
+			r = *(((struct res_listhead *)(r->list.tqe_prev))->tqh_last);
 		}
 	}
-
+	return;
 }
 
 /**
@@ -566,6 +567,10 @@ void client_msess_transmit(int s_udp, int sends) {
 		if (s->got_hello != 1) 
 			continue;
 		/* time to send new packet? */
+		if (s->msec_interval < 1) {
+			syslog(LOG_CRIT, "Invalid interval");
+			continue;
+		}
 		if (sends % s->msec_interval == 0) {
 			memset(&tx, 0, sizeof tx);
 			tx.type = TYPE_PING;
@@ -649,11 +654,11 @@ int client_msess_reconf(char *port, char *cfgpath) {
 			if (kill(s->child_pid, SIGKILL) != 0)
 				syslog(LOG_ERR, "client: kill: %s", strerror(errno));
 		/* Kill all client results */
-		r = s->res_head.lh_first;
+		r = s->res_head.tqh_first;
 		while (r != NULL) {
-			r_tmp = r->list.le_next;
+			r_tmp = r->list.tqe_next;
 			/*@ -branchstate -onlytrans TODO wtf */
-			LIST_REMOVE(r, list);
+			TAILQ_REMOVE(&s->res_head, r, list);
 			/*@ +branchstate +onlytrans */
 			free(r);
 			r = r_tmp;
@@ -723,7 +728,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 		}
 		/*@ -mustfreeonly -immediatetrans TODO wtf */
 		if (ok == 1) {
-			LIST_INIT(&s->res_head);
+			TAILQ_INIT(&s->res_head);
 			LIST_INSERT_HEAD(&msess_head, s, list);
 		} else {
 			free(s);
