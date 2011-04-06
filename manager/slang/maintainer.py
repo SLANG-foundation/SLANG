@@ -47,9 +47,13 @@ class Maintainer(threading.Thread):
             if self.thread_stop:
                 break
             
-            # flush (commit) to database
+            # flush lowres aggregates to highres aggregates
             if (time() - self.last_flush) >= self.flush_interval:
+#                try:
                 self.pstore.flush()
+#                except Exception, e:
+#                    self.logger.error("flush failed with %s: %s" % 
+#                        (str(type(e)), str(e)))
                 self.last_flush = time()
 
             # remove old data from database, 30min HIGHRES and 24h LOWRES
@@ -70,6 +74,8 @@ class Maintainer(threading.Thread):
             if ((time() - self.last_pstore_aggr) >= self.pstore.AGGR_DB_LOWRES
                 + self.pstore.HIGHRES_INTERVAL):
 
+                t_start = time()
+
                 start = self.last_pstore_aggr
 
                 # perform operation for each session we have data for
@@ -77,13 +83,16 @@ class Maintainer(threading.Thread):
 
                 for sess in sesss:
                     try:
-                        self.pstore.aggregate(sess, start*1000000000)
+                        self.pstore.aggregate(sess)
                     except Exception, e:
                         self.logger.error("aggregation failed: %s. Missing valid measurement data?" % str(e))
                         continue
 
                 self.last_pstore_aggr = ((int(time()) / self.pstore.AGGR_DB_LOWRES) * 
                     self.pstore.AGGR_DB_LOWRES)
+
+                t_stop = time()
+                self.logger.debug("Aggregation performed in %.2f seconds" % (t_stop - t_start))
 
             sleep(1)
 

@@ -21,6 +21,11 @@ class ProbeStore:
     probes = None
     max_seq = None
     flag_flush_queue = False
+    l_probe_raw_lowres = None
+    probe_raw_lowres = None
+    l_probe_raw_highres = None
+    probe_raw_highres = None
+    probe_raw_highres_backlog = None
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300
@@ -40,34 +45,17 @@ class ProbeStore:
 
         self.probes = dict()
         self.max_seq = dict()
+        self.probe_raw_lowres = dict()
+        self.l_probe_raw_lowres = threading.Lock()
+        self.probe_raw_highres = dict()
+        self.l_probe_raw_highres = threading.Lock()
+        self.probe_raw_highres_backlog = dict()
 
         self.logger.debug("created instance")
 
         # open database connection
         try:
             self.db = ProbeStoreDB(self.config.get('dbpath'))
-
-            # create probe table
-            self.db.execute("CREATE TABLE IF NOT EXISTS probes (" + 
-                "session_id INTEGER, " +
-                "seq INTEGER, " + 
-                "created INTEGER, " +
-                "t1 INTEGER, " + 
-                "t2 INTEGER, " + 
-                "t3 INTEGER, " + 
-                "t4 INTEGER, " + 
-                "rtt INTEGER, " +
-                "delayvar INTEGER, " +
-                "duplicates INTEGER, " +
-                "in_order INTEGER, " +
-                "state TEXT " + 
-                ");")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id ON probes(session_id)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__state ON probes(session_id, created, state)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__rtt ON probes(session_id, created, rtt)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id__created__in_order ON probes(session_id, created, in_order)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx__rtt ON probes(rtt)")
-            self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes(created)")
 
             # create aggregate database
             self.db.execute("CREATE TABLE IF NOT EXISTS probes_aggregate (" + 
@@ -102,6 +90,7 @@ class ProbeStore:
             estr = "Unable to initialize database: %s" % str(e)
             self.logger.critical(estr)
             raise ProbeStoreError(estr)
+
 
     def flush_queue(self):
         """ Schedule a probe queue flush. """
@@ -231,94 +220,118 @@ class ProbeStore:
 
 
     def insert(self, p):
-        """ Insert probe into database """
+        """ Insert probe into aggregated storage. """
 
-        sql = ("INSERT INTO probes " +
-            "(session_id, seq, state, " + 
-            "created, t1, t2, t3, t4, " +
-            "rtt, delayvar, "+
-            "in_order, duplicates)" +
-            " VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        # acquire lock
+        self.l_probe_raw_highres.acquire(True)
 
-        dv = None
-        if p.delay_variation is not None:
-            dv = abs(p.delay_variation)
+        # session in storage?
+        if p.session_id not in self.probe_raw_highres:
+            self.probe_raw_highres[p.session_id] = {
+                'created': int(p.created / 1000000000 / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES * 1000000000,
+                'rtts': list(),
+                'delayvars': list(),
+                'total': 0,
+                'success': 0,
+                'timestamperror': 0,
+                'pongloss': 0,
+                'dscperror': 0,
+                'timeout': 0,
+                'dup': 0,
+                'reordered': 0
+            }
 
-        try:
-            self.db.execute(sql, 
-                    (p.session_id, p.seq, p.state, p.created,
-                     p.t1, p.t2, p.t2, p.t4, 
-                     p.rtt, dv,
-                     p.in_order, p.dups
-                    ),
-            )
-                      
-        
-        except Exception, e:
-            self.logger.error("Unable to flush probe to database: %s: " % e)
+        # if successful, update rtt & delayvar
+        if p.successful:
+            if p.rtt is not None:
+                self.probe_raw_highres[p.session_id]['rtts'].append(p.rtt)
+            if p.delay_variation is not None:
+                self.probe_raw_highres[p.session_id]['delayvars'].append(abs(p.delay_variation))
+
+        # update state counters
+        if p.state == probe.STATE_OK:
+            self.probe_raw_highres[p.session_id]['success'] +=1
+        elif p.state == probe.STATE_DSERROR:
+            self.probe_raw_highres[p.session_id]['dscperror'] += 1
+        elif p.state == probe.STATE_TSERROR:
+            self.probe_raw_highres[p.session_id]['timestamperror'] += 1
+        elif p.state == probe.STATE_PONGLOSS:
+            self.probe_raw_highres[p.session_id]['pongloss'] += 1
+        elif p.state == probe.STATE_TIMEOUT:
+            self.probe_raw_highres[p.session_id]['timeout'] += 1
+
+        self.probe_raw_highres[p.session_id]['total'] += 1
+        self.probe_raw_highres[p.session_id]['dup'] += bool(p.dups)
+
+        # release lock
+        self.l_probe_raw_highres.release()
 
 
     def flush(self):
-        """ Requesting commit """    
+        """ Flush high-res data. """
 
-        self.logger.debug("Requesting commit")
+        # acquire lock
+        self.l_probe_raw_highres.acquire(True)
 
-        self.db.commit()
+        # copy & empty dict before performing work
+        tmp_highres = self.probe_raw_highres
+        self.probe_raw_highres = {}
 
+        # release lock
+        self.l_probe_raw_highres.release()
 
-    def delete(self, age, age_lowres):
-        """ Deletes saved data of age 'age' and older. """
+        if len(tmp_highres) == 0:
+            self.logger.debug("No data to flush.")
+            return
     
-        self.logger.info("Deleting old data from database.")
+        ctime = tmp_highres[ tmp_highres.keys()[0] ]['created']
+        self.logger.debug("Flushing one-second data for %d sessions, time %d" % 
+            (len(tmp_highres), int(ctime/1000000000)))
 
-        now = int(time.time())
+        # add to five min aggregate
+        for session_id in tmp_highres:
 
-        sql = "DELETE FROM probes WHERE created < ?"
-        self.db.execute(sql, ((now - age)*1000000000, ))
+            if session_id not in self.probe_raw_highres:
+                self.probe_raw_lowres[session_id] = {
+                    'created': int(tmp_highres[session_id]['created'] / 
+                        1000000000 / self.AGGR_DB_LOWRES) * 
+                        self.AGGR_DB_LOWRES * 1000000000,
+                    'rtts': list(),
+                    'delayvars': list(),
+                    'total': 0,
+                    'success': 0,
+                    'timestamperror': 0,
+                    'pongloss': 0,
+                    'dscperror': 0,
+                    'timeout': 0,
+                    'dup': 0,
+                    'reordered': 0 }
 
-        sql = "DELETE FROM probes_aggregate WHERE created < ? AND aggr_interval = ?"
-        self.db.execute(sql, ((now - age)*1000000000, self.AGGR_DB_HIGHRES))
+            # save highres data to backlog
+            if ctime not in self.probe_raw_highres_backlog:
+                self.probe_raw_highres_backlog[ctime] = {}
+            
+            self.probe_raw_highres_backlog[ctime][session_id] = tmp_highres[session_id]
 
-        sql = "DELETE FROM probes_aggregate WHERE created < ?"
-        self.db.execute(sql, ((now - age_lowres)*1000000000, ))
+            # perform addition of all fields
+            for key in self.probe_raw_lowres[session_id]:
+                if key == 'created':
+                    continue
 
+                self.probe_raw_lowres[session_id][key] += tmp_highres[session_id][key]
 
-    def aggregate(self, sess_id, start):
-        """ Aggregates self.AGGR_DB_LOWRES seconds worth of data. 
-        
-            Starts att time 'start'. The result will be written to the
-            database.
-        """
+        # remove old data from backlog
+        to_del = list()
+        for t in self.probe_raw_highres_backlog:
+            if t + 2 * self.HIGHRES_INTERVAL * 1000000000 < ctime:
+                to_del.append(t)
 
-        self.logger.debug("aggregating session %d from %d, %d seconds interval" % 
-            (sess_id, start, self.AGGR_DB_LOWRES))
-
-        # get aggregated data
-        data = self.get_aggregate(sess_id, 
-            start, 
-            start + self.AGGR_DB_LOWRES * 1000000000)
-
-        # insert into database
-        sql = ("INSERT INTO probes_aggregate " +
-            "(session_id, aggr_interval, created, total, " +
-            "success, timestamperror, dscperror, pongloss, timeout, " +
-            "dup, reordered, rtt_min, rtt_med, rtt_avg, rtt_max, " +
-            "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
-            "delayvar_max, delayvar_95th) VALUES " +
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
-        params = (
-            sess_id, self.AGGR_DB_LOWRES, start, data['total'], data['success'],
-            data['timestamperror'], data['dscperror'], data['pongloss'], data['timeout'], 
-            data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
-            data['rtt_max'], data['rtt_95th'], data['delayvar_min'], 
-            data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'], 
-            data['delayvar_95th'])
-
-        self.db.execute(sql, params)
+        for t in to_del:
+            self.logger.debug("Removing values of age %d from backlog" % int(t/1000000000))
+            del(self.probe_raw_highres_backlog[t])
 
         #
-        # compare aggregated data to previous data to find interesting events
+        # check backlog - are there interesting events?
         #
         # How to check for interesting events?
         #
@@ -348,85 +361,129 @@ class ProbeStore:
         # Packet loss:
         #  * _any_ packet loss (pongloss, timeout) is interesting.
         #
-
-        # Look for packet loss in aggregated data
-        if data['timeout'] > 0 or data['pongloss'] > 0:
-
-            self.logger.debug( ("Got interesting event: sess_id: %d " +
-                "timeout: %d pongloss: %d") % 
-                (sess_id, data['timeout'], data['pongloss']))
-
-            # Something happened. Get higher resolution data with some
-            # overlap to always be able to present a full interval around an 
-            # error. Begin with calculating intervals.
-            ctime = start - self.HIGHRES_INTERVAL * 1000000000
-            aggr_times = list()
-            while ctime < start + (self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL) * 1000000000:
-                aggr_times.append(ctime)
-                ctime += self.AGGR_DB_HIGHRES * 1000000000
-
-            aggr_times.append(start + (self.AGGR_DB_LOWRES + self.HIGHRES_INTERVAL) * 1000000000)
-    
-            # fetch data for intervals
-            highres = list()
-            for i in range(0, len(aggr_times) - 1):
-                r = self.get_aggregate(sess_id, aggr_times[i], aggr_times[i+1])
-                r['start'] = aggr_times[i]
-                highres.append(r)
-
-            # go through higher resolution data, find where interesting event occurred.
-            # Skip first part as it is outside the current interval
-            idx_to_examine = list()
-            for i in range(int(self.HIGHRES_INTERVAL/self.AGGR_DB_HIGHRES) , len(highres) - int(self.HIGHRES_INTERVAL/self.AGGR_DB_HIGHRES)):
-
-                # was there an error in the interval? If so, add index to list.
-                if highres[i]['timeout'] > 0 or highres[i]['pongloss'] > 0:
-                    idx_to_examine.append(i)
-
-#            self.logger.debug("will examine %d records deeper (%s)" % (len(idx_to_examine), idx_to_examine))
-
-            # append interesting records to list of records to save
-            highres_save = list()
-            idx_per_second = 1/float(self.AGGR_DB_HIGHRES)
-            for i in range(0, len(idx_to_examine) - 1):
-
-                low = idx_to_examine[i] - int(idx_per_second * self.HIGHRES_INTERVAL)
-                high = idx_to_examine[i] + int(idx_per_second * self.HIGHRES_INTERVAL) + 1
-
-                # if there is a previous row, make sure we do not overlap
-                # Might we have some rounding issues here?
-                if i != 0:
-                    prev_top_elem = idx_to_examine[i-1] + int(idx_per_second * self.HIGHRES_INTERVAL) 
-                    if prev_top_elem >= low:
-                        low = prev_top_elem + 1
-
-                # make sure we do not walk outside out list
-                if high > len(highres) - 1:
-                    high = len(highres) - 1
-
-                highres_save += highres[low:high]
-
-            self.logger.debug("Will write %d extra rows to database" % len(highres_save))
-                    
-            # save data
-            for row in highres_save:
-                sql = ("INSERT INTO probes_aggregate " +
-                    "(session_id, aggr_interval, created, total, " +
-                    "success, timestamperror, pongloss, timeout, " +
-                    "dup, reordered, rtt_min, rtt_med, rtt_avg, rtt_max, " +
-                    "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
-                    "delayvar_max, delayvar_95th) VALUES " +
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
-
-                params = (sess_id, self.AGGR_DB_HIGHRES, row['start'], 
-                    row['total'], row['success'], row['timestamperror'], 
-                    row['pongloss'], row['timeout'], row['dup'], row['reordered'], 
-                    row['rtt_min'], row['rtt_med'], row['rtt_avg'], row['rtt_max'], 
-                    row['rtt_95th'], row['delayvar_min'], row['delayvar_med'], 
-                    row['delayvar_avg'], row['delayvar_max'], 
-                    row['delayvar_95th'])
+        action_time = ctime - self.HIGHRES_INTERVAL * 1000000000
+        if action_time not in self.probe_raw_highres_backlog:
+            # missing data...
+            return
         
-                self.db.execute(sql, params)
+        for session_id in self.probe_raw_highres_backlog[action_time]:
+            
+            # check packet loss
+            if (self.probe_raw_highres_backlog[action_time][session_id]['timeout'] > 0 or
+                self.probe_raw_highres_backlog[action_time][session_id]['pongloss'] > 0):
+                
+                # Action! Save highres data.
+                for t in self.probe_raw_highres_backlog:
+                    self.calc_probedict(self.probe_raw_highres_backlog[t][session_id])
+                    self.save(session_id, self.AGGR_DB_HIGHRES, self.probe_raw_highres_backlog[t][session_id])
+
+
+    def calc_probedict(self, p):
+        """ Calculate values such as min, max and mean for a probe dict """
+
+        # sort rtt & delayvar lists
+        p['delayvars'].sort()
+        p['rtts'].sort()
+       
+        # find max, min, mean and 95:th
+        if len(p['rtts']) == 0:
+            p['rtt_max'] = None
+            p['rtt_min'] = None
+            p['rtt_avg'] = None
+            p['rtt_med'] = None
+            p['rtt_95th'] = None
+        else:
+            p['rtt_max'] = p['rtts'][-1]
+            p['rtt_min'] = p['rtts'][0]
+            p['rtt_avg'] = float(sum(p['rtts'])) / len(p['rtts'])
+            p['rtt_med'] = p['rtts'][int(len(p['rtts']) * 0.5)]
+            p['rtt_95th'] = p['rtts'][int(len(p['rtts']) * 0.95)]
+
+        if len(p['delayvars']) == 0:
+            p['delayvar_max'] = None
+            p['delayvar_min'] = None
+            p['delayvar_avg'] = None
+            p['delayvar_med'] = None
+            p['delayvar_95th'] = None
+        else:
+            p['delayvar_max'] = p['delayvars'][-1]
+            p['delayvar_min'] = p['delayvars'][0]
+            p['delayvar_avg'] = float(sum(p['delayvars'])) / len(p['delayvars'])
+            p['delayvar_med'] = p['delayvars'][int(len(p['delayvars']) * 0.5)]
+            p['delayvar_95th'] = p['delayvars'][int(len(p['delayvars']) * 0.95)]
+
+
+    def delete(self, age, age_lowres):
+        """ Deletes saved data of age 'age' and older. """
+    
+        self.logger.info("Deleting old data from database.")
+
+        now = int(time.time())
+
+        sql = "DELETE FROM probes_aggregate WHERE created < ? AND aggr_interval = ?"
+        self.db.execute(sql, ((now - age)*1000000000, self.AGGR_DB_HIGHRES))
+
+        sql = "DELETE FROM probes_aggregate WHERE created < ?"
+        self.db.execute(sql, ((now - age_lowres)*1000000000, ))
+
+
+    def save(self, sess_id, interval, data):
+        """ Save an aggregate to database. 
+        
+            The aggregate is passed as a dict with the required fields; 
+            check the code!
+        """
+
+        self.logger.debug("Saving row; sess_id: %d interval: %d rtt_avg: %.2f ns" 
+            % (sess_id, interval, data['rtt_avg']))
+
+        # insert into database
+        sql = ("INSERT INTO probes_aggregate " +
+            "(session_id, aggr_interval, created, total, " +
+            "success, timestamperror, dscperror, pongloss, timeout, " +
+            "dup, reordered, rtt_min, rtt_med, rtt_avg, rtt_max, " +
+            "rtt_95th, delayvar_min, delayvar_med, delayvar_avg, " +
+            "delayvar_max, delayvar_95th) VALUES " +
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
+
+        params = (
+            sess_id, interval, data['created'], data['total'], data['success'],
+            data['timestamperror'], data['dscperror'], data['pongloss'], data['timeout'], 
+            data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
+            data['rtt_max'], data['rtt_95th'], data['delayvar_min'], 
+            data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'], 
+            data['delayvar_95th'])
+
+        self.db.execute(sql, params)
+
+
+    def aggregate(self, sess_id):
+        """ Aggregates self.AGGR_DB_LOWRES seconds worth of data. 
+        
+            Starts att time 'start'. The result will be written to the
+            database.
+        """
+
+        self.logger.debug("aggregating session %d, %d seconds interval" % 
+            (sess_id, self.AGGR_DB_LOWRES))
+
+        # get aggregated data
+        try:
+            self.calc_probedict(self.probe_raw_lowres[sess_id])
+            data = self.probe_raw_lowres[sess_id]
+        except KeyError, e:
+            self.logger.error("Unable to aggregate session %d, not found" % sess_id)
+            return
+
+        self.save(sess_id, self.AGGR_DB_LOWRES, data)
+        del(self.probe_raw_lowres[sess_id])
+
+
+
+    def commit(self):
+        """ Commit database transactions. """
+
+        self.db.commit()
 
 
     ###################################################################
@@ -436,45 +493,9 @@ class ProbeStore:
 
     def current_sessions(self):
         """ Get IDs of current sessions """
-        
-        sql = "SELECT DISTINCT(session_id) AS session_id FROM probes"
-        res = self.db.select(sql)
-        retval = list()
-        for r in res:
-            retval.append(r['session_id'])
 
-        return retval
+        return self.probe_raw_lowres.keys()
 
-
-    def get_raw(self, session_id, start, end=None):
-        """ Get raw data from database.
-
-        Returns raw measurement data from database.
-        Arguments:
-        session_id -- ID of the session data is requested for.
-        start -- Start time.
-        stop -- End time.
-
-        Data is returned as a list of dicts.
-
-        """
-
-        if end is None:
-            end = int(time.Time())
-
-        sql = "SELECT * FROM probes WHERE session_id = ? AND created > ? AND created < ?"
-        res = self.db.select(sql, (session_id, start, end))
-
-        pset = ProbeSet()
-        for row in res:
-            pdlist = (
-                row['created'],
-                row['state'], '', row['session_id'], row['seq'],
-                row['t1'], row['t2'], row['t3'], row['t4'], None, row['rtt'], row['delayvar']
-                )
-            pset.append(Probe(pdlist))
-
-        return pset
 
     def get_last_lowres_aggregate(self, session_id, num = 1):
         """ Get last precomputed aggregate data.
@@ -527,180 +548,22 @@ class ProbeStore:
         return ret
 
 
-    def get_aggregate(self, session_id, start, end):
-        """ Get round-trip time
-
-            Get average round-trip time for measurement session session_id
-            whose probes were created as end < created <= end.
-        """
-
-        retdata = {
-            'total': 0,
-            'success': 0,
-            'timestamperror': 0,
-            'pongloss': 0,
-            'dscperror': 0,
-            'timeout': 0,
-            'dup': 0,
-            'reordered': 0,
-            'rtt_max': 0,
-            'rtt_min': 0,
-            'rtt_avg': 0,        
-            'rtt_med': 0,        
-            'rtt_95th': 0,        
-            'delayvar_max': 0,
-            'delayvar_min': 0,
-            'delayvar_avg': 0,        
-            'delayvar_med': 0,        
-            'delayvar_95th': 0,        
-        }
-
-        where = "session_id = ? AND created >= ? AND created < ?"
-        whereargs = (session_id, start, end)
-        
-        # get number of probes - needed for percentile and percentage calculations
-        nrows = 0
-        sql = "SELECT COUNT(*) AS count FROM probes WHERE " + where
-        res = self.db.select(sql, whereargs)
-        for row in res:
-            if row['count'] == 0:
-                self.logger.debug("No data for session %d from %d to %d" % (session_id, start, end))
-                return retdata
-            else:
-                retdata['total'] = row['count']
-
-#        self.logger.debug("Aggregating session %d from %d to %d, %d rows" % (session_id, start, end, retdata['total'], ))
-
-        # get percentages
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
-        res = self.db.select(sql, (probe.STATE_TIMEOUT, ) + whereargs)
-        for row in res:
-            retdata['timeout'] = row['c']
-
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
-        res = self.db.select(sql, (probe.STATE_OK, ) + whereargs)
-        for row in res:
-            retdata['success'] = row['c']
-
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
-        res = self.db.select(sql, (probe.STATE_DUP, ) + whereargs)
-        for row in res:
-            retdata['dup'] = row['c']
-
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
-        res = self.db.select(sql, (probe.STATE_TSERROR, ) + whereargs)
-        for row in res:
-            retdata['timestamperror'] = row['c']
-
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
-        res = self.db.select(sql, (probe.STATE_PONGLOSS, ) + whereargs)
-        for row in res:
-            retdata['pongloss'] = row['c']
-
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE state = ? AND " + where
-        res = self.db.select(sql, (probe.STATE_DSERROR, ) + whereargs)
-        for row in res:
-            retdata['dscperror'] = row['c']
-
-        sql = "SELECT CAST( COUNT(*) AS REAL) AS c FROM PROBES WHERE in_order != 1 AND " + where
-        res = self.db.select(sql, whereargs)
-        for row in res:
-            retdata['reordered'] = row['c']
-
-        where = "session_id = ? AND created >= ? AND created < ? AND (state = ?  OR state = ? )"
-        whereargs = (session_id, start, end, probe.STATE_OK, probe.STATE_DSERROR)
-        # get max, min and average
-        sql = ("SELECT MAX(rtt) AS max, MIN(rtt) AS min, " + 
-            "AVG(rtt) AS avg FROM probes " + 
-            "WHERE rtt IS NOT NULL AND " + where)
-        res = self.db.select(sql, whereargs)
-        for row in res:
-#            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
-            retdata['rtt_max'] = row['max']
-            retdata['rtt_min'] = row['min']
-            retdata['rtt_avg'] = row['avg']
-
-        sql = ("SELECT MAX(delayvar) AS max, MIN(delayvar) AS min, " + 
-            "AVG(delayvar) AS avg FROM probes " + 
-            "WHERE delayvar IS NOT NULL AND " + where)
-        res = self.db.select(sql, whereargs)
-        for row in res:
-#            self.logger.debug("got max: %s min: %s avg: %s" % (row['max'], row['min'], row['avg']))
-            retdata['delayvar_max'] = row['max']
-            retdata['delayvar_min'] = row['min']
-            retdata['delayvar_avg'] = row['avg']
-
-        # get percentiles
-        retdata['rtt_med'] = self.get_percentile(session_id, start, end, "rtt", 50)
-        retdata['rtt_95th'] = self.get_percentile(session_id, start, end, "rtt", 95)
-        retdata['delayvar_med'] = self.get_percentile(session_id, start, end, "delayvar", 50)
-        retdata['delayvar_95th'] = self.get_percentile(session_id, start, end, "delayvar", 95)
-
-        return retdata
-
-    def get_percentile(self, session_id, start, end, type, percentile):
-        """ Get percentileth percentile of RTT or delay variation.  
-        
-            TODO:
-            Look for different states for rtt/delayvar?
-        """
-
-        if type == "rtt":
-            column = "rtt"
-        elif type == "delayvar":
-            column = "delayvar"
-        else:
-            return None
-
-        where = "session_id = ? AND created >= ? AND created < ? AND (state = ?  OR state = ?)"
-        whereargs = (session_id, start, end, probe.STATE_OK, probe.STATE_DSERROR)
-
-        sql = "SELECT COUNT(*) AS count FROM probes WHERE " + where
-        res = self.db.select(sql, whereargs)
-        nrows = 0
-        for row in res:
-            nrows = row['count']
-
-        if nrows < 1:
-            return None
-
-        sql = ("SELECT " + column + " AS percentile FROM probes WHERE " + where +
-            " ORDER BY " + column + " ASC LIMIT 1 OFFSET CAST(? * ? / 100 AS INTEGER)")
-
-        res = self.db.select(sql, whereargs + (nrows, percentile))
-
-        for row in res:
-            return row['percentile']
-
-        # We really never should get here...
-        return None
-
-
     def get_storage_statistics(self):
-        """ Get storage statistics """
+        """ Return some storage statistics. """
 
-        retval = {}
+        ret = {}
+        ret['lowres'] = len(self.probe_raw_lowres)
+        ret['highres'] = len(self.probe_raw_highres)
 
-        # Get number of rows in database
-        sql = "SELECT COUNT(*) AS c FROM probes"
-        res = self.db.select(sql)
+        ret['highres_backlog'] = 0
+        for t in self.probe_raw_highres_backlog:
+            ret['highres_backlog'] += len(self.probe_raw_highres_backlog[t])
+
+        res = self.db.select("SELECT COUNT(*) AS c FROM probes_aggregate")
         for row in res:
-            retval['db_numrows_probes'] = row['c']
+            ret['aggregates'] = row['c']
 
-        sql = "SELECT COUNT(*) AS c FROM probes_aggregate"
-        res = self.db.select(sql)
-        for row in res:
-            retval['db_numrows_probes_aggregate'] = row['c']
-        
-        # number of sessions in state dict
-        retval['state_numsessions'] = len(self.probes)
-
-        # number of probes in state dict
-        retval['state_numprobes'] = 0
-        for session in self.probes:
-            retval['state_numprobes'] += len(self.probes[session])
-
-        return retval
+        return ret
 
 
 class ProbeStoreError(Exception):
@@ -755,7 +618,7 @@ class ProbeStoreDB(threading.Thread):
             # commit?
             if req == '--commit--':
                 conn.commit()
-                self.logger.debug("Committing %d queries." % exec_c)
+                self.logger.debug("Committed %d queries (%s queries queued)." % (exec_c, self.reqs.qsize()))
                 exec_c = 0
                 continue
 
