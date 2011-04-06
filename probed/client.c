@@ -382,7 +382,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	/* Didn't find PING. DUP! */
 	i = 0;
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next)
-		if (memcmp(&s->dst.sin6_addr, &a->sin6_addr, sizeof r->addr) == 0)
+		if (memcmp(&s->dst.sin6_addr, &a->sin6_addr, sizeof a->sin6_addr) == 0)
 			if (d->type == TYPE_PONG)
 				if (s->id == d->id)
 					i = 1;
@@ -390,8 +390,8 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	memset(&r_fifo, 0, sizeof r_fifo);
 	(void)clock_gettime(CLOCK_REALTIME, &now);
 	r_fifo.state = STATE_DUP;
-	r_fifo.id = (uint32_t)r->id;
-	r_fifo.seq = (uint32_t)r->seq;
+	r_fifo.id = (uint32_t)d->id;
+	r_fifo.seq = (uint32_t)d->seq;
 	r_fifo.created_sec = (uint32_t)now.tv_sec;
 	if (cfg.op == DAEMON)
 		if (write(cfg.fifo, (char*)&r_fifo, sizeof r_fifo) == -1)
@@ -629,6 +629,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 	xmlNode *root, *n, *k;
 	xmlChar *c;
 
+	syslog(LOG_INFO, "Reloading configuration...");
 	/* Sanity check; only run this if in DAEMON mode */
 	if (cfg.op != DAEMON)
 		return -1;
