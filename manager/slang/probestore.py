@@ -26,6 +26,7 @@ class ProbeStore:
     probe_highres = None
     last_flush = None
     highres_max_saved = None
+    session_state = None
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300 * 1000000000
@@ -54,6 +55,7 @@ class ProbeStore:
         self.l_probe_highres = threading.Lock()
         self.last_flush = 0
         self.highres_max_saved = dict()
+        self.session_state = dict()
 
         self.logger.debug("created instance")
 
@@ -168,7 +170,7 @@ class ProbeStore:
                 lowres_interval = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES 
                 if lowres_interval in self.probe_highres:
                     if p.session_id in self.probe_highres[lowres_interval]:
-                        self.probe_highres[lowres_interval][p.session_id]['dups'] += 1
+                        self.probe_highres[lowres_interval][p.session_id]['dup'] += 1
 
             return
 
@@ -280,7 +282,7 @@ class ProbeStore:
             self.probe_highres[ctime][p.session_id]['timeout'] += 1
 
         self.probe_highres[ctime][p.session_id]['total'] += 1
-        self.probe_highres[ctime][p.session_id]['dup'] += bool(p.dups)
+        self.probe_highres[ctime][p.session_id]['dup'] += p.dups
 
         # release lock
         self.l_probe_highres.release()
@@ -359,6 +361,21 @@ class ProbeStore:
                         self.probe_lowres[cltime][session_id][key] += tmp_highres[t][session_id][key]
                     except KeyError, e:
                         pass
+
+                # save & check measurement state
+                if session_id not in self.session_state:
+                    self.session_state[session_id] = {
+                        'prev': 'up',
+                        'cur': 'up' }
+
+                self.session_state[session_id]['prev'] = self.session_state[session_id]['cur']
+                if (tmp_highres[t][session_id]['timeout'] == tmp_highres[t][session_id]['total'] or
+                    tmp_highres[t][session_id]['pongloss'] == tmp_highres[t][session_id]['total']):
+
+                    self.session_state[session_id]['cur'] = 'down'
+
+                else:
+                    self.session_state[session_id]['cur'] = 'up'
     
                 #
                 # Look for interesting events
@@ -392,8 +409,24 @@ class ProbeStore:
                 # Packet loss:
                 #  * _any_ packet loss (pongloss, timeout) is interesting.
                 #
-                if (tmp_highres[t][session_id]['timeout'] > 0 or
-                    tmp_highres[t][session_id]['pongloss'] > 0):
+                #
+                # Then, to not fill the ASM up with crap we want to avoid
+                # saving high-resolution data when a host is down, but do
+                # save when the hosts state is changed.
+                #
+                # Therefore, we get the following requirements:
+                # when the hosts state has changed or 
+                # state is up, but we have packet loss
+                #
+                #
+                if (
+                    (self.session_state[session_id]['prev'] !=
+                     self.session_state[session_id]['cur'] ) or
+                    (self.session_state[session_id]['cur'] == 'up' and
+                     (tmp_highres[t][session_id]['timeout'] > 0 or
+                      tmp_highres[t][session_id]['pongloss'] > 0)
+                    )
+                   ):
 
                     self.logger.debug("Found highres event; time: %d session_id: %d timeout: %d pongloss: %d" % 
                         (t/1000000000, session_id, 
