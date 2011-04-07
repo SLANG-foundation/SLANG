@@ -160,13 +160,15 @@ class ProbeStore:
                 return
 
             # Do we have the sequence number in list?
-            # If not, the result has probably been written to database already.
+            # If not, the result has probably been saved to highres already
+            # and we try to write it there instead.
             if p.seq in self.probes[p.session_id]:
                 self.probes[p.session_id][p.seq].dups += 1
             else:
-                sql = ("UPDATE probes SET duplicates = duplicates + 1 " +
-                    "WHERE session_id = ? AND seq = ?")
-                self.db.execute(sql, (p.session_id, p.seq))
+                lowres_interval = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES 
+                if lowres_interval in self.probe_highres:
+                    if p.session_id in self.probe_highres[lowres_interval]:
+                        self.probe_highres[lowres_interval][p.session_id]['dups'] += 1
 
             return
 
@@ -559,19 +561,21 @@ class ProbeStore:
         return list(ret)
 
 
-    def get_last_lowres_aggregate(self, session_id, num = 1):
-        """ Get last precomputed aggregate data.
+    def get_last_lowres(self, session_id, num = 1):
+        """ Get last finished low-resolution data.
+        
+            Returns last finished (one timeout old) data aggregated over
+            one highres interval.
 
-            Returns precomputed aggregates (300 seconds) for session 'id'.
-            In case of interesting event during the interval (packet loss)
-            higher resolution data is returned for an interval around the 
-            interesting event.
+            Arguments:
+            session_id -- The session ID to return data for
+            num -- Number of values to return
         """
 
         start = ((int(time.time()) * 1000000000 / self.AGGR_DB_LOWRES - num - 1) * 
             self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        self.logger.debug("Getting last lowres aggregate for id %d from %d now: %d" % 
-            (session_id, start/1000000000, int(time.time())))
+        self.logger.debug("Getting last lowres aggregate for id %d from %d" % 
+            (session_id, start/1000000000))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
             "created >= ? AND aggr_interval = ?")
         res = self.db.select(sql, (session_id, start, self.AGGR_DB_LOWRES))
@@ -582,9 +586,50 @@ class ProbeStore:
 
         return ret
 
+
+    def get_last_highres(self, session_id, num=1):
+        """ Get last finished high-resolution data.
+        
+            Returns last finished (one timeout old) data aggregated over
+            one highres interval.
+
+            Arguments:
+            session_id -- The session ID to return data for
+            num -- Number of values to return
+        """
+
+        # find time
+        start = ( ( int( (time.time() * 1000000000 - self.TIMEOUT) / 
+            self.AGGR_DB_HIGHRES) - num + 1 ) * self.AGGR_DB_HIGHRES )
+        end = ( int( (time.time() * 1000000000 - self.TIMEOUT ) / 
+            self.AGGR_DB_HIGHRES ) * self.AGGR_DB_HIGHRES )
+
+        self.logger.debug("Getting last %d highres aggregate for id %d from %d to %d" % 
+            (num, session_id, start/1000000000, end/1000000000))
+
+        self.l_probe_highres.acquire()
+
+        ret = list()
+        for t in self.probe_highres:
+            if t >= start and t <= end:
+                if session_id in self.probe_highres[t]:
+                    row = self.probe_highres[t][session_id].copy()
+                    row['created'] = t
+                    ret.append(row)
+
+        self.l_probe_highres.release()
+
+        for row in ret:
+            self.calc_probedict(row)
+            del row['rtts']
+            del row['delayvars']
+            row['aggr_interval'] = self.AGGR_DB_HIGHRES / 1000000000
+
+        return ret
+
     
     def get_last_dyn_aggregate(self, session_id, num = 1):
-        """ Get last precomputed aggregate data.
+        """ Get last aggregated data.
 
             Returns precomputed aggregates (300 seconds) for session 'id'.
             In case of interesting event during the interval (packet loss)
@@ -616,17 +661,29 @@ class ProbeStore:
         """ Return some storage statistics. """
 
         ret = {}
+
+        # low-resolution datapoints
         ret['lowres'] = 0
         for t in self.probe_lowres:
             ret['lowres'] += len(self.probe_lowres[t])
 
+        # high-resolution datapoints
         ret['highres'] = 0
         for t in self.probe_highres:
             ret['highres'] += len(self.probe_highres[t])
 
+        # aggregates in database
         res = self.db.select("SELECT COUNT(*) AS c FROM probes_aggregate")
         for row in res:
             ret['aggregates'] = row['c']
+
+        # sessions in state dict
+        ret['state_numsessions'] = len(self.probes)
+   
+        # probes in state dict
+        ret['state_numprobes'] = 0
+        for session in self.probes:
+            ret['state_numprobes'] += len(self.probes[session])
 
         return ret
 

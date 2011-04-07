@@ -48,71 +48,44 @@ class RemoteProc(xmlrpc.XMLRPC):
     xmlrpc_recv_config.signature = [ [ 'integer', 'string' ], ]
 
 
-    def xmlrpc_get_aggregate(self, session_id, aggr_interval, start, end):
-        """ Get aggregated data.
+    def xmlrpc_get_last_highres(self, session_id, num=1):
+        """ Get latest finished high-resolution data.
 
-        Get aggregated measurement data for a measurement session.
         Arguments:
         session_id -- ID of the session data is requested for.
-        atime -- Aggregation time, the number of seconds results will be aggregated.
-        start -- Start time.
-        stop -- End time.
+        num -- Number of values to return -- NOT IMPLEMENTED
 
         """
 
-        result = list()
+        res = self.pstore.get_last_highres(session_id, num) 
+        for row in res:
+            # Clean up timestamps.
+            row['start'] = row['created'] / 1000000000
+            del row['created']
 
-        # get times
-        ctime = start
-        aggr_times = list()
-        while ctime < end:
-            aggr_times.append(ctime)
-            ctime += aggr_interval
-        aggr_times.append(end)
+        return res
 
-        for i in range(0, len(aggr_times) - 1):
-            r = self.pstore.get_aggregate(session_id, 
-                aggr_times[i]*1000000000, aggr_times[i+1]*1000000000)
-            r['start'] = aggr_times[i]
+    xmlrpc_get_last_highres.signature = [ ['array', 'integer', 'integer'], ]
 
-            # set null values to zero before we send them over XML-RPC
-            for k, v in r.items():
-                if v == None:
-                    r[k] = str(0)
-                else:
-                    r[k] = str(v)
+    def xmlrpc_get_last_lowres(self, session_id, num = 1):
+        """ Get latest finished low-resolution data.
 
-            result.append(r)
+        Arguments:
+        session_id -- ID of the session data is requested for.
+        num -- Number of values to return -- NOT IMPLEMENTED
 
-        return result
-
-    xmlrpc_get_aggregate.signature = [ ['array', 'integer', 'integer', 'integer', 'integer'], ]
-
-    def xmlrpc_get_last_lowres_aggregate(self, session_id, num = 1):
-        """ Get last precomputed aggregate data.
-
-            Returns precomputed aggregates (300 seconds) for session 'id'.
-            In case of interesting event during the interval (values higher 
-            than the baseline), higher resolution data is returned for an 
-            interval around the interesting event.
         """
 
-        data = self.pstore.get_last_lowres_aggregate(session_id, num)
+        data = self.pstore.get_last_lowres(session_id, num)
 
         for row in data:
             # Clean up timestamps.
-            r = row
-            r['start'] = r['created'] / 1000000000
-            del r['created']
-            # set null values to zero before we send them over XML-RPC
-            for k, v in r.items():
-                if v == None:
-                    r[k] = str(0)
-                else:
-                    r[k] = str(v)
+            row['start'] = row['created'] / 1000000000
+            del row['created']
 
         return data
 
+    xmlrpc_get_last_lowres.signature = [ ['array', 'integer', 'integer'], ]
 
     def xmlrpc_get_last_dyn_aggregate(self, session_id, num = 1):
         """ Get last precomputed aggregate data.
@@ -127,19 +100,12 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         for row in data:
             # Clean up timestamps.
-            r = row
-            r['start'] = r['created'] / 1000000000
-            del r['created']
-            # set null values to zero before we send them over XML-RPC
-            for k, v in r.items():
-                if v == None:
-                    r[k] = str(0)
-                else:
-                    r[k] = str(v)
+            row['start'] = row['created'] / 1000000000
+            del row['created']
 
         return data
 
-    xmlrpc_get_last_dyn_aggregate.signature = [ [ 'array', 'integer' ], ]
+    xmlrpc_get_last_dyn_aggregate.signature = [ [ 'array', 'integer', 'integer' ], ]
     
 
     def xmlrpc_get_current_sessions(self):
