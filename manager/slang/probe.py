@@ -33,6 +33,7 @@ class Probe:
     delay_variation = None
     in_order = None
     dups = None
+    state = None
 
     session_id = None
     seq = None

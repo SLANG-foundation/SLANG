@@ -260,7 +260,12 @@ class ProbeStore:
             }
 
         # if successful, update rtt & delayvar
-        if p.successful:
+        if p.successful():
+
+            if p.rtt < 0:
+                self.logger.warning("Found strange RTT %d for successful packet. State: %d" %
+                    (p.rtt, p.state))
+                p.rtt = None
 
             if p.rtt is not None:
                 self.probe_highres[ctime][p.session_id]['rtts'].append(p.rtt)
@@ -447,9 +452,10 @@ class ProbeStore:
                     for t2 in self.probe_highres:
                         
                         if t2 >= start and t2 <= end:
-                            self.calc_probedict(self.probe_highres[t2][session_id])
-                            self.save(session_id, t2, self.AGGR_DB_HIGHRES, 
-                                self.probe_highres[t2][session_id])
+                            if session_id in self.probe_highres[t2]:
+                                self.calc_probedict(self.probe_highres[t2][session_id])
+                                self.save(session_id, t2, self.AGGR_DB_HIGHRES,
+                                    self.probe_highres[t2][session_id])
 
                     self.l_probe_highres.release()
                     self.highres_max_saved[session_id] = end
