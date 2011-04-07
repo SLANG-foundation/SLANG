@@ -344,7 +344,11 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 						syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 				/* Client output */
 				if (cfg.op == CLIENT) {
-					if (r_fifo.state == STATE_DS_ERR) {
+					if (r_fifo.state == STATE_TS_ERR) {
+						res_tserror++;
+						printf("Error    %4d from %d (invalid timestamps)\n", 
+								(int)r->seq, (int)r->id);
+					} else if (r_fifo.state == STATE_DS_ERR) {
 						res_dserror++;
 						printf("Error    %4d from %d in %d sec (invalid DSCP)\n", 
 								(int)r->seq, (int)r->id, (int)diff.tv_sec);

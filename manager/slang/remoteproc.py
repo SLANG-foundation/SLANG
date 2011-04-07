@@ -62,6 +62,8 @@ class RemoteProc(xmlrpc.XMLRPC):
             # Clean up timestamps.
             row['start'] = row['created'] / 1000000000
             del row['created']
+            for k, v in row.items():
+                row[k] = str(v)
 
         return res
 
@@ -82,6 +84,8 @@ class RemoteProc(xmlrpc.XMLRPC):
             # Clean up timestamps.
             row['start'] = row['created'] / 1000000000
             del row['created']
+            for k, v in row.items():
+                row[k] = str(v)
 
         return data
 
@@ -102,6 +106,8 @@ class RemoteProc(xmlrpc.XMLRPC):
             # Clean up timestamps.
             row['start'] = row['created'] / 1000000000
             del row['created']
+            for k, v in row.items():
+                row[k] = str(v)
 
         return data
 
