@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define APP_AND_VERSION "SLA-NG probed 0.1"
+#define APP_AND_VERSION "SLA-NG probed 0.2"
 #define TIMEOUT 10
 #define TMPLEN 512
 #define DATALEN 48
