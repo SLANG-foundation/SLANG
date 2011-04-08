@@ -78,11 +78,12 @@ void tstamp_mode_hardware(int sock, char *iface) {
 	hwcfg.rx_filter = HWTSTAMP_FILTER_ALL;
    	/* Check that one is root */
 	if (getuid() != 0)
-		syslog(LOG_ERR, "Hardware timestamping requires root privileges");	
+		syslog(LOG_ERR, "Hardware timestamps requires root privileges");
 	/* apply by sending to ioctl */
 	if (ioctl(sock, SIOCSHWTSTAMP, &dev) < 0) {
 		syslog(LOG_ERR, "ioctl: SIOCSHWTSTAMP: %s", strerror(errno));
-		syslog(LOG_ERR, "Verify that %s supports hardware timestamp\n", iface);
+		syslog(LOG_ERR, "Verify that %s supports hardware timestamp\n",
+			       iface);
 		/* otherwise, try kernel timestamps (socket only) */ 
 		syslog(LOG_INFO, "Falling back to kernel timestamps");
 		tstamp_mode_kernel(sock);
@@ -169,16 +170,18 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		if (cmsg->cmsg_level == SOL_SOCKET) {
 			/* if hw/kernel timestamps, check SO_TIMESTAMPING */
-			if (cfg.ts != USERLAND && cmsg->cmsg_type == SO_TIMESTAMPING) {
+			if (cfg.ts != USERLAND &&
+					cmsg->cmsg_type == SO_TIMESTAMPING) {
 				t = (struct scm_timestamping *)CMSG_DATA(cmsg);
-				/*@ -onlytrans Please, let me copy the timestamp */
+				/*@ -onlytrans Let me copy the timestamp */
 				if (cfg.ts == HARDWARE) *ts = t->hwtimeraw;
 				if (cfg.ts == KERNEL) *ts = t->systime;
 				/*@ +onlytrans */
 				return 0;
 			}
 			/* if software timestamps, check SO_TIMESTAMPNS */
-			if (cfg.ts == USERLAND && cmsg->cmsg_type == SO_TIMESTAMPNS) {
+			if (cfg.ts == USERLAND
+					&& cmsg->cmsg_type == SO_TIMESTAMPNS) {
 				ts_p = (struct timespec *)CMSG_DATA(cmsg);
 				*ts = *ts_p;
 				return 0;
@@ -218,17 +221,17 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 	while (timercmp(&tmp, &tv, <) != 0) {
 		unix_fd_zero(&fs);
 		unix_fd_set(sock, &fs);
+		tv.tv_sec = 0;
+		tv.tv_usec = 10000;
 		if (select(sock + 1, &fs, NULL, NULL, &tv) > 0) {
 			/* We have a normal packet OR a timestamp */
 			if (recv_w_ts(sock, MSG_ERRQUEUE, &pkt) == 0) {
-				/*@ -dependenttrans Please, let me copy the timestamp */
+				/*@ -dependenttrans Let me copy timestamp */
 				*ts = pkt.ts;
 				/*@ +dependenttrans */
 				return 0;
 			}
 		}
-		tv.tv_sec = 0;
-		tv.tv_usec = 10000;
 		(void)gettimeofday(&now, 0);
 		timersub(&now, &last, &tmp);
 	}

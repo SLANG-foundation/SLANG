@@ -92,10 +92,10 @@ int main(int argc, char *argv[]) {
 		/* Create PING results array */
 		client_init();
 		/* Add one measurement session */
-		if (client_msess_add(port, addr, 0, atoi(wait)*1000, 0) != 0)
+		if (client_msess_add(port, addr, 0, atoi(wait), 0) != 0)
 			exit(EXIT_FAILURE);
 		/* When loop_or_die starts, reload config (fork!) immediatelly */
-		cfg.shouldreload = 1;
+		cfg.should_reload = 1;
 		/* Print results on Ctrl+C */
 		(void)signal(SIGINT, client_res_summary);
 		/* Launch */
@@ -107,8 +107,9 @@ int main(int argc, char *argv[]) {
 		client_res_fifo_or_die(fifopath);
 		/* Reload configuration on HUP */
 		(void)signal(SIGHUP, reload);
+		(void)signal(SIGALRM, reload);
 		/* When loop_or_die starts, reload config immediatelly */
-		cfg.shouldreload = 1;
+		cfg.should_reload = 1;
 		/* Launch */
 		loop_or_die(s_udp, s_tcp, port, cfgpath);
 	}
@@ -144,6 +145,6 @@ static void help_and_die(void) {
 /*
  * Reload application
  */
-static void reload(/*@unused@*/ int sig) {
-	cfg.shouldreload = 1;
+static void reload(int sig) {
+	cfg.should_reload = 1;
 }

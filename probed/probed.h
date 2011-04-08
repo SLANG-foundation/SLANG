@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define APP_AND_VERSION "SLA-NG probed 0.1"
+#define APP_AND_VERSION "SLA-NG probed 0.2"
 #define TIMEOUT 10
 #define TMPLEN 512
 #define DATALEN 48
@@ -16,6 +16,7 @@
 #define TYPE_PONG 'o'
 #define TYPE_TIME 't'
 #define TYPE_HELO 'h'
+#define TYPE_SEND 's'
 
 typedef struct timespec ts_t;
 typedef struct sockaddr_in6 addr_t;
@@ -36,7 +37,8 @@ struct config {
 	enum tsmode ts; /* timestamping type */
 	enum opmode op; /* operation mode */
 	int fifo; /* file descriptor to named pipe for daemon mode */
-	int shouldreload;
+	int should_reload;
+	int should_clear_timeouts;
 };
 extern struct config cfg;
 

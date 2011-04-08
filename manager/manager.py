@@ -6,6 +6,7 @@ import logging.handlers
 import signal
 import sys
 from optparse import OptionParser
+#import yappi
 
 import slang.manager
 import slang.config
@@ -37,31 +38,46 @@ def daemonize (stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
      
 # Read parameters
 p = OptionParser()
-p.add_option('-f', dest='cfg_path', default='/etc/sla-ng/manager.conf')
-p.add_option('-m', dest='mode', default='bg')
+p.add_option('-f', dest='cfg_path', default='/etc/sla-ng/manager.conf',
+    help="read config from file CFG_PATH", metavar="CFG_PATH")
+p.add_option('-m', dest='mode', default='bg',
+    help="set daemon mode to MODE where 'bg' (default) makes the program detach run "
+        "in background and anything else makes it run in foreground", 
+    metavar="MODE")
+p.add_option('-v', dest='verbose', action="store_true", default=False,
+    help="verbose; enable debug output")
+
 (options, args) = p.parse_args()
 
 
 # set up logging
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+if options.verbose == True:
+    logger.setLevel(logging.DEBUG)
+else:
+    logger.setLevel(logging.INFO)
+
 lformat = logging.Formatter('sla-ng-manager: %(name)s: %(message)s')
 
 # daemonize
 if options.mode == 'bg':
     daemonize()
-    ls = logging.handlers.SysLogHandler(address='/dev/log')
-    ls.setFormatter(lformat)
-    ls.setLevel(logging.INFO)
-    logger.addHandler(ls)
+    l = logging.handlers.SysLogHandler(address='/dev/log')
+    l.setFormatter(lformat)
 else:
-    lc = logging.StreamHandler()
-    lc.setLevel(logging.INFO)
-    lc.setFormatter(lformat)
-    logger.addHandler(lc)
+    l = logging.StreamHandler()
+    l.setFormatter(lformat)
+
+if options.verbose == True:
+    l.setLevel(logging.DEBUG)
+else:
+    l.setLevel(logging.INFO)
+
+logger.addHandler(l)
 
 # start up
 logger.info("Starting up SLA-NG manager...")
+#yappi.start(builtins=True)
 
 try:
     m = slang.manager.Manager(options.cfg_path)
@@ -76,5 +92,11 @@ signal.signal(signal.SIGTERM, m.sighandler)
 m.run()
 m.stop()
 logger.info("Exiting SLA-NG manager; run() finished")
+
+#stats = yappi.get_stats(sorttype=yappi.SORTTYPE_TSUB)
+#print type(stats)
+#for stat in stats:
+#    print stat
+#yappi.stop()
 
 sys.exit(0)

@@ -4,32 +4,24 @@ import time
 #
 # constants
 #
-STATE_OK = 'o'       # Ready, got both PONG and valid TS */ 
-STATE_DSERROR = 'd'  # Ready, but invalid traffic class */ 
-STATE_TSERROR = 'e'  # Ready, but missing correct TS */ 
-STATE_PONGLOSS = 'l' # Ready, but timeout, got only TS, lost PONG */ 
-STATE_TIMEOUT = 't'  # Ready, but timeout, got neither PONG or TS */ 
-STATE_DUP = 'u'      # Got a PONG we didn't recognize, DUP? */ 
+STATE_OK = 1       # Ready, got both PONG and valid TS */
+STATE_DSERROR = 2  # Ready, but invalid traffic class */
+STATE_TSERROR = 3  # Ready, but missing correct TS */
+STATE_PONGLOSS = 4 # Ready, but timeout, got only TS, lost PONG */
+STATE_TIMEOUT = 5  # Ready, but timeout, got neither PONG or TS */
+STATE_DUP = 6      # Got a PONG we didn't recognize, DUP? */
 
 def from_struct(structdata):
     """ Create a probe from the struct data """
-    
-    listdata = unpack('llc16siillllllll16s', structdata)
+    d = unpack('iiiiii', structdata)
 
     clist = (
-      listdata[0]*1000000000+listdata[1],   # 0: created
-      listdata[2],                          # 1: state
-      listdata[3],                          # 2: address
-      listdata[4],                          # 3: session_id
-      listdata[5],                          # 4: sequence number
-      listdata[6]*1000000000+listdata[7],   # t1
-      listdata[8]*1000000000+listdata[9],   # t2
-      listdata[10]*1000000000+listdata[11], # t3
-      listdata[12]*1000000000+listdata[13], # t4
-      None,                                 # In order
-      None,                                 # rtt
-      None                                  # Delay variation
-      )
+        d[0],
+        d[1],
+        d[2],
+        d[3]*1000000000,
+        d[4]*1000000000+d[5],
+    )
 
     return Probe(clist) 
 
@@ -37,16 +29,12 @@ class Probe:
     """ A probe. """
 
     created = None
-    t1 = None
-    t2 = None
-    t3 = None
-    t4 = None
     rtt = None
     delay_variation = None
     in_order = None
     dups = None
+    state = None
 
-    addr = None
     session_id = None
     seq = None
 
@@ -54,27 +42,17 @@ class Probe:
     has_gotten = None
 
     def __init__(self, data):
-
-        self.created = data[0]
-        self.state = data[1]
-        self.addr = data[2]
-        self.session_id = data[3]
-        self.seq = data[4]
-        self.t1 = data[5]
-        self.t2 = data[6]
-        self.t3 = data[7]
-        self.t4 = data[8]
-        self.in_order = data[9]
-        self.rtt = data[10]
-        self.delay_variation = data[11]
+        self.session_id = data[0]
+        self.seq = data[1]
+        self.state = data[2]
+        self.created = data[3]
+        self.rtt = data[4]
+        self.in_order = None
+        self.delay_variation = None
         self.dups = 0
 
         self.has_given = False
         self.has_gotten = False
-
-        if self.rtt is None:
-          self.rtt = self.getRtt()
-
 
     def __str__(self):
         if self.state == STATE_OK:
@@ -97,16 +75,6 @@ class Probe:
                 (self.seq, self.session_id))
         return 'Unable to parse' + self.state
 
-
-    def getRtt(self):
-        """ Calculates the rtt of the probe. """
-
-        if self.successful():
-            return (self.t4 - self.t1) - (self.t3 - self.t2)
-        else:
-            return None
-
-
     def toDict(self):
         """ Returns data as a dict.
 
@@ -119,10 +87,6 @@ class Probe:
             'state': self.state,
             'in_order': self.in_order,
             'created': self.created,
-            't1': self.t1,
-            't2': self.t2,
-            't3': self.t3,
-            't4': self.t4,
             'rtt': self.rtt,
             'delayvar': self.delay_variation
         }
