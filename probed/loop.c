@@ -18,6 +18,7 @@
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
 #include <unistd.h>
 #endif
+#include <signal.h>
 #include <errno.h>
 #include <string.h>
 #include <syslog.h>
@@ -31,7 +32,8 @@
 
 static int server_find_peer_fd(int fd_max, addr_t *peer);
 static void server_kill_peer(fd_set *fs, int *fd_max, int fd);
-
+static void client_transmit(int sig);
+static int fd_client_pipe[2];
 /**
  * Main SLA-NG 'probed' state machine, handling all client/server stuff
  *
@@ -69,18 +71,20 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	pkt_t pkt;
 	data_t *rx, tx, tx_last;
 	ts_t ts;
-	struct timeval tv;
 	fd_set fs_tmp;
-	int fd, i, fd_max = 0;
-	int fd_pipe[2];
+	int fd, i, sends = 0, fd_max = 0;
 	fd_set fs;
 	socklen_t slen;
 
 	/* IPC for children-to-parent (TCP client to UDP state machine) */
-	if (pipe(fd_pipe) < 0) {
+	if (pipe(fd_client_pipe) < 0) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
+	/* Transmit on alarm timer */
+	(void)signal(SIGALRM, client_transmit);
+	(void)ualarm(1000, 0);
 
 	/* Add both pipe, UDP and TCP to the FD set, note highest FD */
 	unix_fd_zero(&fs);
@@ -88,19 +92,20 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	unix_fd_set(s_udp, &fs);
 	unix_fd_set(s_tcp, &fs);
 	unix_fd_set(s_tcp, &fs);
-	unix_fd_set(fd_pipe[0], &fs);
+	unix_fd_set(fd_client_pipe[0], &fs);
 	fd_max = MAX(fd_max, s_udp);
 	fd_max = MAX(fd_max, s_tcp);
-	fd_max = MAX(fd_max, fd_pipe[0]);
-	fd_max = MAX(fd_max, fd_pipe[1]);
+	fd_max = MAX(fd_max, fd_client_pipe[0]);
+	fd_max = MAX(fd_max, fd_client_pipe[1]);
 	memset(&addr_last, 0, sizeof addr_last);
 	memset(&tx_last, 0, sizeof tx_last);
+	//struct timeval tv;
 	/* Let's loop those sockets! */
 	while (1 == 1) {
 		fs_tmp = fs;
-		tv.tv_sec = 0;
-		tv.tv_usec = 100;
-		if (select(fd_max + 1, &fs_tmp, NULL, NULL, &tv) > 0) {
+		//tv.tv_sec = 1;
+		//tv.tv_usec = 0;
+		if (select(fd_max + 1, &fs_tmp, NULL, NULL, NULL) > 0) {
 			/* CLIENT/SERVER: UDP socket, that is PING and PONG */
 			if (unix_fd_isset(s_udp, &fs_tmp) == 1) {
 				pkt.data[0] = '\0';
@@ -152,8 +157,8 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					server_kill_peer(&fs, &fd_max, fd);
 				}
 			/* CLIENT: PIPE; timestamps from client_fork (TCP) */
-			} else if (unix_fd_isset(fd_pipe[0], &fs_tmp) == 1) {
-				if (read(fd_pipe[0], &pkt, sizeof pkt) < 0) {
+			} else if (unix_fd_isset(fd_client_pipe[0], &fs_tmp) == 1) {
+				if (read(fd_client_pipe[0], &pkt, sizeof pkt) < 0) {
 					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
 					continue;
 				}
@@ -166,6 +171,17 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 						syslog(LOG_INFO, "client: %s: Connected", addrstr);
 				} else if (rx->type == TYPE_TIME) {
 					client_res_update(&pkt.addr, rx, NULL, -1);
+				} else if (rx->type == TYPE_SEND) {
+					client_msess_transmit(s_udp, sends);
+					if (cfg.should_reload == 1) {
+						cfg.should_reload = 0;
+						(void)client_msess_reconf(port, cfgpath);
+						client_msess_forkall(fd_client_pipe[1]);
+					}
+					if (sends % 1000 == 0)
+						client_res_clear_timeouts();
+					sends++;
+					(void)ualarm(1000, 0);
 				}
 			} else {
 				/* It's a client. They shouldn't speak, it's probably a
@@ -176,18 +192,21 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					}	
 				}
 			}
-		/* CLIENT: select() timeout, time to send data and reload config */
 		} else {
-			/* Send PINGs to all clients */
-			client_msess_transmit(s_udp);
-			/* Configuration reload, shoudreload is set on SIGHUP */
-			if (cfg.shouldreload == 1) {
-				cfg.shouldreload = 0;
-				(void)client_msess_reconf(port, cfgpath);
-				client_msess_forkall(fd_pipe[1]);
-			}
+			/* select() timeout */
 		}
 	}
+}
+
+void client_transmit(int sig) {
+	pkt_t pkt;
+	data_t d;
+
+	memset(&pkt, 0, sizeof pkt);
+	d.type = TYPE_SEND;
+	memcpy(&pkt.data, &d, sizeof d);
+	if (write(fd_client_pipe[1], (char *)&pkt, sizeof pkt) < 0)
+		syslog(LOG_ERR, "write: %s", strerror(errno));
 }
 
 /**

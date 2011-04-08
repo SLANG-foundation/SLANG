@@ -60,7 +60,7 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	msg[0].msg_controllen = sizeof control;
 
 	if (recvmsg(sock, msg, flags) < 0) {
-		/* FAIL, recv error! Don't warn about err queue, it's non-block */
+		/* Recv error! Don't warn about err queue, it's non-block */
 		if ((flags & MSG_ERRQUEUE) == 0)
 			syslog(LOG_INFO, "recvmsg: %s", strerror(errno));
 		return -1;
@@ -74,7 +74,7 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 		} else {
 			/* THIS IS NORMAL PACKET: store rx tstamp and DSCP */
 			if (tstamp_extract(msg, &pkt->ts) < 0)
-				syslog(LOG_ERR, "recv_w_ts: RX timestamp error");
+				syslog(LOG_ERR, "recv_w_ts: RX tstamp error");
 			if (dscp_extract(msg, &pkt->dscp) < 0)
 				syslog(LOG_ERR, "recv_w_ts: DSCP error");
 
@@ -114,7 +114,7 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	/* get kernel tx timestamp */
 	if (cfg.ts != USERLAND) { 
 		if (tstamp_fetch_tx(sock, ts) < 0) {
-			syslog(LOG_ERR, "send_w_ts: TX timestamp error");
+			syslog(LOG_ERR, "send_w_ts: TX tstamp error");
 			return -1;
 		}
 	}
@@ -158,7 +158,8 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 		syslog(LOG_ERR, "setsockopt: IP_RECVTTL: %s", strerror(errno));
 	f = 1;
 	if (setsockopt(*s_udp, IPPROTO_IPV6, IPV6_RECVTCLASS, &f, slen) < 0)
-		syslog(LOG_ERR, "setsockopt: IPV6_RECVTCLASS: %s", strerror(errno));
+		syslog(LOG_ERR, "setsockopt: IPV6_RECVTCLASS: %s",
+				strerror(errno));
 	/* Bind port */
 	slen = (socklen_t)sizeof my;
 	if (bind(*s_udp, (struct sockaddr *)&my, slen) < 0) {
@@ -178,7 +179,8 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
 	f = 1;
 	if (setsockopt(*s_tcp, SOL_SOCKET, SO_REUSEADDR, &f, slen) < 0)
-		syslog(LOG_ERR, "setsockopt: SO_REUSEADDR: %s", strerror(errno));
+		syslog(LOG_ERR, "setsockopt: SO_REUSEADDR: %s",
+				strerror(errno));
 	/* Bind port */
 	slen = (socklen_t)sizeof my;
 	if (bind(*s_tcp, (struct sockaddr *)&my, slen) < 0) {
@@ -202,6 +204,8 @@ int dscp_set(int sock, uint8_t dscp) {
 	socklen_t slen;
 	int tclass = 0;
 
+	/* Remove ECN */
+	dscp <<= 2;
 	/* IPv6 TCLASS */
 	slen = (socklen_t)sizeof tclass;
 	tclass = (int)dscp;
@@ -211,9 +215,8 @@ int dscp_set(int sock, uint8_t dscp) {
 	}
 	/* IPv4 TOS */
 	slen = (socklen_t)sizeof dscp;
-	dscp <<= 2;
 	if (setsockopt(sock, IPPROTO_IP, IP_TOS, &dscp, slen) < 0) {
-		syslog(LOG_ERR, "Unable to set IP_TOS");
+		syslog(LOG_ERR, "setsockopt: IP_TOS: %s", strerror(errno));
 		return -1;
 	}
 	return 0;
@@ -233,36 +236,30 @@ static int dscp_extract(struct msghdr *msg, /*@out@*/ uint8_t *dscp_out) {
 	struct cmsghdr *cmsg;
 	int *ptr;
 	uint8_t tos = 255;
-	int tclass = -1;
-
-	*dscp_out = 0;
 	
+	*dscp_out = 0;
 	/* iterate cmsg headers, look for IP_TOS */
 	/*@ -branchstate Don't care about cmsg storage */
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		/* Fetch TOS value */
 		if (cmsg->cmsg_level == IPPROTO_IP && 
 			cmsg->cmsg_type == IP_TOS) { 
-			/* Fetch TOS value and extract DSCP by
-			 * discarding the two righmost bits (ECN) */
 			ptr = (int *)CMSG_DATA(cmsg);
 			tos = (uint8_t)*ptr;
+			/* Discard the two righmost bits (ECN) */
 			*dscp_out = tos >> 2;
+			return 0;
 		}
+		/* Fetch TCLASS value (DSCP) */
 		if (cmsg->cmsg_level == IPPROTO_IPV6 && 
-			cmsg->cmsg_type == IPV6_TCLASS) { 
-			/* Fetch TCLASS value (DSCP) */ 
+			cmsg->cmsg_type == IPV6_TCLASS) {
 			ptr = (int *)CMSG_DATA(cmsg);
-			tclass = (int)*ptr;
-			*dscp_out = (uint8_t)tclass;
+			tos = (uint8_t)*ptr;
+			/* Discard the two righmost bits (ECN) */
+			*dscp_out = tos >> 2;
+			return 0;
 		}
 	}
 	/*@ +branchstate */
-	
-	/* if no IP_TOS header was found, dscp still keeps its initial 
-	 * value of 255 (which is invalid since the DSCP field is six bits) 
-	 */
-	if (tos == 255 && tclass == -1) 
-		return -1;
-	return 0;
-
+	return -1;
 }
