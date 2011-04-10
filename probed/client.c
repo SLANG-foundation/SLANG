@@ -155,6 +155,28 @@ void client_res_fifo_or_die(char *fifopath) {
  * \todo         Should we simply send a dummy packet, just for conn status?
  */
 
+void client_send_fork(int pipe) {
+	char b = 's';
+
+	/* Do not react to SIGCHLD (when a child dies) */
+	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGCHLD failed");
+	/* Create client fork; parent returns */
+	if (fork() != 0) return;
+	/* We are child, do not react to HUP (reload), INT (print) */
+	if (signal(SIGHUP, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGHUP failed");
+	if (signal(SIGINT, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGINT failed");
+	/* Please kill me, I hate myself */
+	(void)prctl(PR_SET_PDEATHSIG, SIGKILL);
+	while (1) {
+		usleep(SEND_INTERVAL);
+		if (write(pipe, &b, sizeof b) < 0)
+			syslog(LOG_ERR, "send: write: %s", strerror(errno));
+	}
+}
+
 pid_t client_fork(int pipe, addr_t *server) {
 	int sock, r;
 	pid_t client_pid;
@@ -338,6 +360,14 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				for (i = 0; i < 4; i++)
 					if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) 
 						r_fifo.state = STATE_TS_ERR;
+				if (r_fifo.rtt_sec != 0) {
+					syslog(LOG_ERR, "Strange RTT %d %ld.%ld sec (%ld.%ld %ld.%ld %ld.%ld %ld.%ld)\n",
+					      r->id, rtt.tv_sec, rtt.tv_nsec,
+					      r->ts[0].tv_sec, r->ts[0].tv_nsec,
+					      r->ts[1].tv_sec, r->ts[1].tv_nsec,
+					      r->ts[2].tv_sec, r->ts[2].tv_nsec,
+					      r->ts[3].tv_sec, r->ts[3].tv_nsec);
+				}
 				/* Pipe (daemon) output */
 				if (cfg.op == DAEMON) 
 					if (write(cfg.fifo, (char *)&r_fifo, sizeof r_fifo) == -1)
@@ -361,7 +391,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 							printf("Response %4d from %d in %10ld.%09ld\n", 
 									(int)r->seq, (int)r->id, rtt.tv_sec, 
 									rtt.tv_nsec);
-						else 
+						else
 							printf("Response %4d from %d in %ld ns\n", 
 									(int)r->seq, (int)r->id, rtt.tv_nsec);
 						if (cmp_ts(&res_rtt_max, &rtt) == -1)
@@ -437,7 +467,6 @@ void client_res_clear_timeouts(void) {
 	struct res_fifo r_fifo;
 	struct msess *s;
 	ts_t now, diff;
-	int fisk, fisk2;
 
 	(void)clock_gettime(CLOCK_REALTIME, &now);
 	r = NULL;
@@ -447,16 +476,12 @@ void client_res_clear_timeouts(void) {
 		if ((&s->res_head)->tqh_last == NULL)
 			continue;
 		r = *(((struct res_listhead *)((&s->res_head)->tqh_last))->tqh_last);
-		fisk = 0;
-		fisk2 = 0;
 		while (r != NULL) {
-			fisk++;
 			diff_ts(&diff, &now, &r->created);
 			if (diff.tv_sec <= TIMEOUT) {
 				/* We have reached young probes; stop looking */
 				break;
 			} else {
-				fisk2++;
 				/* 
 				 * Define three states: 
 				 * PONGLOSS, we have a TCP timestamp, but no pong

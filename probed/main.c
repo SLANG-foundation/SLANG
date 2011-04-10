@@ -30,7 +30,6 @@ static void reload(/*@unused@*/ int sig);
  * SLA-NG documentation is found for loop_or_die() in mainloop.c
  */
 int main(int argc, char *argv[]) {
-
 	int arg, s_udp, s_tcp, log;
 	enum tsmode tstamp;
 	char *addr, *iface, *port, *cfgpath, *fifopath, *wait;
