@@ -12,13 +12,14 @@ import config
 from probe import Probe, ProbeSet
 import probe
 
-class ProbeStore:
+class ProbeStore(threading.Thread):
     """ Probe storage """
 
     logger = None
     config = None
     db = None
     probes = None
+    pdata = None
     max_seq = None
     flag_flush_queue = False
     probe_lowres = None
@@ -27,6 +28,7 @@ class ProbeStore:
     last_flush = None
     highres_max_saved = None
     session_state = None
+    _stop = False
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300 * 1000000000
@@ -45,10 +47,14 @@ class ProbeStore:
     def __init__(self):
         """Constructor """
 
+        threading.Thread.__init__(self)
+
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
 
+        self._stop = False
         self.probes = dict()
+        self.pdata = Queue()
         self.max_seq = dict()
         self.probe_lowres = dict()
         self.probe_highres = dict()
@@ -99,18 +105,56 @@ class ProbeStore:
 
 
     def flush_queue(self):
-        """ Schedule a probe queue flush. """
+        """ Schedule a probe queue flush. 
+        """
 
         self.flag_flush_queue = True
 
+    
+    def run(self):
+        """ Start thread.
+        """
+
+        self.logger.debug("Starting thread")
+
+        while True:
+
+            if self._stop is True:
+                break
+
+            # fetch probe data
+            # timeout needed to stop thread when no data is received
+            try:
+                data = self.pdata.get(timeout=1)
+            except Empty:
+                continue
+
+            # add probe
+            try:
+                p = probe.from_struct(data)
+                self.add(p)
+            except Exception, e:
+                self.logger.error("Probe %s: %s" % (e.__class__.__name__, e))
+
 
     def stop(self):
-        """ Close down ProbeStore """
+        """ Close down ProbeStore 
+        """
         self.logger.debug("Closing probestore...")
+        self._stop = True
         self.db.close()
         self.logger.debug("Waiting for db to die...")
         self.db.join()
         self.logger.debug("db dead.")
+
+    def put(self, data):
+        """ Put raw probe data into the process queue.
+            
+            Arguments:
+            data -- raw data received from probed
+        """
+
+        self.pdata.put(data)
 
 
     def add(self, p):
@@ -451,7 +495,7 @@ class ProbeStore:
                     self.l_probe_highres.acquire() # TODO: Do less within this lock
                     for t2 in self.probe_highres:
                         
-                        if t2 >= start and t2 <= end:
+                         if t2 >= start and t2 <= end:
                             if session_id in self.probe_highres[t2]:
                                 self.calc_probedict(self.probe_highres[t2][session_id])
                                 self.save(session_id, t2, self.AGGR_DB_HIGHRES,
@@ -697,7 +741,8 @@ class ProbeStore:
 
 
     def get_storage_statistics(self):
-        """ Return some storage statistics. """
+        """ Return some storage statistics. 
+        """
 
         ret = {}
 
@@ -724,14 +769,19 @@ class ProbeStore:
         for session in self.probes:
             ret['state_numprobes'] += len(self.probes[session])
 
+        # probes in process queue
+        ret['queuelen'] = self.pdata.qsize()
+
         return ret
 
 
 class ProbeStoreError(Exception):
     pass
 
+
 class ProbeStoreDB(threading.Thread):
-    """ Thread-safe wrapper to sqlite interface """
+    """ Thread-safe wrapper to sqlite interface 
+    """
 
     def __init__(self, db):
         threading.Thread.__init__(self)
@@ -740,6 +790,7 @@ class ProbeStoreDB(threading.Thread):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.debug("Created instance")
         self.start()
+
 
     def run(self):
 
@@ -807,12 +858,17 @@ class ProbeStoreDB(threading.Thread):
         conn.commit()
         conn.close()
 
+
     def execute(self, req, arg = None, res = None):
-        """ "Execute" by pushing query to queue """
+        """ "Execute" by pushing query to queue 
+        """
 
         self.reqs.put((req, arg or tuple(), res))
 
+
     def select(self, req, arg = None):
+        """ Perform a SQL SELECT query.
+        """
         res = Queue()
         self.execute(req, arg, res)
         while True:
@@ -820,9 +876,15 @@ class ProbeStoreDB(threading.Thread):
             if rec == '--no more--': break
             yield rec
 
+
     def close(self):
+        """ Request thread stop.
+        """
         self.logger.debug("Got close request, passing to thread.")
         self.execute('--close--')
 
+
     def commit(self):
+        """ Request a commit.
+        """
         self.execute('--commit--')

@@ -42,6 +42,8 @@ class Maintainer(threading.Thread):
     def run(self):
         """ Starts thread. """
 
+        self.logger.debug("Starting thread")
+
         while True:
 
             if self.thread_stop:
