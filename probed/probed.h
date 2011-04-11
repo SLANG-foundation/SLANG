@@ -20,6 +20,13 @@
 #define TYPE_HELO 4
 #define TYPE_SEND 5
 
+int count_server_resp;
+int count_client_sent;
+int count_client_done;
+int count_client_find;
+int count_client_fifoq;
+int count_client_fifoq_max;
+
 typedef struct timespec ts_t;
 typedef struct sockaddr_in6 addr_t;
 typedef uint32_t num_t;

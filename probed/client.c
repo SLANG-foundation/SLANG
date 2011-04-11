@@ -64,16 +64,6 @@ struct res {
 	/*@dependent@*/ ts_t ts[4];
 	TAILQ_ENTRY(res) list;
 };
-
-struct res_fifo {
-	uint32_t id;
-	uint32_t seq;
-	uint32_t state;
-	uint32_t created_sec;
-	uint32_t rtt_sec;
-	uint32_t rtt_nsec;
-};
-
 /** 
  * Struct for storing configuration for one measurement session.
  */
@@ -90,6 +80,19 @@ struct msess {
 	LIST_ENTRY(msess) list;
 };
 static LIST_HEAD(msess_listhead, msess) msess_head;
+struct res_fifo {
+	uint32_t id;
+	uint32_t seq;
+	uint32_t state;
+	uint32_t created_sec;
+	uint32_t rtt_sec;
+	uint32_t rtt_nsec;
+};
+struct fifoq {
+	struct res_fifo res;
+	TAILQ_ENTRY(fifoq) list;
+};
+static TAILQ_HEAD(fifoq_listhead, fifoq) fifoq_head;
 /* Client mode statistics */
 static int res_ok = 0;
 static int res_timeout = 0;
@@ -103,6 +106,7 @@ static ts_t res_rtt_min, res_rtt_max;
 static void client_res_insert(addr_t *a, data_t *d, ts_t *ts);
 static pid_t client_fork(int pipe, addr_t *server);
 static int client_msess_isaddrtaken(addr_t *addr, num_t id);
+static void client_write_fifo(struct res_fifo *r_fifo);
 
 /**
  * Initializes global variables
@@ -112,6 +116,7 @@ static int client_msess_isaddrtaken(addr_t *addr, num_t id);
 void client_init(void) {
 	/*@ -mustfreeonly -immediatetrans TODO wtf */
 	LIST_INIT(&msess_head);
+	TAILQ_INIT(&fifoq_head);
 	/*@ +mustfreeonly +immediatetrans */
 	res_rtt_min.tv_sec = -1;
 	res_rtt_min.tv_nsec = 0;
@@ -137,6 +142,10 @@ void client_res_fifo_or_die(char *fifopath) {
 	}
 	syslog(LOG_INFO, "Waiting for listeners on FIFO %s", fifopath);
 	cfg.fifo = open(fifopath, O_WRONLY);
+	if (fcntl(cfg.fifo, F_SETFL, O_NONBLOCK) < 0) {
+		syslog(LOG_ERR, "fcntl: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
 }
 
 /**
@@ -317,7 +326,9 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	if (s == NULL) 
 		return;
 	r = s->res_head.tqh_first;
+	count_client_find = 0;
 	while (r != NULL) {
+		count_client_find++;
 		/* If match; update */
 		if (r->id == d->id &&
 			r->seq == d->seq &&
@@ -368,10 +379,10 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 					      r->ts[2].tv_sec, r->ts[2].tv_nsec,
 					      r->ts[3].tv_sec, r->ts[3].tv_nsec);
 				}
+				count_client_done++;
 				/* Pipe (daemon) output */
-				if (cfg.op == DAEMON) 
-					if (write(cfg.fifo, (char *)&r_fifo, sizeof r_fifo) == -1)
-						syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+				if (cfg.op == DAEMON)
+					client_write_fifo(&r_fifo);
 				/* Client output */
 				if (cfg.op == CLIENT) {
 					if (r_fifo.state == STATE_TS_ERR) {
@@ -428,8 +439,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	r_fifo.seq = (uint32_t)d->seq;
 	r_fifo.created_sec = (uint32_t)now.tv_sec;
 	if (cfg.op == DAEMON)
-		if (write(cfg.fifo, (char*)&r_fifo, sizeof r_fifo) == -1)
-			syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+		client_write_fifo(&r_fifo);
 	if (cfg.op == CLIENT) {
 		res_dup++;
 		printf("Unknown  %4d from %d (probably DUP)\n",
@@ -498,9 +508,9 @@ void client_res_clear_timeouts(void) {
 				r_fifo.id = (uint32_t)r->id;
 				r_fifo.seq = (uint32_t)r->seq;
 				r_fifo.created_sec = (uint32_t)r->created.tv_sec;
+				count_client_done++;
 				if (cfg.op == DAEMON)
-					if (write(cfg.fifo, (char *)&r_fifo, sizeof r_fifo) == -1)
-						syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
+					client_write_fifo(&r_fifo);
 				/* Client output */
 				if (cfg.op == CLIENT) {
 					if (r_fifo.state == STATE_TS_ERR) {
@@ -533,6 +543,35 @@ void client_res_clear_timeouts(void) {
 		}
 	}
 	return;
+}
+
+void client_write_fifo(struct res_fifo *r_fifo) {
+	struct fifoq *q, *q_tmp;
+
+	q = fifoq_head.tqh_first;
+	while (q != NULL) {
+		q_tmp = q->list.tqe_next;
+		if (write(cfg.fifo, (char *)&q->res, sizeof q->res) == -1) {
+			break;
+		} else {
+			TAILQ_REMOVE(&fifoq_head, q, list);
+			free(q);
+			q = q_tmp;
+			count_client_fifoq--;
+		}
+	}
+
+	if (write(cfg.fifo, (char *)r_fifo, sizeof *r_fifo) == -1) {
+		q = malloc(sizeof *q);
+		if (q == NULL) return;
+		//memset(q, 0, sizeof *q);
+		memcpy(&q->res, r_fifo, sizeof *r_fifo);
+		TAILQ_INSERT_TAIL(&fifoq_head, q, list);
+		count_client_fifoq++;
+		count_client_fifoq_max = MAX(count_client_fifoq_max,
+				count_client_fifoq);
+	}
+	//syslog(LOG_ERR, "daemon: write: %s", strerror(errno));
 }
 
 /**
@@ -601,6 +640,7 @@ void client_msess_transmit(int s_udp, int sends) {
 			continue;
 		}
 		if (sends % s->msec_interval == 0) {
+			count_client_sent++;
 			memset(&tx, 0, sizeof tx);
 			tx.type = TYPE_PING;
 			tx.id = s->id;

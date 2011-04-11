@@ -124,6 +124,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 				rx = (data_t *)&pkt.data;
 				/* SERVER: Send UDP PONG */
 				if (ok == 1 && rx->type == TYPE_PING) {
+					count_server_resp++;
 					tx.type = TYPE_PONG;
 					tx.id = rx->id;
 					tx.seq = rx->seq;
@@ -206,6 +207,23 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					}
 					if (sends % (TIMEOUT_INTERVAL/SEND_INTERVAL) == 0)
 						client_res_clear_timeouts();
+					if (sends % 10000 == 0) {
+						syslog(LOG_INFO, "count_server_resp:  %d (pps*10)",
+								count_server_resp);
+						syslog(LOG_INFO, "count_client_sent:  %d (pps*10)",
+								count_client_sent);
+						syslog(LOG_INFO, "count_client_done:  %d (pps*10)",
+								count_client_done);
+						syslog(LOG_INFO, "count_client_find:  %d (1)",
+								count_client_find);
+						syslog(LOG_INFO, "count_client_fifoq: %d (0)",
+								count_client_fifoq);
+						syslog(LOG_INFO, "count_client_fqmax: %d (0)",
+								count_client_fifoq_max);
+						count_server_resp = 0;
+						count_client_sent = 0;
+						count_client_done = 0;
+					}
 					sends++;
 				}
 			}
@@ -220,7 +238,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 			}
 		} else {
 			/* select() timeout */
-			syslog(LOG_ERR, "select %s", strerror(errno));
+			syslog(LOG_ERR, "select: %s", strerror(errno));
 		}
 	}
 }
