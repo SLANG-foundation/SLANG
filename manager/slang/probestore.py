@@ -351,11 +351,11 @@ class ProbeStore(threading.Thread):
         self.l_probe_highres.release()
 
 
-    def flush(self):
+    def flush(self, ts):
         """ Flush high-res data. """
 
         # find current higres interval
-        chtime = ((int(time.time() * 1000000000) / self.AGGR_DB_HIGHRES) * 
+        chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) * 
             self.AGGR_DB_HIGHRES)
 
         # acquire lock

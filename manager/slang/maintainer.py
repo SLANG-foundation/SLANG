@@ -52,8 +52,10 @@ class Maintainer(threading.Thread):
             t_s = time()
             # flush lowres aggregates to highres aggregates
             if (t_s - self.last_flush) >= self.flush_interval:
+
+                ctime = self.last_flush + 1
 #                try:
-                self.pstore.flush()
+                self.pstore.flush(ctime)
 #                except Exception, e:
 #                    self.logger.error("flush failed with %s: %s" % 
 #                        (str(type(e)), str(e)))
@@ -61,7 +63,7 @@ class Maintainer(threading.Thread):
                 stat = self.manager.run_stats()
                 self.logger.debug("Run stats: Probed: %d ProbeStore: %d" % (stat['probed'], stat['probestore']))
 
-                self.last_flush = t_s
+                self.last_flush = ctime
 
             # remove old data from database, 30min HIGHRES and 24h LOWRES
             if (t_s - self.last_delete) >= self.delete_interval:

@@ -144,6 +144,7 @@ class Probed(threading.Thread):
             except Exception, e:
                 self.logger.error('Unable to read from FIFO: %s' % e)
                 time.sleep(1) 
+                continue
 
             # error condition - handle in nice way!
             # \todo Handle read from dead fifo in a nice way.
