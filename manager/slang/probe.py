@@ -73,7 +73,7 @@ class Probe:
         if self.state == STATE_DUP:
             return str('Unknown  %5d from %d (probably DUP)' % 
                 (self.seq, self.session_id))
-        return 'Unable to parse' + self.state
+        return 'Unable to parse ' + str(self.state)
 
     def toDict(self):
         """ Returns data as a dict.
