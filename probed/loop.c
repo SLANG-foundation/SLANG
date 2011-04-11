@@ -24,6 +24,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <sys/time.h>
+#include <sys/queue.h>
 #include "probed.h"
 #include "loop.h"
 #include "unix.h"
@@ -31,7 +32,14 @@
 #include "net.h"
 #include "client.h"
 
-static int server_find_peer_fd(int low, int high, addr_t *peer);
+struct server_peer {
+	addr_t addr;
+	int fd;
+	LIST_ENTRY(server_peer) list;
+};
+static LIST_HEAD(peers_listhead, server_peer) peers_head;
+
+static int server_find_peer_fd(addr_t *addr);
 static void server_kill_peer(fd_set *fs, int *fd_max, int fd);
 
 /**
@@ -65,6 +73,7 @@ static void server_kill_peer(fd_set *fs, int *fd_max, int fd);
  * \bug       The 'first', not 'correct' TCP client socket will be used
  */
 void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
+	struct server_peer *p;
 	char addrstr[INET6_ADDRSTRLEN];
 	char byte;
 	struct sockaddr_in6 addr_tmp;
@@ -79,6 +88,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	int fd_send_pipe[2];
 	int ok = 1;
 
+	LIST_INIT(&peers_head);
 	/* IPC for children-to-parent (TCP client to UDP state machine) */
 	if (pipe(fd_client_pipe) < 0) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
@@ -134,7 +144,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					/* Send TCP timestamp */
 					tx.type = TYPE_TIME;
 					tx.t3 = ts;
-					fd = server_find_peer_fd(fd_client_low, fd_max, &pkt.addr);
+					fd = server_find_peer_fd(&pkt.addr);
 					if (fd < 0) continue;
 					if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
 						server_kill_peer(&fs, &fd_max, fd);
@@ -170,6 +180,11 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
 						server_kill_peer(&fs, &fd_max, fd);
 					}
+					p = malloc(sizeof *p);
+					if (p == NULL) return;
+					p->fd = fd;
+					memcpy(&p->addr, &addr_tmp, sizeof p->addr);
+					LIST_INSERT_HEAD(&peers_head, p, list);
 				}
 			}
 			/* CLIENT: PIPE; timestamps from client_fork (TCP) */
@@ -255,21 +270,14 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
  * \param[in] peer     Pointer to IP address to find socket for 
  * \return             File descriptor to client socket of address 'peer'
  */
-static int server_find_peer_fd(int low, int high, addr_t *peer) {
-	int i;
-	addr_t tmp;
-	socklen_t slen;
+static int server_find_peer_fd(addr_t *addr) {
+	struct server_peer *p;
 	size_t len;
 	
-	for (i = low; i <= high; i++) {
-		slen = (socklen_t)sizeof tmp;
-		if (getpeername(i, (struct sockaddr*)&tmp, &slen) == 0) {
-			len = sizeof tmp.sin6_addr;
-			if (memcmp(&(peer->sin6_addr), &(tmp.sin6_addr), len) == 0) {
-				return i;
-			}
-		}
-	}
+	len = sizeof addr->sin6_addr;
+	for (p = peers_head.lh_first; p != NULL; p = p->list.le_next)
+		if (memcmp(&p->addr.sin6_addr, &addr->sin6_addr, len) == 0)
+			return p->fd;
 	return -1;
 }
 
@@ -283,6 +291,7 @@ static int server_find_peer_fd(int low, int high, addr_t *peer) {
  */
 static void server_kill_peer(fd_set *fs, int *fd_max, int fd) {
 	char addrstr[INET6_ADDRSTRLEN];
+	struct server_peer *p;
 	addr_t tmp;
 	socklen_t slen;
 
@@ -294,7 +303,14 @@ static void server_kill_peer(fd_set *fs, int *fd_max, int fd) {
 			syslog(LOG_INFO, "server: %s: %d: Disconnected", addrstr, fd);
 		} else syslog(LOG_INFO, "server: %d: Disconnected", fd);
 	} else syslog(LOG_INFO, "server: %d: Disconnected", fd);
-
+	/* Remove linked list */
+	for (p = peers_head.lh_first; p != NULL; p = p->list.le_next) {
+		if (p->fd == fd) {
+			LIST_REMOVE(p, list);
+			free(p);
+			break; /* Otherwise for() crashes! */
+		}
+	}
 	/* Close, clear fd set, maybe decrease fd_max */
 	if (close(fd) < 0)
 		syslog(LOG_ERR, "server: close: %s", strerror(errno));
