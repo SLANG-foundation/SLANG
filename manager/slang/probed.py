@@ -20,9 +20,9 @@ class Probed(threading.Thread):
     logger = None
     config = None
     pstore = None
-    thread_stop = False
+    _flag_thread_stop = False
+    _flag_run_stats = False
     nrun = 0
-    flag_log_clock = False
 
     def __init__(self, pstore):
 
@@ -91,12 +91,14 @@ class Probed(threading.Thread):
 
     def stop(self):
         """ Stop thread execution """
-        self.thread_stop = True
+        self._flag_thread_stop = True
 
-    def log_clock(self):
-        """ Log thread run time.
+
+    def run_stats(self):
+        """ Log thread statistics
         """
-        self.flag_log_clock = True
+        self._flag_run_stats = True
+
 
     def reload(self):
         """ Reload probed application """
@@ -113,12 +115,12 @@ class Probed(threading.Thread):
         
         while True:
 
-            if self.thread_stop: 
+            if self._flag_thread_stop: 
                 break
 
-            if self.flag_log_clock is True:
+            if self._flag_run_stats is True:
                 self.logger.debug("thread %d run time: %f" % (self.ident, resource.getrusage(1)[0]))
-                self.flag_log_clock = False
+                self._flag_run_stats = False
 
             # check if probed is alive
             if self.probed.poll() != None:

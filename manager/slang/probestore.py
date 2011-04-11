@@ -10,7 +10,7 @@ import resource
 from Queue import Queue, Empty
 
 import config
-from probe import Probe, ProbeSet
+from probe import Probe
 import probe
 
 class ProbeStore:
@@ -20,7 +20,6 @@ class ProbeStore:
     config = None
     db = None
     probes = None
-    pdata = None
     max_seq = None
     flag_flush_queue = False
     flag_log_clock = False
@@ -53,7 +52,6 @@ class ProbeStore:
         self.config = config.Config()
 
         self.probes = dict()
-        self.pdata = Queue()
         self.max_seq = dict()
         self.probe_lowres = dict()
         self.probe_highres = dict()
@@ -738,9 +736,6 @@ class ProbeStore:
         ret['state_numprobes'] = 0
         for session in self.probes:
             ret['state_numprobes'] += len(self.probes[session])
-
-        # probes in process queue
-        ret['queuelen'] = self.pdata.qsize()
 
         return ret
 

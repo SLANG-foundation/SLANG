@@ -142,10 +142,13 @@ void client_res_fifo_or_die(char *fifopath) {
 	}
 	syslog(LOG_INFO, "Waiting for listeners on FIFO %s", fifopath);
 	cfg.fifo = open(fifopath, O_WRONLY);
+
 	if (fcntl(cfg.fifo, F_SETFL, O_NONBLOCK) < 0) {
 		syslog(LOG_ERR, "fcntl: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
+
 }
 
 /**

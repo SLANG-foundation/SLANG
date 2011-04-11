@@ -1,6 +1,7 @@
 import threading
 from time import time, sleep
 import logging
+import resource
 
 import config
 
@@ -50,15 +51,13 @@ class Maintainer(threading.Thread):
                 break
             
             t_s = time()
+
             # flush lowres aggregates to highres aggregates
-            if (t_s - self.last_flush) >= self.flush_interval:
+            # If we are behind, run many times!
+            while (t_s - self.last_flush) >= self.flush_interval:
 
                 ctime = self.last_flush + 1
-#                try:
                 self.pstore.flush(ctime)
-#                except Exception, e:
-#                    self.logger.error("flush failed with %s: %s" % 
-#                        (str(type(e)), str(e)))
 
                 self.last_flush = ctime
 
@@ -97,6 +96,10 @@ class Maintainer(threading.Thread):
 
                 t_stop = time()
                 self.logger.debug("Aggregation performed in %.3f seconds" % (t_stop - t_start))
+
+
+            self.logger.debug("thread %d run time: %f s" % (self.ident, resource.getrusage(1)[0]))
+            self.manager.run_stats()
 
             sleep(1)
 

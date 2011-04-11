@@ -192,8 +192,7 @@ class Manager:
 
         """
 
-        self.pstore.log_clock()
-        self.probed.log_clock()
+        self.probed.run_stats()
 
 
     def run(self):
