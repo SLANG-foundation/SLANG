@@ -28,7 +28,7 @@ class ProbeStore(threading.Thread):
     last_flush = None
     highres_max_saved = None
     session_state = None
-    _stop = False
+    _thread_stop = False
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300 * 1000000000
@@ -52,7 +52,7 @@ class ProbeStore(threading.Thread):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
 
-        self._stop = False
+        self._thread_stop = False
         self.probes = dict()
         self.pdata = Queue()
         self.max_seq = dict()
@@ -119,7 +119,7 @@ class ProbeStore(threading.Thread):
 
         while True:
 
-            if self._stop is True:
+            if self._thread_stop is True:
                 break
 
             # fetch probe data
@@ -141,7 +141,7 @@ class ProbeStore(threading.Thread):
         """ Close down ProbeStore 
         """
         self.logger.debug("Closing probestore...")
-        self._stop = True
+        self._thread_stop = True
         self.db.close()
         self.logger.debug("Waiting for db to die...")
         self.db.join()
