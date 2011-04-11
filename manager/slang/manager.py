@@ -187,6 +187,19 @@ class Manager:
         self.logger.debug("ProbeStore done.")
 
 
+    def run_stats(self):
+        """ Run-time statistics.
+
+            Returns statistics describing how many iterations has passed in
+            the main loops of Probed and ProbeStore.
+        """
+
+        self.pstore.log_clock()
+        self.probed.log_clock()
+
+        return { 'probed': self.probed.nrun, 'probestore': self.pstore.nrun }
+
+
     def run(self):
         """ Start the application """
 

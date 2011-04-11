@@ -5,6 +5,7 @@ import sys
 import logging
 import threading
 import time
+import resource
 import signal
 
 import probe
@@ -20,6 +21,8 @@ class Probed(threading.Thread):
     config = None
     pstore = None
     thread_stop = False
+    nrun = 0
+    flag_log_clock = False
 
     def __init__(self, pstore):
 
@@ -90,6 +93,10 @@ class Probed(threading.Thread):
         """ Stop thread execution """
         self.thread_stop = True
 
+    def log_clock(self):
+        """ Log thread run time.
+        """
+        self.flag_log_clock = True
 
     def reload(self):
         """ Reload probed application """
@@ -108,6 +115,10 @@ class Probed(threading.Thread):
 
             if self.thread_stop: 
                 break
+
+            if self.flag_log_clock is True:
+                self.logger.debug("thread %d run time: %f" % (self.ident, resource.getrusage(1)[0]))
+                self.flag_log_clock = False
 
             # check if probed is alive
             if self.probed.poll() != None:
@@ -140,6 +151,7 @@ class Probed(threading.Thread):
                 continue
 
             self.pstore.put(data)
+            self.nrun += 1
 
 
         self.probed.terminate()

@@ -57,6 +57,10 @@ class Maintainer(threading.Thread):
 #                except Exception, e:
 #                    self.logger.error("flush failed with %s: %s" % 
 #                        (str(type(e)), str(e)))
+
+                stat = self.manager.run_stats()
+                self.logger.debug("Run stats: Probed: %d ProbeStore: %d" % (stat['probed'], stat['probestore']))
+
                 self.last_flush = t_s
 
             # remove old data from database, 30min HIGHRES and 24h LOWRES

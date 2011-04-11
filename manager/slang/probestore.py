@@ -6,6 +6,7 @@ import threading
 import logging
 import sqlite3
 import time
+import resource
 from Queue import Queue, Empty
 
 import config
@@ -22,13 +23,15 @@ class ProbeStore(threading.Thread):
     pdata = None
     max_seq = None
     flag_flush_queue = False
+    flag_log_clock = False
     probe_lowres = None
     l_probe_highres = None
     probe_highres = None
-    last_flush = None
+    last_flush = 0
     highres_max_saved = None
     session_state = None
     _thread_stop = False
+    nrun = 0
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300 * 1000000000
@@ -52,14 +55,12 @@ class ProbeStore(threading.Thread):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
 
-        self._thread_stop = False
         self.probes = dict()
         self.pdata = Queue()
         self.max_seq = dict()
         self.probe_lowres = dict()
         self.probe_highres = dict()
         self.l_probe_highres = threading.Lock()
-        self.last_flush = 0
         self.highres_max_saved = dict()
         self.session_state = dict()
 
@@ -110,6 +111,13 @@ class ProbeStore(threading.Thread):
 
         self.flag_flush_queue = True
 
+
+    def log_clock(self):
+        """ Schedula a logging of thread run time.
+        """
+
+        self.flag_log_clock = True
+        
     
     def run(self):
         """ Start thread.
@@ -121,6 +129,10 @@ class ProbeStore(threading.Thread):
 
             if self._thread_stop is True:
                 break
+
+            if self.flag_log_clock is True:
+                self.logger.debug("thread %d run time: %f s" % (self.ident, resource.getrusage(1)[0]))
+                self.flag_log_clock = False
 
             # fetch probe data
             # timeout needed to stop thread when no data is received
@@ -135,6 +147,8 @@ class ProbeStore(threading.Thread):
                 self.add(p)
             except Exception, e:
                 self.logger.error("Probe %s: %s" % (e.__class__.__name__, e))
+
+            self.nrun += 1
 
 
     def stop(self):
