@@ -187,6 +187,14 @@ class Manager:
         self.logger.debug("ProbeStore done.")
 
 
+    def run_stats(self):
+        """ Run-time statistics.
+
+        """
+
+        self.probed.run_stats()
+
+
     def run(self):
         """ Start the application """
 
@@ -194,7 +202,6 @@ class Manager:
         
         # start threads
         try:
-            self.pstore.start()
             self.probed.start()
             self.maintainer.start()
         except Exception, e:

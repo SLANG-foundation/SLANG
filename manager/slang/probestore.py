@@ -6,26 +6,27 @@ import threading
 import logging
 import sqlite3
 import time
+import resource
 from Queue import Queue, Empty
 
 import config
-from probe import Probe, ProbeSet
+from probe import Probe
 import probe
 
-class ProbeStore(threading.Thread):
+class ProbeStore:
     """ Probe storage """
 
     logger = None
     config = None
     db = None
     probes = None
-    pdata = None
     max_seq = None
     flag_flush_queue = False
+    flag_log_clock = False
     probe_lowres = None
     l_probe_highres = None
     probe_highres = None
-    last_flush = None
+    last_flush = 0
     highres_max_saved = None
     session_state = None
     _thread_stop = False
@@ -47,19 +48,14 @@ class ProbeStore(threading.Thread):
     def __init__(self):
         """Constructor """
 
-        threading.Thread.__init__(self)
-
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
 
-        self._thread_stop = False
         self.probes = dict()
-        self.pdata = Queue()
         self.max_seq = dict()
         self.probe_lowres = dict()
         self.probe_highres = dict()
         self.l_probe_highres = threading.Lock()
-        self.last_flush = 0
         self.highres_max_saved = dict()
         self.session_state = dict()
 
@@ -110,33 +106,14 @@ class ProbeStore(threading.Thread):
 
         self.flag_flush_queue = True
 
-    
-    def run(self):
-        """ Start thread.
+
+    def log_clock(self):
+        """ Schedula a logging of thread run time.
         """
 
-        self.logger.debug("Starting thread")
-
-        while True:
-
-            if self._thread_stop is True:
-                break
-
-            # fetch probe data
-            # timeout needed to stop thread when no data is received
-            try:
-                data = self.pdata.get(timeout=1)
-            except Empty:
-                continue
-
-            # add probe
-            try:
-                p = probe.from_struct(data)
-                self.add(p)
-            except Exception, e:
-                self.logger.error("Probe %s: %s" % (e.__class__.__name__, e))
-
-
+        self.flag_log_clock = True
+        
+    
     def stop(self):
         """ Close down ProbeStore 
         """
@@ -146,15 +123,6 @@ class ProbeStore(threading.Thread):
         self.logger.debug("Waiting for db to die...")
         self.db.join()
         self.logger.debug("db dead.")
-
-    def put(self, data):
-        """ Put raw probe data into the process queue.
-            
-            Arguments:
-            data -- raw data received from probed
-        """
-
-        self.pdata.put(data)
 
 
     def add(self, p):
@@ -337,11 +305,11 @@ class ProbeStore(threading.Thread):
         self.l_probe_highres.release()
 
 
-    def flush(self):
+    def flush(self, ts):
         """ Flush high-res data. """
 
         # find current higres interval
-        chtime = ((int(time.time() * 1000000000) / self.AGGR_DB_HIGHRES) * 
+        chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) * 
             self.AGGR_DB_HIGHRES)
 
         # acquire lock
@@ -768,9 +736,6 @@ class ProbeStore(threading.Thread):
         ret['state_numprobes'] = 0
         for session in self.probes:
             ret['state_numprobes'] += len(self.probes[session])
-
-        # probes in process queue
-        ret['queuelen'] = self.pdata.qsize()
 
         return ret
 

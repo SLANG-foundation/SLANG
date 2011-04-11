@@ -5,6 +5,7 @@ import sys
 import logging
 import threading
 import time
+import resource
 import signal
 
 import probe
@@ -19,7 +20,9 @@ class Probed(threading.Thread):
     logger = None
     config = None
     pstore = None
-    thread_stop = False
+    _flag_thread_stop = False
+    _flag_run_stats = False
+    nrun = 0
 
     def __init__(self, pstore):
 
@@ -88,7 +91,13 @@ class Probed(threading.Thread):
 
     def stop(self):
         """ Stop thread execution """
-        self.thread_stop = True
+        self._flag_thread_stop = True
+
+
+    def run_stats(self):
+        """ Log thread statistics
+        """
+        self._flag_run_stats = True
 
 
     def reload(self):
@@ -106,8 +115,12 @@ class Probed(threading.Thread):
         
         while True:
 
-            if self.thread_stop: 
+            if self._flag_thread_stop: 
                 break
+
+            if self._flag_run_stats is True:
+                self.logger.debug("thread %d run time: %f" % (self.ident, resource.getrusage(1)[0]))
+                self._flag_run_stats = False
 
             # check if probed is alive
             if self.probed.poll() != None:
@@ -133,13 +146,20 @@ class Probed(threading.Thread):
             except Exception, e:
                 self.logger.error('Unable to read from FIFO: %s' % e)
                 time.sleep(1) 
+                continue
 
             # error condition - handle in nice way!
             # \todo Handle read from dead fifo in a nice way.
             if len(data) < 1:
                 continue
 
-            self.pstore.put(data)
+            try:
+                p = probe.from_struct(data)
+                self.pstore.add(p)
+            except Exception, e:
+                self.logger.error("Probe %s: %s" % (e.__class__.__name__, e))
+
+            self.nrun += 1
 
 
         self.probed.terminate()
