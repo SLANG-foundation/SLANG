@@ -13,7 +13,7 @@ import config
 from probe import Probe, ProbeSet
 import probe
 
-class ProbeStore(threading.Thread):
+class ProbeStore:
     """ Probe storage """
 
     logger = None
@@ -31,7 +31,6 @@ class ProbeStore(threading.Thread):
     highres_max_saved = None
     session_state = None
     _thread_stop = False
-    nrun = 0
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300 * 1000000000
@@ -49,8 +48,6 @@ class ProbeStore(threading.Thread):
 
     def __init__(self):
         """Constructor """
-
-        threading.Thread.__init__(self)
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
@@ -119,38 +116,6 @@ class ProbeStore(threading.Thread):
         self.flag_log_clock = True
         
     
-    def run(self):
-        """ Start thread.
-        """
-
-        self.logger.debug("Starting thread")
-
-        while True:
-
-            if self._thread_stop is True:
-                break
-
-            if self.flag_log_clock is True:
-                self.logger.debug("thread %d run time: %f s" % (self.ident, resource.getrusage(1)[0]))
-                self.flag_log_clock = False
-
-            # fetch probe data
-            # timeout needed to stop thread when no data is received
-            try:
-                data = self.pdata.get(timeout=1)
-            except Empty:
-                continue
-
-            # add probe
-            try:
-                p = probe.from_struct(data)
-                self.add(p)
-            except Exception, e:
-                self.logger.error("Probe %s: %s" % (e.__class__.__name__, e))
-
-            self.nrun += 1
-
-
     def stop(self):
         """ Close down ProbeStore 
         """
@@ -160,15 +125,6 @@ class ProbeStore(threading.Thread):
         self.logger.debug("Waiting for db to die...")
         self.db.join()
         self.logger.debug("db dead.")
-
-    def put(self, data):
-        """ Put raw probe data into the process queue.
-            
-            Arguments:
-            data -- raw data received from probed
-        """
-
-        self.pdata.put(data)
 
 
     def add(self, p):

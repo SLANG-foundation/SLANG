@@ -190,14 +190,10 @@ class Manager:
     def run_stats(self):
         """ Run-time statistics.
 
-            Returns statistics describing how many iterations has passed in
-            the main loops of Probed and ProbeStore.
         """
 
         self.pstore.log_clock()
         self.probed.log_clock()
-
-        return { 'probed': self.probed.nrun, 'probestore': self.pstore.nrun }
 
 
     def run(self):
@@ -207,7 +203,6 @@ class Manager:
         
         # start threads
         try:
-            self.pstore.start()
             self.probed.start()
             self.maintainer.start()
         except Exception, e:

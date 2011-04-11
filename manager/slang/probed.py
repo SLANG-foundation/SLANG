@@ -151,7 +151,12 @@ class Probed(threading.Thread):
             if len(data) < 1:
                 continue
 
-            self.pstore.put(data)
+            try:
+                p = probe.from_struct(data)
+                self.pstore.add(p)
+            except Exception, e:
+                self.logger.error("Probe %s: %s" % (e.__class__.__name__, e))
+
             self.nrun += 1
 
 
