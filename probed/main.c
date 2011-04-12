@@ -30,7 +30,6 @@ static void reload(/*@unused@*/ int sig);
  * SLA-NG documentation is found for loop_or_die() in mainloop.c
  */
 int main(int argc, char *argv[]) {
-
 	int arg, s_udp, s_tcp, log;
 	enum tsmode tstamp;
 	char *addr, *iface, *port, *cfgpath, *fifopath, *wait;
@@ -45,6 +44,12 @@ int main(int argc, char *argv[]) {
 	addr = "";
 	fifopath = "";
 	wait = "500";
+	count_server_resp = 0;
+	count_client_sent = 0;
+	count_client_done = 0;
+	count_client_find = 0;
+	count_client_fifoq = 0;
+	count_client_fifoq_max = 0;
 
 	p(APP_AND_VERSION);
 	debug(0);

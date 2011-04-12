@@ -6,6 +6,7 @@
  */ 
 
 void client_init(void);
+void client_send_fork(int pipe);
 void client_res_fifo_or_die(char *fifopath);
 void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp);
 void client_res_summary(/*@unused@*/ int sig);

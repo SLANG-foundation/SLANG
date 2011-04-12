@@ -6,10 +6,11 @@ import threading
 import logging
 import sqlite3
 import time
+import resource
 from Queue import Queue, Empty
 
 import config
-from probe import Probe, ProbeSet
+from probe import Probe
 import probe
 
 class ProbeStore:
@@ -20,13 +21,15 @@ class ProbeStore:
     db = None
     probes = None
     max_seq = None
-    flag_flush_queue = False
+    _flag_flush_queue = False
+    flag_log_clock = False
     probe_lowres = None
     l_probe_highres = None
     probe_highres = None
-    last_flush = None
+    last_flush = 0
     highres_max_saved = None
     session_state = None
+    _thread_stop = False
 
     # Low resolution aggretation interval
     AGGR_DB_LOWRES = 300 * 1000000000
@@ -53,7 +56,6 @@ class ProbeStore:
         self.probe_lowres = dict()
         self.probe_highres = dict()
         self.l_probe_highres = threading.Lock()
-        self.last_flush = 0
         self.highres_max_saved = dict()
         self.session_state = dict()
 
@@ -99,14 +101,24 @@ class ProbeStore:
 
 
     def flush_queue(self):
-        """ Schedule a probe queue flush. """
+        """ Schedule a probe queue flush. 
+        """
 
-        self.flag_flush_queue = True
+        self._flag_flush_queue = True
 
 
+    def log_clock(self):
+        """ Schedula a logging of thread run time.
+        """
+
+        self.flag_log_clock = True
+        
+    
     def stop(self):
-        """ Close down ProbeStore """
+        """ Close down ProbeStore 
+        """
         self.logger.debug("Closing probestore...")
+        self._thread_stop = True
         self.db.close()
         self.logger.debug("Waiting for db to die...")
         self.db.join()
@@ -116,9 +128,6 @@ class ProbeStore:
     def add(self, p):
         """ Add probe to ProbeStore 
 
-            TODO:
-            Handle duplicate packets!
-        
             Logic when new probe arrives:
             V2:
             if p.seq > max_seq:
@@ -149,10 +158,10 @@ class ProbeStore:
         """
 
         # Should queue be flushed?
-        if self.flag_flush_queue:
+        if self._flag_flush_queue:
             self.probes = dict()
             self.max_seq = dict()
-            self.flag_flush_queue = False
+            self._flag_flush_queue = False
 
         # duplicate packet?
         if p.state == probe.STATE_DUP:
@@ -233,7 +242,8 @@ class ProbeStore:
 
 
     def insert(self, p):
-        """ Insert probe into aggregated storage. """
+        """ Insert probe into aggregated storage. 
+        """
 
         ctime = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES
 
@@ -293,11 +303,11 @@ class ProbeStore:
         self.l_probe_highres.release()
 
 
-    def flush(self):
+    def flush(self, ts):
         """ Flush high-res data. """
 
-        # find current higres interval
-        chtime = ((int(time.time() * 1000000000) / self.AGGR_DB_HIGHRES) * 
+        # find current highres interval
+        chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) * 
             self.AGGR_DB_HIGHRES)
 
         # acquire lock
@@ -451,7 +461,7 @@ class ProbeStore:
                     self.l_probe_highres.acquire() # TODO: Do less within this lock
                     for t2 in self.probe_highres:
                         
-                        if t2 >= start and t2 <= end:
+                         if t2 >= start and t2 <= end:
                             if session_id in self.probe_highres[t2]:
                                 self.calc_probedict(self.probe_highres[t2][session_id])
                                 self.save(session_id, t2, self.AGGR_DB_HIGHRES,
@@ -697,7 +707,8 @@ class ProbeStore:
 
 
     def get_storage_statistics(self):
-        """ Return some storage statistics. """
+        """ Return some storage statistics. 
+        """
 
         ret = {}
 
@@ -730,8 +741,10 @@ class ProbeStore:
 class ProbeStoreError(Exception):
     pass
 
+
 class ProbeStoreDB(threading.Thread):
-    """ Thread-safe wrapper to sqlite interface """
+    """ Thread-safe wrapper to sqlite interface 
+    """
 
     def __init__(self, db):
         threading.Thread.__init__(self)
@@ -740,6 +753,7 @@ class ProbeStoreDB(threading.Thread):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.debug("Created instance")
         self.start()
+
 
     def run(self):
 
@@ -807,12 +821,17 @@ class ProbeStoreDB(threading.Thread):
         conn.commit()
         conn.close()
 
+
     def execute(self, req, arg = None, res = None):
-        """ "Execute" by pushing query to queue """
+        """ "Execute" by pushing query to queue 
+        """
 
         self.reqs.put((req, arg or tuple(), res))
 
+
     def select(self, req, arg = None):
+        """ Perform a SQL SELECT query.
+        """
         res = Queue()
         self.execute(req, arg, res)
         while True:
@@ -820,9 +839,15 @@ class ProbeStoreDB(threading.Thread):
             if rec == '--no more--': break
             yield rec
 
+
     def close(self):
+        """ Request thread stop.
+        """
         self.logger.debug("Got close request, passing to thread.")
         self.execute('--close--')
 
+
     def commit(self):
+        """ Request a commit.
+        """
         self.execute('--commit--')
