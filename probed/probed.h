@@ -8,15 +8,24 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define APP_AND_VERSION "SLA-NG probed 0.2"
+#define APP_AND_VERSION "SLA-NG probed 0.3"
 #define TIMEOUT 10
+#define SEND_INTERVAL 1000
+#define TIMEOUT_INTERVAL 100000
 #define TMPLEN 512
 #define DATALEN 48
-#define TYPE_PING 'i'
-#define TYPE_PONG 'o'
-#define TYPE_TIME 't'
-#define TYPE_HELO 'h'
-#define TYPE_SEND 's'
+#define TYPE_PING 1
+#define TYPE_PONG 2
+#define TYPE_TIME 3
+#define TYPE_HELO 4
+#define TYPE_SEND 5
+
+int count_server_resp;
+int count_client_sent;
+int count_client_done;
+int count_client_find;
+int count_client_fifoq;
+int count_client_fifoq_max;
 
 typedef struct timespec ts_t;
 typedef struct sockaddr_in6 addr_t;
@@ -50,14 +59,13 @@ struct packet {
 };
 typedef struct packet pkt_t;
 struct packet_data {
-	char type;
+	num_t type;
 	num_t seq;
 	num_t id;
 	/*@dependent@*/ ts_t t2;
 	/*@dependent@*/ ts_t t3;
 };
 typedef struct packet_data data_t;
-
 struct packet_rpm {
 	int32_t t1_sec;
 	int32_t t1_usec;

@@ -164,20 +164,35 @@ class Manager:
             pass
 
         # wait for threads to finish...
-        self.logger.debug("Waiting for maintainer...")
+        self.logger.debug("Waiting for Maintainer...")
         try:
             self.maintainer.join()
         except:
             pass
 
-        self.logger.debug("Maintainer done. Waiting for probed...")
+        self.logger.debug("Maintainer done. Waiting for Probed...")
 
         try:
             self.probed.join()
         except:
             pass
 
-        self.logger.debug("Probed done.")
+        self.logger.debug("Probed done. Waiting for ProbeStore...")
+
+        try:
+            self.pstore.join()
+        except:
+            pass
+
+        self.logger.debug("ProbeStore done.")
+
+
+    def run_stats(self):
+        """ Run-time statistics.
+
+        """
+
+        self.probed.run_stats()
 
 
     def run(self):

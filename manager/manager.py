@@ -94,7 +94,6 @@ m.stop()
 logger.info("Exiting SLA-NG manager; run() finished")
 
 #stats = yappi.get_stats(sorttype=yappi.SORTTYPE_TSUB)
-#print type(stats)
 #for stat in stats:
 #    print stat
 #yappi.stop()

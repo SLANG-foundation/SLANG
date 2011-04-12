@@ -73,7 +73,7 @@ class Probe:
         if self.state == STATE_DUP:
             return str('Unknown  %5d from %d (probably DUP)' % 
                 (self.seq, self.session_id))
-        return 'Unable to parse' + self.state
+        return 'Unable to parse ' + str(self.state)
 
     def toDict(self):
         """ Returns data as a dict.
@@ -108,144 +108,13 @@ class Probe:
         """ Perform calculations which require previous probe.
         """
         try:
-            self.delay_variation = self.rtt - prev_probe.rtt
+            if self.successful() and prev_probe.successful():
+                self.delay_variation = self.rtt - prev_probe.rtt
+            else:
+                self.delay_variation = None
         except TypeError:
             # catch error when RTT is None
             pass
 
         self.has_gotten = True
         prev_probe.has_given = True
-
-
-class ProbeSet(list):
-    """ A set of probes. """
-
-
-    def split(self, split_interval):
-        """ Split up the ProbeSet 
-        
-            Splits up the ProbeSet into a list of smaller ProbeSets,
-            each one containing Probes for a split_interval.
-
-            TODO: move slicing code into the index findning loop
-        """
-
-        # Find indexes
-        idxlist = []
-        cur_start_time = self[0].created
-        cur_start_idx = 0
-        
-        for i in range(0, len(self)-1):
-            if self[i].created > cur_start_time + split_interval:
-                idxlist.append( (cur_start_idx, i) )
-                cur_start_idx = i
-                cur_start_time += split_interval
-
-        idxlist.append( (cur_start_idx, len(self)) )
-
-        # Iterate index list and slice array
-        res = []
-        for idx in idxlist:
-            subset = ProbeSet(self[idx[0]:idx[1]])
-            res.append(subset)
-
-        return res
-
-    def avg_rtt(self):
-        """ Find the average RTT 
-        
-        TODO: prevent overflow
-        """
-        t = time.time()
-        sum = Timespec(0, 0)
-        
-        successful = 0
-        for p in self:
-            if p.successful():
-                sum += p.rtt
-                successful += 1
-
-        print "avg_rtt: %f" % (time.time() - t)
-        if successful < 1:
-            return None
-        return sum/successful
-
-
-    def max_rtt(self):
-        """ Find the max RTT """
-        t = time.time()
-        r = []
-        for p in self:
-            if p.successful():
-              r.append(p.rtt)
-        print "max_rtt: %f" % (time.time() - t)
-
-        if len(r) < 1:
-            return None
-        return max(r)
-
-
-    def min_rtt(self):
-        """ Find the min RTT """
-        t = time.time()
-        r = []
-        for p in self:
-            if p.successful():
-                r.append(p.rtt)
-        print "min_rtt: %f" % (time.time() - t)
-        if len(r) < 1:
-            return None
-        return min(r)
-
-
-    def perc_rtt(self, perc):
-        """ Find the percth percentile """
-
-        t = time.time()
-
-        # sanity check of percentile
-        if perc < 0 or perc > 100:
-            raise Exception("Invalid percentile")
-
-        # get rtt:s
-        r = []
-        for p in self:
-            if p.successful():
-                r.append(p.rtt)
-
-        if len(r) < 1:
-            return None
-
-        r.sort()
-
-        # special cases for "strange" percentiles
-        if perc == 0:
-            return r[0]
-        if perc == 100:
-            return r[-1]
-        
-        print "perc_rtt: %f" % (time.time() - t)
-
-        return r[ int( round( perc * 0.01 * (len(r)-1) ) ) ]
-
-    def lost(self):
-        """ Return number of lost probes """
-        
-        t = time.time()
-        l = 0
-        for p in self:
-            if p.lost(): l +=1
-
-        print "perc_lost: %f" % (time.time() - t)
-
-        return l
-
-    def successful(self):
-        """ Return number of successful probes """
-
-        s = 0
-        for p in self:
-            if p.successful(): 
-                s += 1
-
-        return s

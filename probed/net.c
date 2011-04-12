@@ -160,6 +160,7 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 	if (setsockopt(*s_udp, IPPROTO_IPV6, IPV6_RECVTCLASS, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: IPV6_RECVTCLASS: %s",
 				strerror(errno));
+
 	/* Bind port */
 	slen = (socklen_t)sizeof my;
 	if (bind(*s_udp, (struct sockaddr *)&my, slen) < 0) {

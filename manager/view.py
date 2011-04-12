@@ -21,7 +21,7 @@ if options.mode == 'ping':
     fifo = open(config.get('fifopath'), 'r');
 
     while True:
-        data = fifo.read(128)
+        data = fifo.read(24)
         if len(data) < 1:
             continue
         p = slang.probe.from_struct(data)
