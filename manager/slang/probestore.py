@@ -21,7 +21,7 @@ class ProbeStore:
     db = None
     probes = None
     max_seq = None
-    flag_flush_queue = False
+    _flag_flush_queue = False
     flag_log_clock = False
     probe_lowres = None
     l_probe_highres = None
@@ -104,7 +104,7 @@ class ProbeStore:
         """ Schedule a probe queue flush. 
         """
 
-        self.flag_flush_queue = True
+        self._flag_flush_queue = True
 
 
     def log_clock(self):
@@ -128,9 +128,6 @@ class ProbeStore:
     def add(self, p):
         """ Add probe to ProbeStore 
 
-            TODO:
-            Handle duplicate packets!
-        
             Logic when new probe arrives:
             V2:
             if p.seq > max_seq:
@@ -161,10 +158,10 @@ class ProbeStore:
         """
 
         # Should queue be flushed?
-        if self.flag_flush_queue:
+        if self._flag_flush_queue:
             self.probes = dict()
             self.max_seq = dict()
-            self.flag_flush_queue = False
+            self._flag_flush_queue = False
 
         # duplicate packet?
         if p.state == probe.STATE_DUP:
@@ -245,7 +242,8 @@ class ProbeStore:
 
 
     def insert(self, p):
-        """ Insert probe into aggregated storage. """
+        """ Insert probe into aggregated storage. 
+        """
 
         ctime = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES
 
@@ -308,7 +306,7 @@ class ProbeStore:
     def flush(self, ts):
         """ Flush high-res data. """
 
-        # find current higres interval
+        # find current highres interval
         chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) * 
             self.AGGR_DB_HIGHRES)
 

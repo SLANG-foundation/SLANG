@@ -108,7 +108,10 @@ class Probe:
         """ Perform calculations which require previous probe.
         """
         try:
-            self.delay_variation = self.rtt - prev_probe.rtt
+            if self.successful() and prev_probe.successful():
+                self.delay_variation = self.rtt - prev_probe.rtt
+            else:
+                self.delay_variation = None
         except TypeError:
             # catch error when RTT is None
             pass
