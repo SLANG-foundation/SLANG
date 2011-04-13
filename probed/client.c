@@ -374,13 +374,11 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				for (i = 0; i < 4; i++)
 					if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) 
 						r_fifo.state = STATE_TS_ERR;
-				if (r_fifo.rtt_sec != 0) {
-					syslog(LOG_ERR, "Strange RTT %d %ld.%ld sec (%ld.%ld %ld.%ld %ld.%ld %ld.%ld)\n",
-					      r->id, rtt.tv_sec, rtt.tv_nsec,
-					      r->ts[0].tv_sec, r->ts[0].tv_nsec,
-					      r->ts[1].tv_sec, r->ts[1].tv_nsec,
-					      r->ts[2].tv_sec, r->ts[2].tv_nsec,
-					      r->ts[3].tv_sec, r->ts[3].tv_nsec);
+				if (r_fifo.state == STATE_SUCCESS &&
+						r_fifo.rtt_sec > 20) {
+					syslog(LOG_ERR, "Strange RTT %d %ld.%ld sec\n",
+					      r->id, rtt.tv_sec, rtt.tv_nsec);
+						r_fifo.state = STATE_TS_ERR;
 				}
 				count_client_done++;
 				/* Pipe (daemon) output */
