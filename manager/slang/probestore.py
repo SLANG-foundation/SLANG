@@ -6,7 +6,6 @@ import threading
 import logging
 import sqlite3
 import time
-import resource
 from Queue import Queue, Empty
 
 import config
