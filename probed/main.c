@@ -27,7 +27,7 @@ static void reload(/*@unused@*/ int sig);
 
 /**
  * Sets default values, parses arguments, and start main loop. General
- * SLA-NG documentation is found for loop_or_die() in mainloop.c
+ * SLA-NG documentation is found for loop_or_die() in loop.c
  */
 int main(int argc, char *argv[]) {
 	int arg, s_udp, s_tcp, log;
