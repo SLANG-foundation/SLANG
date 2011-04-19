@@ -7,12 +7,12 @@ import time
 import xmlrpclib
 import socket
 
-n = 48 # How many lowres-intervals back in time to check
+n = 24 # How many lowres-intervals back in time to check
 
 check = {
         'lab-slang-1.tele2.net': [1, 2, 3, 4, 5, 6, 7, 8, 9, 1155],
         'lab-slang-4.tele2.net': [1, 2, 3, 4, 5, 6, 7, 1146, 1148, 1154],
-        'lab-slang-3.tele2.net': [1145, 1158, 1160, 1165, 1166],
+        'lab-slang-3.tele2.net': [1, 2, 3, 4, 5, 1145, 1158, 1160, 1165, 1166],
         'lab-slang-5.tele2.net': [1149, 1150, 1156, 1157, 1161]
         }
 

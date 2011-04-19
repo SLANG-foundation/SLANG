@@ -121,6 +121,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	fd_max = MAX(fd_max, fd_send_pipe[0]);
 	fd_max = MAX(fd_max, fd_send_pipe[1]);
 	fd_client_low = fd_max;
+
 	/* Let's loop those sockets! */
 	while (1 == 1) {
 		fs_tmp = fs;
