@@ -160,7 +160,7 @@ void tstamp_mode_userland(sock) {
  * and store it's timestamp.
  * 
  * \param[in]  msg Pointer to the message's header data
- * \param[out] ts  Pointer to timestamp where timestamp is saved
+ * \param[out] ts  Pointer to location where timestamp is saved
  */
 int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts, int tx) {
 	struct cmsghdr *cmsg;

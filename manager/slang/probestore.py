@@ -6,7 +6,6 @@ import threading
 import logging
 import sqlite3
 import time
-import resource
 from Queue import Queue, Empty
 
 import config
@@ -621,13 +620,12 @@ class ProbeStore:
             num -- Number of values to return
         """
 
-        start = ((int(time.time()) * 1000000000 / self.AGGR_DB_LOWRES - num - 1) * 
-            self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        self.logger.debug("Getting last lowres aggregate for id %d from %d" % 
-            (session_id, start/1000000000))
+        start = (int(time.time() * 1000000000 / self.AGGR_DB_LOWRES - num - 2) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
+        end =   (int(time.time() * 1000000000 / self.AGGR_DB_LOWRES - 2)       * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
+        self.logger.debug("Getting last lowres aggregate for id %d from %d" % (session_id, int(start/1000000000)))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
-            "created >= ? AND aggr_interval = ?")
-        res = self.db.select(sql, (session_id, start, self.AGGR_DB_LOWRES))
+            "created >= ? AND created < ? AND aggr_interval = ?")
+        res = self.db.select(sql, (session_id, start, end, self.AGGR_DB_LOWRES/1000000000))
 
         ret = list()
         for row in res:
