@@ -22,7 +22,7 @@ killhard()
 	pkill -f $NAME
 	sleep 3
 	pkill -9 -f $NAME
-	pkill -9 -f probed 
+	#pkill -9 -f probed 
 }
 
 starthard()

@@ -26,6 +26,7 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <linux/errqueue.h>
 #include "external/sockios.h"
 #include "external/net_tstamp.h"
 #include "probed.h"
@@ -161,10 +162,25 @@ void tstamp_mode_userland(sock) {
  * \param[in]  msg Pointer to the message's header data
  * \param[out] ts  Pointer to timestamp where timestamp is saved
  */
-int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
+int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts, int tx) {
 	struct cmsghdr *cmsg;
 	struct scm_timestamping *t;
 	ts_t *ts_p;
+	int ok = 0;
+	data_t *d;
+	char *cp;
+	struct sock_extended_err *err;
+
+		d = (data_t *)&msg[0].msg_iov[0].iov_base;
+		cp = msg[0].msg_iov[0].iov_base;
+		//printf("check %d %d \n", d->seq, d->id);
+		//printf("check %d\n", cp[4]);
+	if (tx) {
+		/* Check that we got the right packet back */
+		//if (d->seq != last_tx_seq) return -1;
+		//if (d->id != last_tx_id) return -1;
+	}
+	/* Check message headers */
 	memset(ts, 0, sizeof *ts);
 	/*@ -branchstate Don't care about cmsg storage */
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
@@ -177,14 +193,28 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts) {
 				if (cfg.ts == HARDWARE) *ts = t->hwtimeraw;
 				if (cfg.ts == KERNEL) *ts = t->systime;
 				/*@ +onlytrans */
-				return 0;
+				if (!tx) return 0;
+				else ok |= 1;
+				if (ok == 3) return 0;
 			}
-			/* if software timestamps, check SO_TIMESTAMPNS */
+			/* if RX software timestamps, check SO_TIMESTAMPNS */
 			if (cfg.ts == USERLAND
 					&& cmsg->cmsg_type == SO_TIMESTAMPNS) {
 				ts_p = (struct timespec *)CMSG_DATA(cmsg);
 				*ts = *ts_p;
 				return 0;
+			}
+		}
+		/* Check that this is the right packet */
+		if (tx && cmsg->cmsg_level == IPPROTO_IPV6) {
+			if (cmsg->cmsg_type == IPV6_RECVERR) {
+				err = (struct sock_extended_err
+					 *)CMSG_DATA(cmsg);
+				if (err->ee_origin ==
+						SO_EE_ORIGIN_TIMESTAMPING) {
+					ok |= 2;
+					if (ok == 3) return 0;
+				}
 			}
 		}
 	}
@@ -221,8 +251,6 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 	while (timercmp(&tmp, &tv, <) != 0) {
 		unix_fd_zero(&fs);
 		unix_fd_set(sock, &fs);
-		tv.tv_sec = 0;
-		tv.tv_usec = 10000;
 		if (select(sock + 1, &fs, NULL, NULL, &tv) > 0) {
 			/* We have a normal packet OR a timestamp */
 			if (recv_w_ts(sock, MSG_ERRQUEUE, &pkt) == 0) {
@@ -232,6 +260,8 @@ int tstamp_fetch_tx(int sock, /*@out@*/ ts_t *ts) {
 				return 0;
 			}
 		}
+		tv.tv_sec = 0;
+		tv.tv_usec = 10000;
 		(void)gettimeofday(&now, 0);
 		timersub(&now, &last, &tmp);
 	}

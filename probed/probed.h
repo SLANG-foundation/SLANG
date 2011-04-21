@@ -26,6 +26,8 @@ int count_client_done;
 int count_client_find;
 int count_client_fifoq;
 int count_client_fifoq_max;
+int last_tx_id;
+int last_tx_seq;
 
 typedef struct timespec ts_t;
 typedef struct sockaddr_in6 addr_t;

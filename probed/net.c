@@ -50,7 +50,12 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	memset(&(pkt->data), 0, DATALEN);
 	memset(msg, 0, sizeof *msg);
 	addrlen = (socklen_t)sizeof pkt->addr;
-	iov[0].iov_base = pkt->data;
+	char da[30];
+	if ((flags & MSG_ERRQUEUE) != 0) {
+		iov[0].iov_base = da;
+	} else {
+		iov[0].iov_base = pkt->data;
+	}
 	iov[0].iov_len = DATALEN;
 	msg[0].msg_iov = iov;
 	msg[0].msg_iovlen = 1;
@@ -59,21 +64,27 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 	msg[0].msg_control = &control;
 	msg[0].msg_controllen = sizeof control;
 
-	if (recvmsg(sock, msg, flags) < 0) {
+	if (recvmsg(sock, msg, flags|MSG_DONTWAIT) != DATALEN) {
 		/* Recv error! Don't warn about err queue, it's non-block */
-		if ((flags & MSG_ERRQUEUE) == 0)
-			syslog(LOG_INFO, "recvmsg: %s", strerror(errno));
+		//if ((flags & MSG_ERRQUEUE) == 0)
+		//	syslog(LOG_INFO, "recvmsg: %s", strerror(errno));
 		return -1;
 	} else {
 		/* OK, we got a packet */
 		if ((flags & MSG_ERRQUEUE) != 0) {
+			//data_t *d;
+			//d = (data_t *)&pkt->data;
+			//d = (data_t *)da;
+			//printf("send: %d\n", d->seq);
+			//printf("tx2: %d\n", da[4]);
 			/* THIS IS A TX TIMESTAMP: store tx tstamp */
-			if (tstamp_extract(msg, &pkt->ts) < 0) 
+			if (tstamp_extract(msg, &pkt->ts, 1) < 0)
 				return -1;
 			return 0;
 		} else {
+			//printf("recv: %d\n", pkt->data[1]);
 			/* THIS IS NORMAL PACKET: store rx tstamp and DSCP */
-			if (tstamp_extract(msg, &pkt->ts) < 0)
+			if (tstamp_extract(msg, &pkt->ts, 0) < 0)
 				syslog(LOG_ERR, "recv_w_ts: RX tstamp error");
 			if (dscp_extract(msg, &pkt->dscp) < 0)
 				syslog(LOG_ERR, "recv_w_ts: DSCP error");
@@ -100,7 +111,8 @@ int recv_w_ts(int sock, int flags, /*@out@*/ pkt_t *pkt) {
 
 int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
 	socklen_t slen;
-
+	
+	//printf("tx: %d\n", data[4]);
 	memset(ts, 0, sizeof *ts);
 	/* get userland tx timestamp (before send, hehe) */
 	if (cfg.ts == USERLAND)   

@@ -138,6 +138,8 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					tx.type = TYPE_PONG;
 					tx.id = rx->id;
 					tx.seq = rx->seq;
+					last_tx_id = rx->id;
+					last_tx_seq = rx->seq;
 					tx.t2 = pkt.ts;
 					(void)dscp_set(s_udp, pkt.dscp);
 					(void)send_w_ts(s_udp, &(pkt.addr), (char*)&tx, &ts);

@@ -647,9 +647,13 @@ void client_msess_transmit(int s_udp, int sends) {
 			tx.id = s->id;
 			s->last_seq++;
 			tx.seq = s->last_seq;
+			last_tx_id = s->id;
+			last_tx_seq = s->last_seq;
 			(void)dscp_set(s_udp, s->dscp);
-			(void)send_w_ts(s_udp, &s->dst, (char*)&tx, &ts);
-			client_res_insert(&s->dst, &tx, &ts);
+			if (send_w_ts(s_udp, &s->dst, (char*)&tx, &ts) < 0)
+				syslog(LOG_INFO, "skipping send");
+			else
+				client_res_insert(&s->dst, &tx, &ts);
 		}
 	}
 
