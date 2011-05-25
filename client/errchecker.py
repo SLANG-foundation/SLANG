@@ -33,6 +33,7 @@ for k in check.keys():
         n_pongloss = 0
         n_tserr = 0
         max_delayvar = 0
+        max_95 = 0
 
         for row in res:
             if int(row['aggr_interval']) != 300:
@@ -43,11 +44,13 @@ for k in check.keys():
             n_tserr += int(row['timestamperror'])
             if int(row['delayvar_max']) > max_delayvar:
                 max_delayvar = int(row['delayvar_max'])
+            if int(row['delayvar_95th']) > max_95:
+                max_95 = int(row['delayvar_95th'])
 
         if n_pingloss != 0 or n_pongloss != 0:
             status = 'FAIL'
         else:
             status = 'SUCCESS'
 
-        print ("%4d %3d: pingloss: %6d pongloss: %6d tserr: %6s delayvar_max: %6d total: %8d %8s" % 
-            (sess_id, len(res), n_pingloss, n_pongloss, n_tserr, int(max_delayvar/1000), n_total, status))
+        print ("%4d %3d: pingloss: %6d pongloss: %6d tserr: %6s delayvar_max: %6d delayvar_95: %6d total: %8d %8s" % 
+            (sess_id, len(res), n_pingloss, n_pongloss, n_tserr, int(max_delayvar/1000), int(max_95/1000), n_total, status))
