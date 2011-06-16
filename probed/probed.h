@@ -7,6 +7,7 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <signal.h>
 
 #define APP_AND_VERSION "SLA-NG probed 0.3"
 #define TIMEOUT 10
@@ -48,8 +49,8 @@ struct config {
 	enum tsmode ts; /* timestamping type */
 	enum opmode op; /* operation mode */
 	int fifo; /* file descriptor to named pipe for daemon mode */
-	int should_reload;
-	int should_clear_timeouts;
+	volatile sig_atomic_t should_reload;
+	volatile sig_atomic_t should_clear_timeouts;
 };
 extern struct config cfg;
 

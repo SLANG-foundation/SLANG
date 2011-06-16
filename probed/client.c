@@ -431,7 +431,9 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 		if (memcmp(&s->dst.sin6_addr, &a->sin6_addr, sizeof a->sin6_addr) == 0)
 			if (d->type == TYPE_PONG)
 				if (s->id == d->id)
-					i = 1;
+					if (s->last_seq >= d->seq)
+						i = 1;
+	/* DUPs should not come from the future :) Reconf? */
 	if (i == 0) return;
 	memset(&r_fifo, 0, sizeof r_fifo);
 	(void)clock_gettime(CLOCK_REALTIME, &now);

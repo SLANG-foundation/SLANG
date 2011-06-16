@@ -225,7 +225,8 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					}
 					if (sends % (TIMEOUT_INTERVAL/SEND_INTERVAL) == 0)
 						client_res_clear_timeouts();
-					if (sends % 10000 == 0) {
+					if (sends % 10000 == 0 && cfg.op ==
+							DAEMON) {
 						syslog(LOG_INFO, "count_server_resp:  %d (pps*10)",
 								count_server_resp);
 						syslog(LOG_INFO, "count_client_sent:  %d (pps*10)",
