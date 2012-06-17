@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <string.h>
 #include <syslog.h>
+#include <time.h>
 #include <sys/time.h>
 #include <sys/queue.h>
 #include "probed.h"
@@ -79,7 +80,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	struct sockaddr_in6 addr_tmp;
 	pkt_t pkt;
 	data_t *rx, tx;
-	ts_t ts;
+	ts_t ts, last_stats, now, tmp_ts;
 	fd_set fs_tmp;
 	int i, fd, fd_client_low, sends = 0, fd_max = 0;
 	fd_set fs;
@@ -102,6 +103,10 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 		syslog(LOG_ERR, "fcntl: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
+	/* set last stats timer */
+	(void)clock_gettime(CLOCK_REALTIME, &last_stats);
+
 
 	/* Transmit timer */
 	client_send_fork(fd_send_pipe[1]);
@@ -227,6 +232,11 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 						client_res_clear_timeouts();
 					if (sends % 10000 == 0 && cfg.op ==
 							DAEMON) {
+						(void)clock_gettime(CLOCK_REALTIME, &now);
+						diff_ts(&tmp_ts, &now, &last_stats);
+						memcpy(&last_stats, &now, sizeof last_stats);
+						syslog(LOG_INFO, "stats_delay:        %d.%d",
+								(int)tmp_ts.tv_sec, (int)tmp_ts.tv_nsec);
 						syslog(LOG_INFO, "count_server_resp:  %d (pps*10)",
 								count_server_resp);
 						syslog(LOG_INFO, "count_client_sent:  %d (pps*10)",
