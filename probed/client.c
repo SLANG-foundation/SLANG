@@ -85,6 +85,7 @@ struct res_fifo {
 	uint32_t seq;
 	uint32_t state;
 	uint32_t created_sec;
+	uint32_t created_nsec;
 	uint32_t rtt_sec;
 	uint32_t rtt_nsec;
 };
@@ -275,7 +276,6 @@ pid_t client_fork(int pipe, addr_t *server) {
  * \param a    The server IP address that is being pinged
  * \param d    The ping data, such as sequence number, session ID, etc.
  * \param ts   Pointer to the timestamp T1
- * \param dscp TOS/TCLASS for the ping 
  */
 void client_res_insert(addr_t *a, data_t *d, ts_t *ts) {
 	struct res *r;
@@ -354,6 +354,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				r_fifo.id = (uint32_t)r->id;
 				r_fifo.seq = (uint32_t)r->seq;
 				r_fifo.created_sec = (uint32_t)r->created.tv_sec;
+				r_fifo.created_nsec = (uint32_t)r->created.tv_nsec;
 				/* Check for DSCP error */
 				if (r->state & MASK_DSCP)
 					r_fifo.state = STATE_DS_ERR;
@@ -441,6 +442,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	r_fifo.id = (uint32_t)d->id;
 	r_fifo.seq = (uint32_t)d->seq;
 	r_fifo.created_sec = (uint32_t)now.tv_sec;
+	r_fifo.created_nsec = (uint32_t)now.tv_nsec;
 	if (cfg.op == DAEMON)
 		client_write_fifo(&r_fifo);
 	if (cfg.op == CLIENT) {
@@ -511,6 +513,7 @@ void client_res_clear_timeouts(void) {
 				r_fifo.id = (uint32_t)r->id;
 				r_fifo.seq = (uint32_t)r->seq;
 				r_fifo.created_sec = (uint32_t)r->created.tv_sec;
+				r_fifo.created_nsec = (uint32_t)r->created.tv_nsec;
 				count_client_done++;
 				if (cfg.op == DAEMON)
 					client_write_fifo(&r_fifo);

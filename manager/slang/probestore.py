@@ -30,14 +30,14 @@ class ProbeStore:
     session_state = None
     _thread_stop = False
 
-    # Low resolution aggretation interval
+    # Low resolution aggregation interval
     AGGR_DB_LOWRES = 300 * 1000000000
 
     # High resolution aggregation interval, used when errors occur
     AGGR_DB_HIGHRES = 1 * 1000000000
     
     # How long time, in seconds, before and after interesting event to
-    # store hugh resolution data.
+    # store high resolution data.
     HIGHRES_INTERVAL = 10 * 1000000000
 
     # Timeout set in probed, the time we need to wait to be sure

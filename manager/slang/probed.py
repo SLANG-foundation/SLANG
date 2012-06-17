@@ -141,7 +141,7 @@ class Probed(threading.Thread):
 
             try:
                 # ~780 probes can be held in fifo buff before pause
-                data = self.fifo.read(24)
+                data = self.fifo.read(28)
 #                self.logger.debug("got ipc: %d bytes " % len(data))
             except Exception, e:
                 self.logger.error('Unable to read from FIFO: %s' % e)

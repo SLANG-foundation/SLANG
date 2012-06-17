@@ -4,23 +4,23 @@ import time
 #
 # constants
 #
-STATE_OK = 1       # Ready, got both PONG and valid TS */
-STATE_DSERROR = 2  # Ready, but invalid traffic class */
-STATE_TSERROR = 3  # Ready, but missing correct TS */
-STATE_PONGLOSS = 4 # Ready, but timeout, got only TS, lost PONG */
-STATE_TIMEOUT = 5  # Ready, but timeout, got neither PONG or TS */
-STATE_DUP = 6      # Got a PONG we didn't recognize, DUP? */
+STATE_OK = 1       # Ready, got both PONG and valid TS
+STATE_DSERROR = 2  # Ready, but invalid traffic class
+STATE_TSERROR = 3  # Ready, but missing timestamps
+STATE_PONGLOSS = 4 # Ready, but timeout, got only TS, lost PONG
+STATE_TIMEOUT = 5  # Ready, but timeout, got neither PONG or TS
+STATE_DUP = 6      # Got a PONG we didn't recognize, DUP?
 
 def from_struct(structdata):
     """ Create a probe from the struct data """
-    d = unpack('iiiiii', structdata)
+    d = unpack('iiiiiii', structdata)
 
     clist = (
         d[0],
         d[1],
         d[2],
-        d[3]*1000000000,
-        d[4]*1000000000+d[5],
+        d[3]*1000000000+d[4],
+        d[5]*1000000000+d[6],
     )
 
     return Probe(clist) 
@@ -88,7 +88,10 @@ class Probe:
             'in_order': self.in_order,
             'created': self.created,
             'rtt': self.rtt,
-            'delayvar': self.delay_variation
+            'delayvar': self.delay_variation,
+            'dups': self.dups,
+            'has_given': self.has_given,
+            'has_gotten': self.has_gotten
         }
 
 
