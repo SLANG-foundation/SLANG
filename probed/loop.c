@@ -1,9 +1,9 @@
-/* 
+/*
  * Copyright (c) 2011 Anders Berggren, Lukas Garberg, Tele2
  *
  * We have not yet decided upon a license, and so far it may only be
  * used and redistributed with our explicit permission.
- */ 
+ */
 
 /**
  * \file   loop.c
@@ -62,7 +62,7 @@ static void server_kill_peer(fd_set *fs, int *fd_max, int fd);
  *  loop: wait for pong > save tstamp                              \n
  *  loop: wait for pipe tstamp > save tstamp                       \n
  *  fork: connect > wait for TCP tstamp > write to pipe > wait...  \n
- * 
+ *
  * SERVER MODE                                                     \n
  *  loop: wait for ping > send pong > find fd > send TCP tstamp    \n
  *  loop: wait for TCP connect > add to fd set > remove dead fds   \n
@@ -95,12 +95,19 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
 	if (pipe(fd_send_pipe) < 0) {
 		syslog(LOG_ERR, "pipe: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
 	if (fcntl(fd_send_pipe[1], F_SETFL, O_NONBLOCK) < 0) {
-		syslog(LOG_ERR, "fcntl: %s", strerror(errno));
+		syslog(LOG_ERR, "fcntl: %s; fd_send_pipe[1]", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	if (fcntl(fd_send_pipe[0], F_SETFL, O_NONBLOCK) < 0) {
+		syslog(LOG_ERR, "fcntl: %s; fd_send_pipe[0]", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
@@ -157,11 +164,11 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 					if (send(fd, (char*)&tx, DATALEN, 0) != DATALEN) {
 						server_kill_peer(&fs, &fd_max, fd);
 					}
-				} 
+				}
 				/* CLIENT: Update results with received UDP PONG */
 				if (ok == 1 && rx->type == TYPE_PONG) {
 					client_res_update(&pkt.addr, rx, &pkt.ts, pkt.dscp);
-				} 
+				}
 			}
 			/* SERVER: TCP socket, accept timestamp connection */
 			if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
@@ -216,27 +223,52 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 			}
 			/* CLIENT: PIPE; send */
 			if (unix_fd_isset(fd_send_pipe[0], &fs_tmp) == 1) {
-				ok = 1;
-				if (read(fd_send_pipe[0], &byte, sizeof byte) < 0) {
-					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
-					ok = 0;
+
+				ok = 0;
+
+				/* Read pipe as long as we have data.
+				 * If the pipe hasn't been read for a while, we might have a
+				 * large number of messages here, but should only trigger
+				 * transmit function once...*/
+				while (read(fd_send_pipe[0], &byte, sizeof byte) > 0) {
+					ok++;
 				}
-				if (ok == 1) {
+
+				/* Did we receive any message? */
+				if (ok > 0) {
+
+					/* Warn if we had more than one message queued */
+					if (ok > 1) {
+						syslog(LOG_ERR, "Found %d trigger messages queued",
+							ok);
+					}
+
+					/* trigger client packet transmission*/
 					client_msess_transmit(s_udp, sends);
+
+					/* reload if requested */
 					if (cfg.should_reload == 1) {
 						cfg.should_reload = 0;
 						(void)client_msess_reconf(port, cfgpath);
 						client_msess_forkall(fd_client_pipe[1]);
 					}
-					if (sends % (TIMEOUT_INTERVAL/SEND_INTERVAL) == 0)
+
+					/* clear timed out probes every now and then */
+					if (sends % (TIMEOUT_INTERVAL/SEND_INTERVAL) == 0) {
 						client_res_clear_timeouts();
-					if (sends % 10000 == 0 && cfg.op ==
-							DAEMON) {
+					}
+
+					/* log statistics */
+					if (sends % 10000 == 0 &&
+							cfg.op == DAEMON) {
+
+						/* calculate time since last statistics report */
 						(void)clock_gettime(CLOCK_REALTIME, &now);
 						diff_ts(&tmp_ts, &now, &last_stats);
 						memcpy(&last_stats, &now, sizeof last_stats);
 						syslog(LOG_INFO, "stats_delay:        %d.%d",
 								(int)tmp_ts.tv_sec, (int)tmp_ts.tv_nsec);
+
 						syslog(LOG_INFO, "count_server_resp:  %d (pps*10)",
 								count_server_resp);
 						syslog(LOG_INFO, "count_client_sent:  %d (pps*10)",
@@ -253,8 +285,13 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 						count_client_sent = 0;
 						count_client_done = 0;
 					}
+
 					sends++;
+
+				} else {
+					syslog(LOG_ERR, "pipe: read: %s", strerror(errno));
 				}
+
 			}
 			/* It's a client. They shouldn't speak, it's probably a
 			 * disconnect. KILL IT. */
@@ -274,14 +311,14 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 
 /**
  * The function mapping an address 'peer' to a socket file descriptor
- * 
+ *
  * It also removes dead peers, as that functionality comes for free
  * when doing 'getpeername'. Therefore, it needs to know the lowest
- * static (listening) fd, in order not to kill them as well. It 
+ * static (listening) fd, in order not to kill them as well. It
  * modifies the global variable fd_max; the heighest seen fd in fs.
  *
- * \param[in] fd_max   The highest client file descriptor 
- * \param[in] peer     Pointer to IP address to find socket for 
+ * \param[in] fd_max   The highest client file descriptor
+ * \param[in] peer     Pointer to IP address to find socket for
  * \return             File descriptor to client socket of address 'peer'
  */
 static int server_find_peer_fd(addr_t *addr) {
@@ -298,10 +335,10 @@ static int server_find_peer_fd(addr_t *addr) {
 /**
  * The function killing an client peer socket file descriptor, modifies
  * global variables fs; the file descriptor set, and fd_max.
- * 
+ *
  * \param[out] fs       Pointer to file descriptor set
- * \param[out] fd_ax    Pointer  to the highest client file descriptor 
- * \param[in]  fd       Client file descriptor 
+ * \param[out] fd_ax    Pointer  to the highest client file descriptor
+ * \param[in]  fd       Client file descriptor
  */
 static void server_kill_peer(fd_set *fs, int *fd_max, int fd) {
 	char addrstr[INET6_ADDRSTRLEN];
