@@ -33,8 +33,8 @@ then
 	mkdir -p debian/etc/sla-ng
 	cp probed/probed debian/usr/bin
 	cp appliance/ui.sh debian/usr/bin/
-	cp manager/manager.py debian/usr/bin/sla-ng-manager
-	cp manager/view.py debian/usr/bin/sla-ng-view
+	cp manager/sla-ng-manager debian/usr/bin/sla-ng-manager
+	cp manager/sla-ng-view debian/usr/bin/sla-ng-view
 	cp manager/manager.conf debian/etc/sla-ng
 	cp -r manager/slang debian/usr/lib/python2.6/dist-packages
 	fakeroot dpkg-deb --build debian sla-ng.deb
