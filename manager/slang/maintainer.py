@@ -11,7 +11,7 @@ class Maintainer(threading.Thread):
     flush_interval = 1
     delete_interval = 600
     reload_interval = 3600
-    
+
     logger = None
     pstore = None
     manager = None
@@ -28,7 +28,7 @@ class Maintainer(threading.Thread):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
         self.manager = manager
-        
+
         # save ProbeStorage instance
         self.pstore = pstore
 
@@ -36,9 +36,9 @@ class Maintainer(threading.Thread):
         self.last_flush = time()
         self.last_delete = time()
         self.last_reload = time()
-        self.last_pstore_aggr = ((int(time() * 1000000000) / self.pstore.AGGR_DB_LOWRES) * 
+        self.last_pstore_aggr = ((int(time() * 1000000000) / self.pstore.AGGR_DB_LOWRES) *
             self.pstore.AGGR_DB_LOWRES + 2*self.pstore.AGGR_DB_LOWRES)
-        
+
 
     def run(self):
         """ Starts thread. """
@@ -49,7 +49,7 @@ class Maintainer(threading.Thread):
 
             if self.thread_stop:
                 break
-            
+
             t_s = time()
 
             # flush lowres aggregates to highres aggregates
@@ -65,7 +65,7 @@ class Maintainer(threading.Thread):
             if (t_s - self.last_delete) >= self.delete_interval:
                 self.pstore.delete(1800, 3600*24)
                 self.last_delete = t_s
-            
+
             # reload every hour
             if (t_s - self.last_reload) >= self.reload_interval:
                 try:
@@ -77,7 +77,7 @@ class Maintainer(threading.Thread):
 
             # save precalculated aggregates to database
             #
-            # run when we are certain that we have all data for previous 
+            # run when we are certain that we have all data for previous
             # aggr_db_lowres
             if (t_s * 1000000000 > (self.last_pstore_aggr + self.pstore.AGGR_DB_LOWRES + self.pstore.HIGHRES_INTERVAL + self.pstore.TIMEOUT + 2*1000000000)):
 
@@ -103,7 +103,7 @@ class Maintainer(threading.Thread):
 
             sleep(1)
 
-            
+
     def stop(self):
         """ Stop thread """
 

@@ -40,7 +40,7 @@ class Manager:
 
         # fetch configuration
         try:
-            self.reload()      
+            self.reload()
 
         except ManagerError, e:
 
@@ -74,7 +74,7 @@ class Manager:
 
 
     def reload(self):
-        """ Reload 
+        """ Reload
 
            Fetches probe configuration from central node and saves to disk.
            Then, send a SIGHUP to the probe application to make it reload
@@ -98,7 +98,7 @@ class Manager:
         if self.probed is not None:
             self.probed.reload()
 
-    
+
     def write_config(self, cfg_data):
         """ Save config 'cfg_data' to disk and reload application. """
 
@@ -129,7 +129,7 @@ class Manager:
         if self.probed is not None:
             self.probed.reload()
 
-    
+
     def sighandler(self, signum, frame):
         """ Signal handler. """
 
@@ -199,7 +199,7 @@ class Manager:
         """ Start the application """
 
         self.logger.info("Starting execution")
-        
+
         # start threads
         try:
             self.probed.start()

@@ -41,7 +41,7 @@ if options.mode == 'aggr':
         # fetch data
         print 'Calculating aggregated values...'
         sys.stdout.flush()
-        a = s.get_aggregate(int(options.sessid), int(options.interval), 
+        a = s.get_aggregate(int(options.sessid), int(options.interval),
             int(time.time()-int(options.interval)), int(time.time()))
 
         for aggr in a:
@@ -54,15 +54,15 @@ if options.mode == 'aggr':
                     float(aggr['timestamperror']),
                     float(aggr['dup']),
                     float(aggr['reordered']),
-                    float(aggr['rtt_max']) / float(1000), 
-                    float(aggr['rtt_avg']) / float(1000), 
-                    float(aggr['rtt_med']) / float(1000), 
-                    float(aggr['rtt_min']) / float(1000), 
-                    float(aggr['rtt_95th']) / float(1000), 
-                    float(aggr['delayvar_max']) / float(1000), 
-                    float(aggr['delayvar_avg']) / float(1000), 
-                    float(aggr['delayvar_med']) / float(1000), 
-                    float(aggr['delayvar_min']) / float(1000), 
+                    float(aggr['rtt_max']) / float(1000),
+                    float(aggr['rtt_avg']) / float(1000),
+                    float(aggr['rtt_med']) / float(1000),
+                    float(aggr['rtt_min']) / float(1000),
+                    float(aggr['rtt_95th']) / float(1000),
+                    float(aggr['delayvar_max']) / float(1000),
+                    float(aggr['delayvar_avg']) / float(1000),
+                    float(aggr['delayvar_med']) / float(1000),
+                    float(aggr['delayvar_min']) / float(1000),
                     float(aggr['delayvar_95th']) / float(1000)
                 )
         sys.stdout.flush()

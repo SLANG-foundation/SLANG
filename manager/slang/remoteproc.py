@@ -57,7 +57,7 @@ class RemoteProc(xmlrpc.XMLRPC):
 
         """
 
-        res = self.pstore.get_last_highres(session_id, num) 
+        res = self.pstore.get_last_highres(session_id, num)
         for row in res:
             # Clean up timestamps.
             row['start'] = row['created'] / 1000000000
@@ -97,8 +97,8 @@ class RemoteProc(xmlrpc.XMLRPC):
         """ Get last precomputed aggregate data.
 
             Returns precomputed aggregates (300 seconds) for session 'id'.
-            In case of interesting event during the interval (values higher 
-            than the baseline), higher resolution data is returned for an 
+            In case of interesting event during the interval (values higher
+            than the baseline), higher resolution data is returned for an
             interval around the interesting event.
         """
 
@@ -115,7 +115,7 @@ class RemoteProc(xmlrpc.XMLRPC):
         return data
 
     xmlrpc_get_last_dyn_aggregate.signature = [ [ 'array', 'integer', 'integer' ], ]
-    
+
 
     def xmlrpc_get_current_sessions(self):
         """ Get current measurement sessions there is data for. """
@@ -127,7 +127,7 @@ class RemoteProc(xmlrpc.XMLRPC):
 
     def xmlrpc_get_storage_statistics(self):
         """ Get some statistics from the probe storage. """
-        
+
         return self.pstore.get_storage_statistics()
 
     xmlrpc_get_storage_statistics.signature = [ [ 'struct' ], ]

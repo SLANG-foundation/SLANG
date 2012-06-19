@@ -12,21 +12,21 @@ import slang.manager
 import slang.config
 
 def daemonize (stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
-    try: 
-        pid = os.fork() 
+    try:
+        pid = os.fork()
         if pid > 0:
             sys.exit(0)
-    except OSError, e: 
+    except OSError, e:
         sys.stderr.write ("fork #1 failed: (%d) %s\n" % (e.errno, e.strerror) )
         sys.exit(1)
-    os.chdir("/") 
-    os.umask(0) 
-    os.setsid() 
-    try: 
-        pid = os.fork() 
+    os.chdir("/")
+    os.umask(0)
+    os.setsid()
+    try:
+        pid = os.fork()
         if pid > 0:
             sys.exit(0)
-    except OSError, e: 
+    except OSError, e:
         sys.stderr.write ("fork #2 failed: (%d) %s\n" % (e.errno, e.strerror) )
         sys.exit(1)
     si = open(stdin, 'r')
@@ -35,14 +35,14 @@ def daemonize (stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
     os.dup2(si.fileno(), sys.stdin.fileno())
     os.dup2(so.fileno(), sys.stdout.fileno())
     os.dup2(se.fileno(), sys.stderr.fileno())
-     
+
 # Read parameters
 p = OptionParser()
 p.add_option('-f', dest='cfg_path', default='/etc/sla-ng/manager.conf',
     help="read config from file CFG_PATH", metavar="CFG_PATH")
 p.add_option('-m', dest='mode', default='bg',
     help="set daemon mode to MODE where 'bg' (default) makes the program detach run "
-        "in background and anything else makes it run in foreground", 
+        "in background and anything else makes it run in foreground",
     metavar="MODE")
 p.add_option('-v', dest='verbose', action="store_true", default=False,
     help="verbose; enable debug output")

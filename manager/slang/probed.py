@@ -58,8 +58,8 @@ class Probed(threading.Thread):
             probed_args += ['-u']
 
         elif tstype == 'hardware':
-            # Hardware timestamping is the default action and does not 
-            # need to be passed to probed. However, it requires the 
+            # Hardware timestamping is the default action and does not
+            # need to be passed to probed. However, it requires the
             # interface name to enable timestamping for.
             probed_args += ['-i', self.config.get('interface')]
 
@@ -68,7 +68,7 @@ class Probed(threading.Thread):
 
         try:
             # \todo - Redirect to /dev/null!
-            self.probed = subprocess.Popen(probed_args, 
+            self.probed = subprocess.Popen(probed_args,
                 stdout=self.null, stderr=self.null, shell=False)
             self.logger.debug('Started "probed", pid %d', self.probed.pid)
         except Exception, e:
@@ -109,13 +109,13 @@ class Probed(threading.Thread):
 
     def run(self):
         """ Function which is run when thread is started.
-        
-            Will infinitely read from fifo. 
+
+            Will infinitely read from fifo.
         """
-        
+
         while True:
 
-            if self._flag_thread_stop: 
+            if self._flag_thread_stop:
                 break
 
             if self._flag_run_stats is True:
@@ -145,7 +145,7 @@ class Probed(threading.Thread):
 #                self.logger.debug("got ipc: %d bytes " % len(data))
             except Exception, e:
                 self.logger.error('Unable to read from FIFO: %s' % e)
-                time.sleep(1) 
+                time.sleep(1)
                 continue
 
             # error condition - handle in nice way!
