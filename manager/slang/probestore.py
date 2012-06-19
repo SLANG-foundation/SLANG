@@ -30,19 +30,21 @@ class ProbeStore:
     session_state = None
     _thread_stop = False
 
+    # nanoseconds in a second
+    NS_IN_S = 1000000000
+
     # Low resolution aggregation interval
-    AGGR_DB_LOWRES = 300 * 1000000000
+    AGGR_DB_LOWRES = 300 * NS_IN_S
 
     # High resolution aggregation interval, used when errors occur
-    AGGR_DB_HIGHRES = 1 * 1000000000
-
+    AGGR_DB_HIGHRES = 1 * NS_IN_S
     # How long time, in seconds, before and after interesting event to
     # store high resolution data.
-    HIGHRES_INTERVAL = 10 * 1000000000
+    HIGHRES_INTERVAL = 10 * NS_IN_S
 
     # Timeout set in probed, the time we need to wait to be sure
     # we have all data.
-    TIMEOUT = 1 * 1000000000
+    TIMEOUT = 10 * NS_IN_S
 
     def __init__(self):
         """Constructor """
@@ -306,7 +308,7 @@ class ProbeStore:
         """ Flush high-res data. """
 
         # find current highres interval
-        chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) *
+        chtime = ((int(ts * self.NS_IN_S) / self.AGGR_DB_HIGHRES) *
             self.AGGR_DB_HIGHRES)
 
         # acquire lock
@@ -347,8 +349,8 @@ class ProbeStore:
 
             self.logger.debug(
                 "Flushing interval %d at time %d; diff %d cltime %d" %
-                (t/1000000000, int(time.time()), int(time.time()) - t/1000000000,
-                cltime/1000000000)
+                (t/self.NS_IN_S, int(time.time()), int(time.time()) - t/self.NS_IN_S,
+                cltime/self.NS_IN_S)
             )
 
             if cltime not in self.probe_lowres:
@@ -443,7 +445,7 @@ class ProbeStore:
                    ):
 
                     self.logger.debug("Found highres event; time: %d session_id: %d timeout: %d pongloss: %d" %
-                        (t/1000000000, session_id,
+                        (t/self.NS_IN_S, session_id,
                         tmp_highres[t][session_id]['timeout'],
                         tmp_highres[t][session_id]['pongloss']))
 
@@ -515,10 +517,10 @@ class ProbeStore:
         now = int(time.time())
 
         sql = "DELETE FROM probes_aggregate WHERE created < ? AND aggr_interval = ?"
-        self.db.execute(sql, ((now - age)*1000000000, self.AGGR_DB_HIGHRES/1000000000))
+        self.db.execute(sql, ((now - age)*self.NS_IN_S, self.AGGR_DB_HIGHRES/self.NS_IN_S))
 
         sql = "DELETE FROM probes_aggregate WHERE created < ?"
-        self.db.execute(sql, ((now - age_lowres)*1000000000, ))
+        self.db.execute(sql, ((now - age_lowres)*self.NS_IN_S, ))
 
 
     def save(self, sess_id, time, interval, data):
@@ -529,7 +531,7 @@ class ProbeStore:
         """
 
         self.logger.debug("Saving row; sess_id: %d time: %d interval: %d rtt_avg: %s total packets: %s"
-            % (sess_id, int(time/1000000000), int(interval/1000000000),
+            % (sess_id, int(time/self.NS_IN_S), int(interval/self.NS_IN_S),
                 str(data['rtt_avg']), str(data['total'])))
 
         # insert into database
@@ -542,7 +544,7 @@ class ProbeStore:
             "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )")
 
         params = (
-            sess_id, interval/1000000000, time, data['total'], data['success'],
+            sess_id, interval/self.NS_IN_S, time, data['total'], data['success'],
             data['timestamperror'], data['dscperror'], data['pongloss'], data['timeout'],
             data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'],
             data['rtt_max'], data['rtt_95th'], data['delayvar_min'],
@@ -561,7 +563,7 @@ class ProbeStore:
         """
 
         self.logger.debug("aggregating session %d seconds interval" %
-            (self.AGGR_DB_LOWRES/1000000000))
+            (self.AGGR_DB_LOWRES/self.NS_IN_S))
 
         to_del = list()
         for t in self.probe_lowres:
@@ -584,7 +586,7 @@ class ProbeStore:
 
         # remove saved data
         for t in to_del:
-            self.logger.debug("Deleting time %d" % (t/1000000000))
+            self.logger.debug("Deleting time %d" % (t/self.NS_IN_S))
             del self.probe_lowres[t]
 
 
@@ -620,12 +622,12 @@ class ProbeStore:
             num -- Number of values to return
         """
 
-        start = (int(time.time() * 1000000000 / self.AGGR_DB_LOWRES - num - 2) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        end =   (int(time.time() * 1000000000 / self.AGGR_DB_LOWRES - 2)       * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        self.logger.debug("Getting last lowres aggregate for id %d from %d" % (session_id, int(start/1000000000)))
+        start = (int(time.time() * self.NS_IN_S / self.AGGR_DB_LOWRES - num - 2) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
+        end =   (int(time.time() * self.NS_IN_S / self.AGGR_DB_LOWRES - 2)       * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
+        self.logger.debug("Getting last lowres aggregate for id %d from %d" % (session_id, int(start/self.NS_IN_S)))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
             "created >= ? AND created < ? AND aggr_interval = ?")
-        res = self.db.select(sql, (session_id, start, end, self.AGGR_DB_LOWRES/1000000000))
+        res = self.db.select(sql, (session_id, start, end, self.AGGR_DB_LOWRES/self.NS_IN_S))
 
         ret = list()
         for row in res:
@@ -646,13 +648,13 @@ class ProbeStore:
         """
 
         # find time
-        start = ( ( int( (time.time() * 1000000000 - self.TIMEOUT) /
+        start = ( ( int( (time.time() * self.NS_IN_S - self.TIMEOUT) /
             self.AGGR_DB_HIGHRES) - num + 1 ) * self.AGGR_DB_HIGHRES )
-        end = ( int( (time.time() * 1000000000 - self.TIMEOUT ) /
+        end = ( int( (time.time() * self.NS_IN_S - self.TIMEOUT ) /
             self.AGGR_DB_HIGHRES ) * self.AGGR_DB_HIGHRES )
 
         self.logger.debug("Getting last %d highres aggregate for id %d from %d to %d" %
-            (num, session_id, start/1000000000, end/1000000000))
+            (num, session_id, start/self.NS_IN_S, end/self.NS_IN_S))
 
         self.l_probe_highres.acquire()
 
@@ -670,7 +672,7 @@ class ProbeStore:
             self.calc_probedict(row)
             del row['rtts']
             del row['delayvars']
-            row['aggr_interval'] = self.AGGR_DB_HIGHRES / 1000000000
+            row['aggr_interval'] = self.AGGR_DB_HIGHRES / self.NS_IN_S
 
         return ret
 
@@ -690,9 +692,9 @@ class ProbeStore:
         # requests 00:40:00 and 00:44:59 = will end up in the same interval.
         # That's what makes this API (get_last_dyn_aggregate) so bad. Crappy
         # crappy crappy :)
-        start = ((int(time.time() + 10) * 1000000000 / self.AGGR_DB_LOWRES - num - 2) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        end =   ((int(time.time() + 10) * 1000000000 / self.AGGR_DB_LOWRES - 2)       * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        self.logger.debug("Getting last_dyn_aggregate for id %d from %d to %d now: %d" % (session_id, start/1000000000, end/1000000000, int(time.time())))
+        start = ((int(time.time() + 10) * self.NS_IN_S / self.AGGR_DB_LOWRES - num - 2) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
+        end =   ((int(time.time() + 10) * self.NS_IN_S / self.AGGR_DB_LOWRES - 2)       * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
+        self.logger.debug("Getting last_dyn_aggregate for id %d from %d to %d now: %d" % (session_id, start/self.NS_IN_S, end/self.NS_IN_S, int(time.time())))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
             "created >= ? AND created < ?")
         res = self.db.select(sql, (session_id, start, end))
