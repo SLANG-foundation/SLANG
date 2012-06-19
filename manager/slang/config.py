@@ -4,19 +4,19 @@ import logging
 
 class Config:
     """ Configuration for SLA-NG manager.
-    
-        The configuration file path does only need to be passed to the 
-        constructor the first time in is instanciated. 
+
+        The configuration file path does only need to be passed to the
+        constructor the first time in is instanciated.
     """
 
     filename = None
     lines = None
     __shared_state = {}
-    
+
     def __init__(self, filename=None):
         """ Constructor
-                
-                Creates config instance and makes sure configuration 
+
+                Creates config instance and makes sure configuration
                 file is loaded.
         """
 
@@ -43,18 +43,18 @@ class Config:
 
     def get(self, param):
         """ Get a config parameter
-                
-                Returns a string containing the value for config 
+
+                Returns a string containing the value for config
                 patameter param.
         """
         if param == 'fifopath':
             return '/tmp/probed.fifo'
         if param == 'dbpath':
-            return ':memory:' 
+            return ':memory:'
         if param == 'rpcport':
-            return '8000' 
+            return '8000'
         if param == 'probed_cfg':
-            return '/tmp/probed.conf' 
+            return '/tmp/probed.conf'
         if param == 'configurl':
             return self.lines[0].strip()
         if param == 'secret':

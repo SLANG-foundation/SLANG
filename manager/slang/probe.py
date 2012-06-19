@@ -23,7 +23,7 @@ def from_struct(structdata):
         d[5]*1000000000+d[6],
     )
 
-    return Probe(clist) 
+    return Probe(clist)
 
 class Probe:
     """ A probe. """
@@ -56,22 +56,22 @@ class Probe:
 
     def __str__(self):
         if self.state == STATE_OK:
-            return str('Response %5d from %d in %d ns' % 
+            return str('Response %5d from %d in %d ns' %
                 (self.seq, self.session_id, self.rtt))
         if self.state == STATE_DSERROR:
-            return str('Error    %5d from %d in %d ns (invalid DSCP)' % 
+            return str('Error    %5d from %d in %d ns (invalid DSCP)' %
                 (self.seq, self.session_id, self.rtt))
         if self.state == STATE_TSERROR:
-            return str('Error    %5d from %d (missing T2/T3)' % 
+            return str('Error    %5d from %d (missing T2/T3)' %
                 (self.seq, self.session_id))
         if self.state == STATE_PONGLOSS:
-            return str('Timeout  %5d from %d (missing PONG)' % 
+            return str('Timeout  %5d from %d (missing PONG)' %
                 (self.seq, self.session_id))
         if self.state == STATE_TIMEOUT:
-            return str('Timeout  %5d from %d (missing all)' % 
+            return str('Timeout  %5d from %d (missing all)' %
                 (self.seq, self.session_id))
         if self.state == STATE_DUP:
-            return str('Unknown  %5d from %d (probably DUP)' % 
+            return str('Unknown  %5d from %d (probably DUP)' %
                 (self.seq, self.session_id))
         return 'Unable to parse ' + str(self.state)
 
@@ -97,7 +97,7 @@ class Probe:
 
     def lost(self):
         """ Was the packet lost? """
-        
+
         return self.state == STATE_TIMEOUT
 
 

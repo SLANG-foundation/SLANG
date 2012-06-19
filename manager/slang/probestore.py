@@ -35,7 +35,7 @@ class ProbeStore:
 
     # High resolution aggregation interval, used when errors occur
     AGGR_DB_HIGHRES = 1 * 1000000000
-    
+
     # How long time, in seconds, before and after interesting event to
     # store high resolution data.
     HIGHRES_INTERVAL = 10 * 1000000000
@@ -65,9 +65,9 @@ class ProbeStore:
             self.db = ProbeStoreDB(self.config.get('dbpath'))
 
             # create aggregate database
-            self.db.execute("CREATE TABLE IF NOT EXISTS probes_aggregate (" + 
+            self.db.execute("CREATE TABLE IF NOT EXISTS probes_aggregate (" +
                 "session_id INTEGER, " +
-                "aggr_interval INTEGER, " + 
+                "aggr_interval INTEGER, " +
                 "created INTEGER, " +
                 "total INTEGER, " +
                 "success INTEGER, " +
@@ -77,22 +77,22 @@ class ProbeStore:
                 "timeout INTEGER, " +
                 "dup INTEGER, " +
                 "reordered INTEGER, " +
-                "rtt_min INTEGER, " + 
-                "rtt_med INTEGER, " + 
-                "rtt_avg INTEGER, " + 
-                "rtt_max INTEGER, " + 
-                "rtt_95th INTEGER, " + 
-                "delayvar_min INTEGER, " + 
-                "delayvar_med INTEGER, " + 
-                "delayvar_avg INTEGER, " + 
-                "delayvar_max INTEGER, " + 
-                "delayvar_95th INTEGER " + 
+                "rtt_min INTEGER, " +
+                "rtt_med INTEGER, " +
+                "rtt_avg INTEGER, " +
+                "rtt_max INTEGER, " +
+                "rtt_95th INTEGER, " +
+                "delayvar_min INTEGER, " +
+                "delayvar_med INTEGER, " +
+                "delayvar_avg INTEGER, " +
+                "delayvar_max INTEGER, " +
+                "delayvar_95th INTEGER " +
                 ");")
 
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__session_id ON probes_aggregate(session_id)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__created ON probes_aggregate(created)")
             self.db.execute("CREATE INDEX IF NOT EXISTS idx__sesson_id__idx__created ON probes_aggregate(session_id, created)")
-            
+
         except Exception, e:
             estr = "Unable to initialize database: %s" % str(e)
             self.logger.critical(estr)
@@ -100,7 +100,7 @@ class ProbeStore:
 
 
     def flush_queue(self):
-        """ Schedule a probe queue flush. 
+        """ Schedule a probe queue flush.
         """
 
         self._flag_flush_queue = True
@@ -111,10 +111,10 @@ class ProbeStore:
         """
 
         self.flag_log_clock = True
-        
-    
+
+
     def stop(self):
-        """ Close down ProbeStore 
+        """ Close down ProbeStore
         """
         self.logger.debug("Closing probestore...")
         self._thread_stop = True
@@ -125,7 +125,7 @@ class ProbeStore:
 
 
     def add(self, p):
-        """ Add probe to ProbeStore 
+        """ Add probe to ProbeStore
 
             Logic when new probe arrives:
             V2:
@@ -149,7 +149,7 @@ class ProbeStore:
                         del self.probes[p.session_id][i]
                 except KeyError:
                     continue
-                        
+
 
             save current to list
             set last seq to current
@@ -164,7 +164,7 @@ class ProbeStore:
 
         # duplicate packet?
         if p.state == probe.STATE_DUP:
-            
+
             # Do we have session in list? If not, discard.
             if p.session_id not in self.probes:
                 return
@@ -175,7 +175,7 @@ class ProbeStore:
             if p.seq in self.probes[p.session_id]:
                 self.probes[p.session_id][p.seq].dups += 1
             else:
-                lowres_interval = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES 
+                lowres_interval = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES
                 if lowres_interval in self.probe_highres:
                     if p.session_id in self.probe_highres[lowres_interval]:
                         self.probe_highres[lowres_interval][p.session_id]['dup'] += 1
@@ -207,13 +207,13 @@ class ProbeStore:
                     p.in_order = False
         else:
             p.in_order = True
-        
+
         # check for previous packet
         try:
             p.set_prev_probe(self.probes[p.session_id][p.seq - 1])
         except KeyError:
             pass
-        
+
         # check for next packet
         try:
             self.probes[p.session_id][p.seq + 1].set_prev_probe(p)
@@ -221,16 +221,16 @@ class ProbeStore:
             pass
 
         # save probe and update last_seq
-        # Can this occur, given that we check it when we add new 
+        # Can this occur, given that we check it when we add new
         # element to self.last_seq?
-        if p.session_id not in self.probes: 
+        if p.session_id not in self.probes:
             self.probes[p.session_id] = dict()
         self.probes[p.session_id][p.seq] = p
 
         # see if packets are ready to save
         for i in range(p.seq-1, p.seq+2):
             try:
-                if (self.probes[p.session_id][i].has_given and 
+                if (self.probes[p.session_id][i].has_given and
                     self.probes[p.session_id][i].has_gotten):
 
                     self.insert(self.probes[p.session_id][i])
@@ -241,7 +241,7 @@ class ProbeStore:
 
 
     def insert(self, p):
-        """ Insert probe into aggregated storage. 
+        """ Insert probe into aggregated storage.
         """
 
         ctime = int(p.created / self.AGGR_DB_HIGHRES) * self.AGGR_DB_HIGHRES
@@ -306,7 +306,7 @@ class ProbeStore:
         """ Flush high-res data. """
 
         # find current highres interval
-        chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) * 
+        chtime = ((int(ts * 1000000000) / self.AGGR_DB_HIGHRES) *
             self.AGGR_DB_HIGHRES)
 
         # acquire lock
@@ -319,7 +319,7 @@ class ProbeStore:
             # We are interested in things we know for sure they are finished -
             # that is, the timeout has passed and we have one highres interval
             # worth of data ahead in case of we find an interesting event.
-            if (t < chtime - (self.HIGHRES_INTERVAL + self.TIMEOUT) and 
+            if (t < chtime - (self.HIGHRES_INTERVAL + self.TIMEOUT) and
                 t >= self.last_flush - (self.HIGHRES_INTERVAL + self.TIMEOUT)):
                 tmp_highres[t] = self.probe_highres[t]
 
@@ -338,7 +338,7 @@ class ProbeStore:
         if len(tmp_highres) == 0:
             self.logger.debug("No data to flush.")
             return
-    
+
         # Go through selected highres data.
         for t in tmp_highres:
 
@@ -346,8 +346,8 @@ class ProbeStore:
             cltime = int(t / self.AGGR_DB_LOWRES) * self.AGGR_DB_LOWRES
 
             self.logger.debug(
-                "Flushing interval %d at time %d; diff %d cltime %d" % 
-                (t/1000000000, int(time.time()), int(time.time()) - t/1000000000, 
+                "Flushing interval %d at time %d; diff %d cltime %d" %
+                (t/1000000000, int(time.time()), int(time.time()) - t/1000000000,
                 cltime/1000000000)
             )
 
@@ -355,7 +355,7 @@ class ProbeStore:
                 self.probe_lowres[cltime] = dict()
 
             for session_id in tmp_highres[t]:
-    
+
                 if session_id not in self.probe_lowres[cltime]:
                     self.probe_lowres[cltime][session_id] = {
                         'rtts': list(),
@@ -368,7 +368,7 @@ class ProbeStore:
                         'timeout': 0,
                         'dup': 0,
                         'reordered': 0 }
-    
+
                 # perform addition of all fields
                 for key in self.probe_lowres[cltime][session_id]:
                     try:
@@ -390,7 +390,7 @@ class ProbeStore:
 
                 else:
                     self.session_state[session_id]['cur'] = 'up'
-    
+
                 #
                 # Look for interesting events
                 #
@@ -398,27 +398,27 @@ class ProbeStore:
                 #
                 # We have a few metrics:
                 # rtt
-                # delay variation 
+                # delay variation
                 # packet loss (pongloss, timeouts)
                 # DSCP errors
-                # 
-                # What conditions of the metrics above indicates an interesting 
+                #
+                # What conditions of the metrics above indicates an interesting
                 # event (not necessarily an error)?
                 # * changed RTT (new route)
                 #  - What to look at? max/avg/min/95th? MIN interesting!
-                # 
-                # * changed delay variation 
-                #  - What to look for here? 
-                # 
+                #
+                # * changed delay variation
+                #  - What to look for here?
+                #
                 # * packet loss
                 #  - Always interesting, should not happen very often...
-                # 
+                #
                 # * DSCP? When instant change?
                 #
                 # Let's start with:
                 # RTT: - SKIPPED!
-                #  * abs(avg(rtt_min last X periods) - rtt_min) > 10% of 
-                #    avg(rtt_min last X periods) 
+                #  * abs(avg(rtt_min last X periods) - rtt_min) > 10% of
+                #    avg(rtt_min last X periods)
                 #
                 # Packet loss:
                 #  * _any_ packet loss (pongloss, timeout) is interesting.
@@ -429,7 +429,7 @@ class ProbeStore:
                 # save when the hosts state is changed.
                 #
                 # Therefore, we get the following requirements:
-                # when the hosts state has changed or 
+                # when the hosts state has changed or
                 # state is up, but we have packet loss
                 #
                 #
@@ -442,9 +442,9 @@ class ProbeStore:
                     )
                    ):
 
-                    self.logger.debug("Found highres event; time: %d session_id: %d timeout: %d pongloss: %d" % 
-                        (t/1000000000, session_id, 
-                        tmp_highres[t][session_id]['timeout'], 
+                    self.logger.debug("Found highres event; time: %d session_id: %d timeout: %d pongloss: %d" %
+                        (t/1000000000, session_id,
+                        tmp_highres[t][session_id]['timeout'],
                         tmp_highres[t][session_id]['pongloss']))
 
                     # Action! Save highres data. Step #1: find time interval.
@@ -459,7 +459,7 @@ class ProbeStore:
 
                     self.l_probe_highres.acquire() # TODO: Do less within this lock
                     for t2 in self.probe_highres:
-                        
+
                          if t2 >= start and t2 <= end:
                             if session_id in self.probe_highres[t2]:
                                 self.calc_probedict(self.probe_highres[t2][session_id])
@@ -478,7 +478,7 @@ class ProbeStore:
         # sort rtt & delayvar lists
         p['delayvars'].sort()
         p['rtts'].sort()
-       
+
         # find max, min, mean and 95:th
         if len(p['rtts']) == 0:
             p['rtt_max'] = None
@@ -509,7 +509,7 @@ class ProbeStore:
 
     def delete(self, age, age_lowres):
         """ Deletes saved data of age 'age' and older. """
-    
+
         self.logger.info("Deleting old data from database.")
 
         now = int(time.time())
@@ -522,14 +522,14 @@ class ProbeStore:
 
 
     def save(self, sess_id, time, interval, data):
-        """ Save an aggregate to database. 
-        
-            The aggregate is passed as a dict with the required fields; 
+        """ Save an aggregate to database.
+
+            The aggregate is passed as a dict with the required fields;
             check the code!
         """
 
-        self.logger.debug("Saving row; sess_id: %d time: %d interval: %d rtt_avg: %s total packets: %s" 
-            % (sess_id, int(time/1000000000), int(interval/1000000000), 
+        self.logger.debug("Saving row; sess_id: %d time: %d interval: %d rtt_avg: %s total packets: %s"
+            % (sess_id, int(time/1000000000), int(interval/1000000000),
                 str(data['rtt_avg']), str(data['total'])))
 
         # insert into database
@@ -543,24 +543,24 @@ class ProbeStore:
 
         params = (
             sess_id, interval/1000000000, time, data['total'], data['success'],
-            data['timestamperror'], data['dscperror'], data['pongloss'], data['timeout'], 
-            data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'], 
-            data['rtt_max'], data['rtt_95th'], data['delayvar_min'], 
-            data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'], 
+            data['timestamperror'], data['dscperror'], data['pongloss'], data['timeout'],
+            data['dup'], data['reordered'], data['rtt_min'], data['rtt_med'], data['rtt_avg'],
+            data['rtt_max'], data['rtt_95th'], data['delayvar_min'],
+            data['delayvar_med'], data['delayvar_avg'], data['delayvar_max'],
             data['delayvar_95th'])
 
         self.db.execute(sql, params)
 
 
     def aggregate(self, age):
-        """ Aggregates data to database. 
-        
-            Performs aggregation of lowres data older than 'age' 
-            and saves result to database. When data is saved to database, 
+        """ Aggregates data to database.
+
+            Performs aggregation of lowres data older than 'age'
+            and saves result to database. When data is saved to database,
             it is removed from lowres storage.
         """
 
-        self.logger.debug("aggregating session %d seconds interval" % 
+        self.logger.debug("aggregating session %d seconds interval" %
             (self.AGGR_DB_LOWRES/1000000000))
 
         to_del = list()
@@ -579,8 +579,8 @@ class ProbeStore:
                 except KeyError, e:
                     self.logger.error("Unable to aggregate session %d, not found" % sess_id)
                     continue
-   
-            to_del.append(t) 
+
+            to_del.append(t)
 
         # remove saved data
         for t in to_del:
@@ -611,7 +611,7 @@ class ProbeStore:
 
     def get_last_lowres(self, session_id, num = 1):
         """ Get last finished low-resolution data.
-        
+
             Returns last finished (one timeout old) data aggregated over
             one highres interval.
 
@@ -636,7 +636,7 @@ class ProbeStore:
 
     def get_last_highres(self, session_id, num=1):
         """ Get last finished high-resolution data.
-        
+
             Returns last finished (one timeout old) data aggregated over
             one highres interval.
 
@@ -646,12 +646,12 @@ class ProbeStore:
         """
 
         # find time
-        start = ( ( int( (time.time() * 1000000000 - self.TIMEOUT) / 
+        start = ( ( int( (time.time() * 1000000000 - self.TIMEOUT) /
             self.AGGR_DB_HIGHRES) - num + 1 ) * self.AGGR_DB_HIGHRES )
-        end = ( int( (time.time() * 1000000000 - self.TIMEOUT ) / 
+        end = ( int( (time.time() * 1000000000 - self.TIMEOUT ) /
             self.AGGR_DB_HIGHRES ) * self.AGGR_DB_HIGHRES )
 
-        self.logger.debug("Getting last %d highres aggregate for id %d from %d to %d" % 
+        self.logger.debug("Getting last %d highres aggregate for id %d from %d to %d" %
             (num, session_id, start/1000000000, end/1000000000))
 
         self.l_probe_highres.acquire()
@@ -674,18 +674,18 @@ class ProbeStore:
 
         return ret
 
-    
+
     def get_last_dyn_aggregate(self, session_id, num = 1):
         """ Get last aggregated data.
 
             Returns precomputed aggregates (300 seconds) for session 'id'.
             In case of interesting event during the interval (packet loss)
-            higher resolution data is returned for an interval around the 
+            higher resolution data is returned for an interval around the
             interesting event.
             Zib-delux funktion.
         """
         # the +10 is for ASM that always starts asking 00:00:00 etc, and
-        # therefore it's a risk that we "averages" the time into the same 
+        # therefore it's a risk that we "averages" the time into the same
         # 5-min interval two times in a row. for example:
         # requests 00:40:00 and 00:44:59 = will end up in the same interval.
         # That's what makes this API (get_last_dyn_aggregate) so bad. Crappy
@@ -705,7 +705,7 @@ class ProbeStore:
 
 
     def get_storage_statistics(self):
-        """ Return some storage statistics. 
+        """ Return some storage statistics.
         """
 
         ret = {}
@@ -727,7 +727,7 @@ class ProbeStore:
 
         # sessions in state dict
         ret['state_numsessions'] = len(self.probes)
-   
+
         # probes in state dict
         ret['state_numprobes'] = 0
         for session in self.probes:
@@ -741,7 +741,7 @@ class ProbeStoreError(Exception):
 
 
 class ProbeStoreDB(threading.Thread):
-    """ Thread-safe wrapper to sqlite interface 
+    """ Thread-safe wrapper to sqlite interface
     """
 
     def __init__(self, db):
@@ -759,7 +759,7 @@ class ProbeStoreDB(threading.Thread):
 
         while True:
             try:
-                conn = sqlite3.connect(self.db) 
+                conn = sqlite3.connect(self.db)
                 conn.row_factory = sqlite3.Row
                 curs = conn.cursor()
                 break
@@ -768,10 +768,10 @@ class ProbeStoreDB(threading.Thread):
                 time.sleep(1)
 
         # Possible fix to get rid of commit for each line:
-        # Use self.reqs.get() with a timeout, and when a timeout 
+        # Use self.reqs.get() with a timeout, and when a timeout
         # occurs, perform commit.
         #
-        # Another way would be to keep count of how many execute()s we 
+        # Another way would be to keep count of how many execute()s we
         # have run and commit when we reach a certain value.
         #
         # Or, we can do both.
@@ -784,7 +784,7 @@ class ProbeStoreDB(threading.Thread):
             req, arg, res = self.reqs.get()
 
             # Close command?
-            if req == '--close--': 
+            if req == '--close--':
                 self.logger.info("Stopping thread...")
                 break
 
@@ -815,13 +815,13 @@ class ProbeStoreDB(threading.Thread):
                 self.logger.info("Reached 10000 outstanding queries. Committing transaction.")
                 conn.commit()
                 exec_c = 0
-            
+
         conn.commit()
         conn.close()
 
 
     def execute(self, req, arg = None, res = None):
-        """ "Execute" by pushing query to queue 
+        """ "Execute" by pushing query to queue
         """
 
         self.reqs.put((req, arg or tuple(), res))
