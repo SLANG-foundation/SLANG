@@ -1,5 +1,8 @@
+#! /usr/bin/python
 #
-# Message session handling
+# probestore.py
+#
+# Handles incomming measurement data
 #
 
 import threading
@@ -12,8 +15,10 @@ import config
 from probe import Probe
 import probe
 
+
 class ProbeStore:
-    """ Probe storage """
+    """ Probe storage
+    """
 
     logger = None
     config = None
@@ -29,6 +34,10 @@ class ProbeStore:
     highres_max_saved = None
     session_state = None
     _thread_stop = False
+
+    #
+    # Constants
+    #
 
     # nanoseconds in a second
     NS_IN_S = 1000000000
@@ -46,8 +55,10 @@ class ProbeStore:
     # we have all data.
     TIMEOUT = 10 * NS_IN_S
 
+
     def __init__(self):
-        """Constructor """
+        """Constructor
+        """
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config.Config()
@@ -227,6 +238,7 @@ class ProbeStore:
         # element to self.last_seq?
         if p.session_id not in self.probes:
             self.probes[p.session_id] = dict()
+
         self.probes[p.session_id][p.seq] = p
 
         # see if packets are ready to save
@@ -305,7 +317,12 @@ class ProbeStore:
 
 
     def flush(self, ts):
-        """ Flush high-res data. """
+        """ Flush high-res data.
+
+            Flushes the high-resolution (one second) data into five minute
+            aggregates. Is also responsible for detecting anomalies and saving
+            high-resolution data around it to database.
+        """
 
         # find current highres interval
         chtime = ((int(ts * self.NS_IN_S) / self.AGGR_DB_HIGHRES) *
@@ -321,6 +338,9 @@ class ProbeStore:
             # We are interested in things we know for sure they are finished -
             # that is, the timeout has passed and we have one highres interval
             # worth of data ahead in case of we find an interesting event.
+            #
+            # Select one-second intervals which have appeared since last check
+            # and fulfills the criteria above.
             if (t < chtime - (self.HIGHRES_INTERVAL + self.TIMEOUT) and
                 t >= self.last_flush - (self.HIGHRES_INTERVAL + self.TIMEOUT)):
                 tmp_highres[t] = self.probe_highres[t]
@@ -349,7 +369,8 @@ class ProbeStore:
 
             self.logger.debug(
                 "Flushing interval %d at time %d; diff %d cltime %d" %
-                (t/self.NS_IN_S, int(time.time()), int(time.time()) - t/self.NS_IN_S,
+                (t/self.NS_IN_S, int(time.time()),
+                int(time.time())- t/self.NS_IN_S,
                 cltime/self.NS_IN_S)
             )
 
@@ -475,7 +496,20 @@ class ProbeStore:
 
 
     def calc_probedict(self, p):
-        """ Calculate values such as min, max and mean for a probe dict """
+        """ Calculate statistics from and add result to a probe dict.
+
+            Takes a dict containing measurement results in terms of lists of
+            RTTs and delay variations and calculate statistics from it.
+
+            Statistict calculated:
+            * max
+            * min
+            * average
+            * median
+            * 95th percentile
+
+            The result is added to the probe dict.
+        """
 
         # sort rtt & delayvar lists
         p['delayvars'].sort()
@@ -510,7 +544,11 @@ class ProbeStore:
 
 
     def delete(self, age, age_lowres):
-        """ Deletes saved data of age 'age' and older. """
+        """ Deletes saved data of age 'age' and older.
+
+            Is run every now and then to make sure that the database does not
+            grow for ever.
+        """
 
         self.logger.info("Deleting old data from database.")
 
@@ -555,7 +593,7 @@ class ProbeStore:
 
 
     def aggregate(self, age):
-        """ Aggregates data to database.
+        """ Aggregates low-resolution data to database.
 
             Performs aggregation of lowres data older than 'age'
             and saves result to database. When data is saved to database,
@@ -614,8 +652,7 @@ class ProbeStore:
     def get_last_lowres(self, session_id, num = 1):
         """ Get last finished low-resolution data.
 
-            Returns last finished (one timeout old) data aggregated over
-            one highres interval.
+            Returns last finished low resolution aggregate.
 
             Arguments:
             session_id -- The session ID to return data for
@@ -624,7 +661,8 @@ class ProbeStore:
 
         start = (int(time.time() * self.NS_IN_S / self.AGGR_DB_LOWRES - num - 2) * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
         end =   (int(time.time() * self.NS_IN_S / self.AGGR_DB_LOWRES - 2)       * self.AGGR_DB_LOWRES - self.HIGHRES_INTERVAL)
-        self.logger.debug("Getting last lowres aggregate for id %d from %d" % (session_id, int(start/self.NS_IN_S)))
+        self.logger.debug("Getting last lowres aggregate for id %d from %d" %
+            (session_id, int(start/self.NS_IN_S)))
         sql = ("SELECT * FROM probes_aggregate WHERE session_id = ? AND " +
             "created >= ? AND created < ? AND aggr_interval = ?")
         res = self.db.select(sql, (session_id, start, end, self.AGGR_DB_LOWRES/self.NS_IN_S))
@@ -743,7 +781,7 @@ class ProbeStoreError(Exception):
 
 
 class ProbeStoreDB(threading.Thread):
-    """ Thread-safe wrapper to sqlite interface
+    """ Thread-safe wrapper to sqlite interface.
     """
 
     def __init__(self, db):
@@ -793,7 +831,8 @@ class ProbeStoreDB(threading.Thread):
             # commit?
             if req == '--commit--':
                 conn.commit()
-                self.logger.debug("Committed %d queries (%s queries queued)." % (exec_c, self.reqs.qsize()))
+                self.logger.debug("Committed %d queries (%s queries queued)." %
+                    (exec_c, self.reqs.qsize()))
                 exec_c = 0
                 continue
 
@@ -836,7 +875,8 @@ class ProbeStoreDB(threading.Thread):
         self.execute(req, arg, res)
         while True:
             rec = res.get()
-            if rec == '--no more--': break
+            if rec == '--no more--':
+                break
             yield rec
 
 

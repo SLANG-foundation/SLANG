@@ -1,4 +1,9 @@
 #! /usr/bin/python
+#
+# manager.py
+#
+# The Manager; keeps everything together
+#
 
 import urllib2
 import sys
@@ -16,7 +21,10 @@ import maintainer
 import probed
 import remoteproc
 
+
 class Manager:
+    """ The Manager-class keeps everything together.
+    """
 
     cfg_path = None
 
@@ -29,8 +37,10 @@ class Manager:
 
     thread_stop = False
 
+
     def __init__(self, cfg_path):
-        """ Constructor """
+        """ Constructor.
+        """
 
         # reload
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -59,6 +69,7 @@ class Manager:
                     self.logger.critical("Unable to write cfg: %s" % str(e))
 
         try:
+            # Create sub-component objects
             self.pstore = probestore.ProbeStore()
             self.maintainer = maintainer.Maintainer(self.pstore, self)
             self.probed = probed.Probed(self.pstore)
@@ -74,7 +85,7 @@ class Manager:
 
 
     def reload(self):
-        """ Reload
+        """ Fetch nex configuration and reload application.
 
            Fetches probe configuration from central node and saves to disk.
            Then, send a SIGHUP to the probe application to make it reload
@@ -100,7 +111,11 @@ class Manager:
 
 
     def write_config(self, cfg_data):
-        """ Save config 'cfg_data' to disk and reload application. """
+        """ Save config to disk and reload application.
+
+            Saves configuration passed in the function argument 'cfg_data'
+            to disk and reloads probed.
+        """
 
         self.logger.info('Writing "probed" configuration...')
 
@@ -113,9 +128,9 @@ class Manager:
                 self.logger.info('Config unchanged, not touched')
                 return
         except IOError, e:
-	    pass
+            pass
 
-        # write to disk
+        # write config to disk
         try:
             probed_cfg_file = open(self.config.get('probed_cfg'), "w")
             probed_cfg_file.write(cfg_data)
@@ -131,14 +146,18 @@ class Manager:
 
 
     def sighandler(self, signum, frame):
-        """ Signal handler. """
+        """ Signal handler.
+
+            Called when UNIX signals are received.
+        """
 
         if signum == signal.SIGINT or signum == signal.SIGTERM:
             self.stop()
 
 
     def stop(self):
-        """ Stop everything """
+        """ Shut down everything.
+        """
 
         self.logger.info("Stopping all threads...")
 
@@ -189,14 +208,14 @@ class Manager:
 
     def run_stats(self):
         """ Run-time statistics.
-
         """
 
         self.probed.run_stats()
 
 
     def run(self):
-        """ Start the application """
+        """ Start the application.
+        """
 
         self.logger.info("Starting execution")
 
@@ -214,4 +233,6 @@ class Manager:
 
 
 class ManagerError(Exception):
+    """ Base class for Manager exceptions.
+    """
     pass

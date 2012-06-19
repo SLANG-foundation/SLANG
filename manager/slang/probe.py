@@ -1,3 +1,10 @@
+#! /usr/bin/python
+#
+# probe.py
+#
+# The 'Probe' class which represents a single measurement.
+#
+
 from struct import unpack
 import time
 
@@ -11,8 +18,11 @@ STATE_PONGLOSS = 4 # Ready, but timeout, got only TS, lost PONG
 STATE_TIMEOUT = 5  # Ready, but timeout, got neither PONG or TS
 STATE_DUP = 6      # Got a PONG we didn't recognize, DUP?
 
+
 def from_struct(structdata):
-    """ Create a probe from the struct data """
+    """ Create probe from raw data data.
+    """
+
     d = unpack('iiiiiii', structdata)
 
     clist = (
@@ -25,8 +35,12 @@ def from_struct(structdata):
 
     return Probe(clist)
 
+
 class Probe:
-    """ A probe. """
+    """ A probe.
+
+        A Probe represents measurement data from a single measurement.
+    """
 
     created = None
     rtt = None
@@ -34,14 +48,19 @@ class Probe:
     in_order = None
     dups = None
     state = None
-
     session_id = None
     seq = None
 
     has_given = None
     has_gotten = None
 
+
     def __init__(self, data):
+        """ Constructor.
+
+            Creates a Probe object from the data passed in the list 'data'.
+        """
+
         self.session_id = data[0]
         self.seq = data[1]
         self.state = data[2]
@@ -54,7 +73,11 @@ class Probe:
         self.has_given = False
         self.has_gotten = False
 
+
     def __str__(self):
+        """ Return string representation of Probe object.
+        """
+
         if self.state == STATE_OK:
             return str('Response %5d from %d in %d ns' %
                 (self.seq, self.session_id, self.rtt))
@@ -74,6 +97,7 @@ class Probe:
             return str('Unknown  %5d from %d (probably DUP)' %
                 (self.seq, self.session_id))
         return 'Unable to parse ' + str(self.state)
+
 
     def toDict(self):
         """ Returns data as a dict.
@@ -96,13 +120,15 @@ class Probe:
 
 
     def lost(self):
-        """ Was the packet lost? """
+        """ Returns True if packet was lost, false otherwise.
+        """
 
         return self.state == STATE_TIMEOUT
 
 
     def successful(self):
-        """ Do we have all timestamp? """
+        """ Returns True if all timestamps were received.
+        """
 
         return self.state == STATE_OK or self.state == STATE_DSERROR
 
@@ -110,6 +136,7 @@ class Probe:
     def set_prev_probe(self, prev_probe):
         """ Perform calculations which require previous probe.
         """
+
         try:
             if self.successful() and prev_probe.successful():
                 self.delay_variation = self.rtt - prev_probe.rtt
