@@ -10,11 +10,17 @@
 #include <signal.h>
 
 #define APP_AND_VERSION "SLA-NG probed 0.3"
+/* Measurement time out [seconds] */
 #define TIMEOUT 10
+/* Tick interval [microseconds] */
 #define SEND_INTERVAL 1000
+/* Interval between aclculation of tick deviation [ticks] */
+#define SEND_INTERVAL_DEV_INTERVAL 100
+/* Interval between flush of timed out probes [nanoseconds] */
 #define TIMEOUT_INTERVAL 100000
 #define TMPLEN 512
 #define DATALEN 48
+/* Measurement status types */
 #define TYPE_PING 1
 #define TYPE_PONG 2
 #define TYPE_TIME 3

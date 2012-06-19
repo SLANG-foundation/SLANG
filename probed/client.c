@@ -1,13 +1,13 @@
-/* 
+/*
  * Copyright (c) 2011 Anders Berggren, Lukas Garberg, Tele2
  *
  * We have not yet decided upon a license, and so far it may only be
  * used and redistributed with our explicit permission.
- */ 
+ */
 
 /**
  * \file   client.c
- * \brief  Contains 'client' (PING) specific code, and result handling  
+ * \brief  Contains 'client' (PING) specific code, and result handling
  * \author Anders Berggren <anders@halon.se>
  * \author Lukas Garberg <lukas@spritelink.net>
  * \date   2011-01-10
@@ -64,7 +64,7 @@ struct res {
 	/*@dependent@*/ ts_t ts[4];
 	TAILQ_ENTRY(res) list;
 };
-/** 
+/**
  * Struct for storing configuration for one measurement session.
  */
 struct msess {
@@ -73,7 +73,7 @@ struct msess {
 	addr_t dst; /**< Destination address and port */
 	int msec_interval; /**< Probe interval */
 	int timeout; /**< Timeout for PING */
-	int got_hello; /**< Are we connected with server? */ 
+	int got_hello; /**< Are we connected with server? */
 	uint8_t dscp; /**< DiffServ Code Point value of measurement session */
 	pid_t child_pid; /**< PID of child process doing the TCP connection */
 	uint32_t last_seq; /**< Last sequence number sent */
@@ -131,7 +131,7 @@ void client_init(void) {
  * Initializes a FIFO used by client_res_* functions in DAEMON mode
  *
  * When running in deamon mode, open a FIFO. Should be run once.
- * 
+ *
  * @todo Is the really good to wait for FIFO open?
  */
 void client_res_fifo_or_die(char *fifopath) {
@@ -152,6 +152,90 @@ void client_res_fifo_or_die(char *fifopath) {
 }
 
 /**
+ * Fork a process which triggers the main proces at regular intervals
+ *
+ * To avoid keeping track of time in the main process, a fork is created which
+ * handles this. For IPC there is a pipe, to which data is sent at regular
+ * intervals (SEND_INTERVAL microseconds).
+ *
+ * \param pipe	IPC pipe to which trigger messages are sent
+ */
+void client_send_fork(int pipe) {
+
+	int niter = 0;
+	int time_dev = 0;
+	char b = 's';
+	ts_t last, now, diff;
+
+	/* Do not react to SIGCHLD (when a child dies) */
+	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGCHLD failed");
+
+	/* Create client fork; parent returns */
+	if (fork() != 0) return;
+
+	/* We are child, do not react to HUP (reload), INT (print) */
+	if (signal(SIGHUP, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGHUP failed");
+	if (signal(SIGINT, SIG_IGN) == SIG_ERR)
+		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGINT failed");
+
+	/* Please kill me, I hate myself */
+	(void)prctl(PR_SET_PDEATHSIG, SIGKILL);
+
+
+	/*
+	 * Infinite loop - this is where it happens.
+	 * But first, initialize last iteration timestamp.
+	 */
+	(void)clock_gettime(CLOCK_REALTIME, &last);
+	while (1) {
+
+		usleep(SEND_INTERVAL - time_dev);
+
+		/* send trigger message */
+		if (write(pipe, &b, sizeof b) < 0)
+			syslog(LOG_ERR, "send: write: %s", strerror(errno));
+
+		/*
+		 * The SEND_INTERVAL needs to be adjusted slightly as other
+		 * actions in the loop takes some time to complete.
+		 * Check this evere SEND_INTERVAL_DEV_INTERVAL:th iteration.
+		 *
+		 */
+		if (niter % SEND_INTERVAL_DEV_INTERVAL == 0) {
+
+			/*
+			 * How long time did the last
+			 * SEND_INTERVAL_DEV_INTERVAL iterations take?
+			 */
+			(void)clock_gettime(CLOCK_REALTIME, &now);
+			diff_ts(&diff, &now, &last);
+			memcpy(&last, &now, sizeof last);
+
+			/*
+			 * Calculate deviation from ideal time.
+			 * Division by 1000 is conversion from nsec to usec.
+			 */
+			time_dev += diff.tv_nsec / 1000 /
+				SEND_INTERVAL_DEV_INTERVAL - SEND_INTERVAL;
+
+			/* Warn if we have very high values */
+			if (time_dev > 300 || time_dev < -300) {
+				syslog(LOG_INFO, "time_dev large: %d",
+					time_dev);
+			}
+
+		}
+
+		niter++;
+
+	}
+
+}
+
+
+/**
  * Forks a 'client' process that connects to a server to get timestamps
  *
  * The client connects over TCP to the server, in order to
@@ -166,29 +250,6 @@ void client_res_fifo_or_die(char *fifopath) {
  * \bug          The read timeout of 60 sec before re-connect is bad!
  * \todo         Should we simply send a dummy packet, just for conn status?
  */
-
-void client_send_fork(int pipe) {
-	char b = 's';
-
-	/* Do not react to SIGCHLD (when a child dies) */
-	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
-		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGCHLD failed");
-	/* Create client fork; parent returns */
-	if (fork() != 0) return;
-	/* We are child, do not react to HUP (reload), INT (print) */
-	if (signal(SIGHUP, SIG_IGN) == SIG_ERR)
-		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGHUP failed");
-	if (signal(SIGINT, SIG_IGN) == SIG_ERR)
-		syslog(LOG_ERR, "send: signal: SIG_IGN on SIGINT failed");
-	/* Please kill me, I hate myself */
-	(void)prctl(PR_SET_PDEATHSIG, SIGKILL);
-	while (1) {
-		usleep(SEND_INTERVAL);
-		if (write(pipe, &b, sizeof b) < 0)
-			syslog(LOG_ERR, "send: write: %s", strerror(errno));
-	}
-}
-
 pid_t client_fork(int pipe, addr_t *server) {
 	int sock, r;
 	pid_t client_pid;
@@ -225,7 +286,7 @@ pid_t client_fork(int pipe, addr_t *server) {
 			(void)sleep(10);
 			continue;
 		}
-		syslog(LOG_INFO, "%s Connecting to port %d", log, 
+		syslog(LOG_INFO, "%s Connecting to port %d", log,
 				ntohs(server->sin6_port));
 		sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);	
 		if (sock < 0) {
@@ -249,7 +310,7 @@ pid_t client_fork(int pipe, addr_t *server) {
 			if (select(sock + 1, &fs, NULL, NULL, &tv) < 0) {
 				syslog(LOG_ERR, "%s select: %s", log, strerror(errno));
 				break;
-			} 
+			}
 			if (unix_fd_isset(sock, &fs) == 0) break;
 			r = (int)recv(sock, &pkt.data, DATALEN, 0);
 			if (r == 0) break;
@@ -257,7 +318,7 @@ pid_t client_fork(int pipe, addr_t *server) {
 				syslog(LOG_ERR, "%s recv: %s", log, strerror(errno));
 				break;
 			}
-			if (write(pipe, (char *)&pkt, sizeof pkt) < 0) 
+			if (write(pipe, (char *)&pkt, sizeof pkt) < 0)
 				syslog(LOG_ERR, "%s write: %s", log, strerror(errno));
 		}
 		syslog(LOG_ERR, "%s Connection lost", log);
@@ -275,7 +336,7 @@ pid_t client_fork(int pipe, addr_t *server) {
  * \param a    The server IP address that is being pinged
  * \param d    The ping data, such as sequence number, session ID, etc.
  * \param ts   Pointer to the timestamp T1
- * \param dscp TOS/TCLASS for the ping 
+ * \param dscp TOS/TCLASS for the ping
  */
 void client_res_insert(addr_t *a, data_t *d, ts_t *ts) {
 	struct res *r;
@@ -311,7 +372,7 @@ void client_res_insert(addr_t *a, data_t *d, ts_t *ts) {
  * the daemon FIFO.
  *
  * \param a  The server IP address that is being pinged
- * \param d  The ping data, such as sequence number, timestamp T2 and T3.. 
+ * \param d  The ping data, such as sequence number, timestamp T2 and T3..
  * \param ts Pointer to a timestamp, such as T4
  * \warning  We wait until the next timestamp arrives, before printing
  */
@@ -326,7 +387,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next)
 		if (s->id == d->id)
 			break;
-	if (s == NULL) 
+	if (s == NULL)
 		return;
 	r = s->res_head.tqh_first;
 	count_client_find = 0;
@@ -339,7 +400,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 			if (d->type == TYPE_PONG) {
 				r->state |= MASK_PONG;
 				/* Save T4 timestamp */
-				if (ts != NULL) 
+				if (ts != NULL)
 					r->ts[3] = *ts;
 				/* DSCP failure status */
 				if (s->dscp != (uint8_t)dscp)
@@ -368,11 +429,11 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				now.tv_sec = 0;
 				now.tv_nsec = 0;
 				/* Check that RTT is positive */
-				if (cmp_ts(&now, &rtt) == 1) 
+				if (cmp_ts(&now, &rtt) == 1)
 					r_fifo.state = STATE_TS_ERR;
 				/* Check that all timestamps are present */
 				for (i = 0; i < 4; i++)
-					if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0) 
+					if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0)
 						r_fifo.state = STATE_TS_ERR;
 				if (r_fifo.state == STATE_SUCCESS &&
 						r_fifo.rtt_sec > 20) {
@@ -388,11 +449,11 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 				if (cfg.op == CLIENT) {
 					if (r_fifo.state == STATE_TS_ERR) {
 						res_tserror++;
-						printf("Error    %4d from %d (invalid timestamps)\n", 
+						printf("Error    %4d from %d (invalid timestamps)\n",
 								(int)r->seq, (int)r->id);
 					} else if (r_fifo.state == STATE_DS_ERR) {
 						res_dserror++;
-						printf("Error    %4d from %d in %d sec (invalid DSCP)\n", 
+						printf("Error    %4d from %d in %d sec (invalid DSCP)\n",
 								(int)r->seq, (int)r->id, (int)diff.tv_sec);
 					} else { /* STATE_SUCCESS implicit */
 						res_ok++;
@@ -400,11 +461,11 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 						diff_ts(&now, &r->ts[2], &r->ts[1]);
 						diff_ts(&rtt, &diff, &now);
 						if (rtt.tv_sec > 0)
-							printf("Response %4d from %d in %10ld.%09ld\n", 
-									(int)r->seq, (int)r->id, rtt.tv_sec, 
+							printf("Response %4d from %d in %10ld.%09ld\n",
+									(int)r->seq, (int)r->id, rtt.tv_sec,
 									rtt.tv_nsec);
 						else
-							printf("Response %4d from %d in %ld ns\n", 
+							printf("Response %4d from %d in %ld ns\n",
 									(int)r->seq, (int)r->id, rtt.tv_nsec);
 						if (cmp_ts(&res_rtt_max, &rtt) == -1)
 							res_rtt_max = rtt;
@@ -458,19 +519,19 @@ void client_res_summary(/*@unused@*/ int sig) {
 	loss = (float)(res_timeout + res_pongloss) / (float)total;
 	loss = loss * 100;
 	printf("\n");
-	printf("%d ok, %d dscp errors, %d ts errors, %d unknown/dups\n", 
+	printf("%d ok, %d dscp errors, %d ts errors, %d unknown/dups\n",
 			res_ok, res_dserror, res_tserror, res_dup);
-	printf("%d lost pongs, %d timeouts, %f%% loss\n", 
+	printf("%d lost pongs, %d timeouts, %f%% loss\n",
 			res_pongloss, res_timeout, loss);
 	if (res_rtt_max.tv_sec > 0)
 		printf("max: %ld.%09ld", res_rtt_max.tv_sec, res_rtt_max.tv_nsec);
-	else 
+	else
 		printf("max: %ld ns", res_rtt_max.tv_nsec);
 	loss = (float)res_rtt_total / (float)res_ok;
 	printf(", avg: %.0f ns", loss);
 	if (res_rtt_min.tv_sec > 0)
 		printf(", min: %ld.%09ld\n", res_rtt_min.tv_sec, res_rtt_min.tv_nsec);
-	else 
+	else
 		printf(", min: %ld ns\n", res_rtt_min.tv_nsec);
 	exit(0);
 }
@@ -495,11 +556,11 @@ void client_res_clear_timeouts(void) {
 				/* We have reached young probes; stop looking */
 				break;
 			} else {
-				/* 
-				 * Define three states: 
+				/*
+				 * Define three states:
 				 * PONGLOSS, we have a TCP timestamp, but no pong
-				 * TS_ERR, we have a pong, but no TCP timestamp 
-				 * TIMEOUT, we have nothing 
+				 * TS_ERR, we have a pong, but no TCP timestamp
+				 * TIMEOUT, we have nothing
 				 */
 				memset(&r_fifo, 0, sizeof r_fifo);
 				if (r->state & MASK_TIME)
@@ -603,7 +664,7 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, num_t id) {
 	dst_hints.ai_flags = AI_V4MAPPED;
 	ret = getaddrinfo(a, port, &dst_hints, &dst_addr);
 	if (ret < 0) {
-		syslog(LOG_ERR, "Unable to look up hostname %s: %s", a, 
+		syslog(LOG_ERR, "Unable to look up hostname %s: %s", a,
 				gai_strerror(ret));
 		free(s);
 		return -1;
@@ -619,11 +680,11 @@ int client_msess_add(char *port, char *a, uint8_t dscp, int wait, num_t id) {
 }
 
 /**
- * Send PING packets on the UDP socket for all measurement sessions 
+ * Send PING packets on the UDP socket for all measurement sessions
  *
  * This is called from the main loop at constant intervals, and
  * this function determines if it is time to send to a particular
- * msess 
+ * msess
  *
  * \param[in] s_udp The UDP socket to send on
  */
@@ -635,7 +696,7 @@ void client_msess_transmit(int s_udp, int sends) {
 	
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
 		/* Are we connected to server? */
-		if (s->got_hello != 1) 
+		if (s->got_hello != 1)
 			continue;
 		/* time to send new packet? */
 		if (s->msec_interval < 1) {
@@ -661,18 +722,18 @@ void client_msess_transmit(int s_udp, int sends) {
 
 }
 
-/** 
+/**
  * Spawn client forks for all configured measurement sessions
  *
  * See comments on client_fork for more information.
  *
- * \param[in] pipe The pipe file descriptor where results are sent 
+ * \param[in] pipe The pipe file descriptor where results are sent
  */
 void client_msess_forkall(int pipe) {
 	struct msess *s;
 
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
-		/* Make sure there is no fork already running with 
+		/* Make sure there is no fork already running with
 		 * the same destination address */
 		if (client_msess_isaddrtaken(&s->dst, s->id) == 1) {
 			continue;
@@ -692,7 +753,7 @@ void client_msess_forkall(int pipe) {
  * 5. Start client forks again (not done here!)
  *
  * \param[in] port    Because getaddrinfo needs the "global" port
- * \param[in] cfgpath We need the path to the XML file 
+ * \param[in] cfgpath We need the path to the XML file
  * \return            0 on success, -1 on error
  */
 
@@ -753,7 +814,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 	/* Populate msess list from config */
 	for (n = root->children; n != NULL; n = n->next) {
 		/* Begin <probe> loop */
-		if (n->type != XML_ELEMENT_NODE) 
+		if (n->type != XML_ELEMENT_NODE)
 			continue;
 		if (strncmp((char *)n->name, XML_NODE, strlen(XML_NODE)) != 0)
 			continue;
@@ -772,13 +833,13 @@ int client_msess_reconf(char *port, char *cfgpath) {
 		ok = 0;
 		for (k = n->children; k != NULL; k = k->next) {
 			/* Begin <address/dscp/etc> loop */
-			if (k->type != XML_ELEMENT_NODE) 
+			if (k->type != XML_ELEMENT_NODE)
 				continue;
 			/*@ -mustfreefresh TODO Doesn't understand xmlFree */
 			c = xmlNodeGetContent(k);
 			/*@ +mustfreefresh */
 			/* Interval */
-			if (strcmp((char *)k->name, "interval") == 0) 
+			if (strcmp((char *)k->name, "interval") == 0)
 				s->msec_interval = atoi((char *)c);
 			/* Address */
 			if (strcmp((char *)k->name, "address") == 0) {
@@ -788,7 +849,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 				dst_hints.ai_flags = AI_V4MAPPED;
 				ret = getaddrinfo((char *)c, port, &dst_hints, &dst_addr);
 				if (ret < 0) {
-					syslog(LOG_ERR, "Probe hostname %s: %s", (char *)c, 
+					syslog(LOG_ERR, "Probe hostname %s: %s", (char *)c,
 							gai_strerror(ret));
 				} else {
 					ok = 1;
@@ -798,7 +859,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
 
 			}
 			/* DSCP */
-			if (strcmp((char *)k->name, "dscp") == 0) 
+			if (strcmp((char *)k->name, "dscp") == 0)
 				s->dscp = (uint8_t)atoi((char *)c);
 			xmlFree(c);
 			/* End <address/dscp/etc> loop */
@@ -826,7 +887,7 @@ int client_msess_reconf(char *port, char *cfgpath) {
  *
  * \param[in] addr Address of the connected session
  * \return         Returns 0 is the address was found
- */ 
+ */
 int client_msess_gothello(addr_t *addr) {
 	size_t slen;
 	struct msess *s;
@@ -857,11 +918,11 @@ int client_msess_isaddrtaken(addr_t *addr, num_t id) {
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next) {
 		if (s->id == id)
 			continue;
-		if (s->child_pid == 0) 
+		if (s->child_pid == 0)
 			continue;
 		/* compare addresses */
 		len = sizeof s->dst.sin6_addr;
-		if (memcmp(&addr->sin6_addr, &s->dst.sin6_addr, len) == 0) 
+		if (memcmp(&addr->sin6_addr, &s->dst.sin6_addr, len) == 0)
 			return 1;
 	}
 	return 0;
