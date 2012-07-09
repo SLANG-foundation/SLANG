@@ -4,7 +4,7 @@
  * \author Anders Berggren <anders@halon.se>
  * \author Lukas Garberg <lukas@spritelink.net>
  * \date   2010-11-01
- */ 
+ */
 
 #include <stdlib.h>
 #ifndef S_SPLINT_S /* SPlint 3.1.2 bug */
@@ -19,6 +19,7 @@
 #include "tstamp.h"
 #include "client.h"
 #include "loop.h"
+#include "net.h"
 
 struct config cfg;
 int main(int argc, char *argv[]);
@@ -83,7 +84,7 @@ int main(int argc, char *argv[]) {
 
 	/* Startup config, logging and sockets */
 	openlog("probed", log, LOG_USER);
-	bind_or_die(&s_udp, &s_tcp, (uint16_t)strtoul(port, NULL, 0));
+	bind_or_die(&s_udp, &s_tcp, port);
 	if (tstamp == HARDWARE) tstamp_mode_hardware(s_udp, iface);
 	if (tstamp == KERNEL) tstamp_mode_kernel(s_udp);
 	if (tstamp == USERLAND) tstamp_mode_userland(s_udp);

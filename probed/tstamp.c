@@ -167,19 +167,8 @@ int tstamp_extract(struct msghdr *msg, /*@out@*/ ts_t *ts, int tx) {
 	struct scm_timestamping *t;
 	ts_t *ts_p;
 	int ok = 0;
-	data_t *d;
-	char *cp;
 	struct sock_extended_err *err;
 
-		d = (data_t *)&msg[0].msg_iov[0].iov_base;
-		cp = msg[0].msg_iov[0].iov_base;
-		//printf("check %d %d \n", d->seq, d->id);
-		//printf("check %d\n", cp[4]);
-	if (tx) {
-		/* Check that we got the right packet back */
-		//if (d->seq != last_tx_seq) return -1;
-		//if (d->id != last_tx_id) return -1;
-	}
 	/* Check message headers */
 	memset(ts, 0, sizeof *ts);
 	/*@ -branchstate Don't care about cmsg storage */

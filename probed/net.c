@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <string.h>
 #include <syslog.h>
+#include <netdb.h>
 #include "probed.h"
 #include "tstamp.h"
 #include "net.h"
@@ -142,25 +143,25 @@ int send_w_ts(int sock, addr_t *addr, char *data, /*@out@*/ ts_t *ts) {
  * \warning          Should be run only once
  */
 
-void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
-	int f = 0;
-	socklen_t slen;
-	struct sockaddr_in6 my;
+void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, char *port) {
 
-	syslog(LOG_INFO, "Binding port %d\n", (int)port);
-	my.sin6_family = (sa_family_t)AF_INET6;
-	my.sin6_port = htons(port);
-	my.sin6_addr = in6addr_any;
+	int f = 0;
+	int ret = 0;
+	socklen_t slen;
+	struct addrinfo hints, *dst_addrinfo;
+
 	/* UDP socket */
 	*s_udp = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (*s_udp < 0) {
 		syslog(LOG_ERR, "socket: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	} 
+
 	/* Give us a dual-stack (ipv4/6) socket */
 	slen = (socklen_t)sizeof f;
 	if (setsockopt(*s_udp, IPPROTO_IPV6, IPV6_V6ONLY, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: IPV6_V6ONLY: %s", strerror(errno));
+
 	/* Enable reading of TOS & TTL on received packets */
 	f = 1;
 	if (setsockopt(*s_udp, IPPROTO_IP, IP_RECVTOS, &f, slen) < 0)
@@ -173,18 +174,13 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 		syslog(LOG_ERR, "setsockopt: IPV6_RECVTCLASS: %s",
 				strerror(errno));
 
-	/* Bind port */
-	slen = (socklen_t)sizeof my;
-	if (bind(*s_udp, (struct sockaddr *)&my, slen) < 0) {
-		syslog(LOG_ERR, "bind: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
 	/* TCP socket */
 	*s_tcp = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);
 	if (*s_tcp < 0) {
 		syslog(LOG_ERR, "socket: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	} 
+
 	/* Give us a dual-stack (ipv4/6) socket */
 	f = 0;
 	slen = (socklen_t)sizeof f;
@@ -194,12 +190,35 @@ void bind_or_die(/*@out@*/ int *s_udp, /*@out@*/ int *s_tcp, uint16_t port) {
 	if (setsockopt(*s_tcp, SOL_SOCKET, SO_REUSEADDR, &f, slen) < 0)
 		syslog(LOG_ERR, "setsockopt: SO_REUSEADDR: %s",
 				strerror(errno));
-	/* Bind port */
-	slen = (socklen_t)sizeof my;
-	if (bind(*s_tcp, (struct sockaddr *)&my, slen) < 0) {
+
+	/* Prepare for binding ports */
+	syslog(LOG_INFO, "Binding port %s", port);
+
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_INET6;
+	hints.ai_flags = (AI_V4MAPPED | AI_PASSIVE);
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_addr = NULL;
+	hints.ai_next = NULL;
+
+	/* Perform getaddrinfo */
+	ret = getaddrinfo(NULL, port, &hints, &dst_addrinfo);
+	if (ret < 0) {
+		syslog(LOG_ERR, "Unable to bind: %s", gai_strerror(ret));
+		exit(EXIT_FAILURE);
+	}
+
+	/* Bind! */
+	if (bind(*s_udp, dst_addrinfo->ai_addr, dst_addrinfo->ai_addrlen) < 0) {
 		syslog(LOG_ERR, "bind: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
+
+	if (bind(*s_tcp, dst_addrinfo->ai_addr, dst_addrinfo->ai_addrlen) < 0) {
+		syslog(LOG_ERR, "bind: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
 	if (listen(*s_tcp, 10) == -1) {
 		syslog(LOG_ERR, "listen: %s", strerror(errno));
 		exit(EXIT_FAILURE);
