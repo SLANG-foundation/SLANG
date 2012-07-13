@@ -27,7 +27,7 @@
  * Place human-readable IPv6 or IPv6-mapped-IPv4 address into
  * string 's' with size INET6_ADDRSTRLEN.
  *
- * \param[in] a sockaddr_in6 to fetch address from.
+ * \param[in] a addr_t to fetch address from.
  * \param[out] s Buffer where the string is written.
  * \return Status; 0 on success, <0 on failure.
  */

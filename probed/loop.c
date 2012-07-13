@@ -77,7 +77,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 	struct server_peer *p;
 	char addrstr[INET6_ADDRSTRLEN];
 	char byte;
-	struct sockaddr_in6 addr_tmp;
+	addr_t addr_tmp;
 	pkt_t pkt;
 	data_t *rx, tx;
 	ts_t ts, last_stats, now, tmp_ts;
@@ -173,7 +173,7 @@ void loop_or_die(int s_udp, int s_tcp, char *port, char *cfgpath) {
 			/* SERVER: TCP socket, accept timestamp connection */
 			if (unix_fd_isset(s_tcp, &fs_tmp) == 1) {
 				ok = 1;
-				slen = (socklen_t)sizeof (struct sockaddr_in6);
+				slen = (socklen_t)sizeof (addr_t);
 				memset(&addr_tmp, 0, sizeof addr_tmp);
 				fd = accept(s_tcp, (struct sockaddr *)&addr_tmp, &slen);
 				if (fd < 0) {

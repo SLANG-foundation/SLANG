@@ -64,6 +64,7 @@ struct res {
 	/*@dependent@*/ ts_t ts[4];
 	TAILQ_ENTRY(res) list;
 };
+
 /**
  * Struct for storing configuration for one measurement session.
  */
@@ -79,7 +80,9 @@ struct msess {
 	uint32_t last_seq; /**< Last sequence number sent */
 	LIST_ENTRY(msess) list;
 };
+
 static LIST_HEAD(msess_listhead, msess) msess_head;
+
 struct res_fifo {
 	uint32_t id;
 	uint32_t seq;
@@ -148,7 +151,6 @@ void client_res_fifo_or_die(char *fifopath) {
 		syslog(LOG_ERR, "fcntl: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-
 
 }
 
