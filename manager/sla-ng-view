@@ -1,4 +1,9 @@
 #!/usr/bin/python
+#
+# sla-ng-view
+#
+# A simple application which displays measurement results.
+#
 
 import sys
 from optparse import OptionParser
@@ -10,6 +15,7 @@ o.add_option('-i', dest='sessid', default=-1)
 o.add_option('-m', dest='mode', default='ping')
 o.add_option('-t', dest='interval', default='300')
 (options, args) = o.parse_args()
+
 
 if options.mode == 'ping':
     import slang.probe
@@ -30,6 +36,7 @@ if options.mode == 'ping':
                 continue
         print p
         sys.stdout.flush()
+
 
 if options.mode == 'aggr':
     import time

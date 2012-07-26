@@ -1,3 +1,10 @@
+#! /usr/bin/python
+#
+# maintainer.py
+#
+# A Maintainer taking care of periodic maintenance. Run in a separate thread.
+#
+
 import threading
 from time import time, sleep
 import logging
@@ -5,8 +12,10 @@ import resource
 
 import config
 
+
 class Maintainer(threading.Thread):
-    """ Performs maintenance operations at regular intervals. """
+    """ Performs maintenance operations at regular intervals.
+    """
 
     flush_interval = 1
     delete_interval = 600
@@ -21,7 +30,12 @@ class Maintainer(threading.Thread):
     last_delete = None
     last_reload = None
 
+
     def __init__(self, pstore, manager):
+        """ Constructor.
+
+            Creates an instance of the Maintainer-object.
+        """
 
         threading.Thread.__init__(self, name=self.__class__.__name__)
 
@@ -36,12 +50,16 @@ class Maintainer(threading.Thread):
         self.last_flush = time()
         self.last_delete = time()
         self.last_reload = time()
-        self.last_pstore_aggr = ((int(time() * 1000000000) / self.pstore.AGGR_DB_LOWRES) *
+        self.last_pstore_aggr = (
+            (int(time() * 1000000000) / self.pstore.AGGR_DB_LOWRES) *
             self.pstore.AGGR_DB_LOWRES + 2*self.pstore.AGGR_DB_LOWRES)
 
 
     def run(self):
-        """ Starts thread. """
+        """ Starts thread.
+
+            Start the Maintainer's infinite loop.
+        """
 
         self.logger.debug("Starting thread")
 
@@ -79,9 +97,14 @@ class Maintainer(threading.Thread):
             #
             # run when we are certain that we have all data for previous
             # aggr_db_lowres
-            if (t_s * 1000000000 > (self.last_pstore_aggr + self.pstore.AGGR_DB_LOWRES + self.pstore.HIGHRES_INTERVAL + self.pstore.TIMEOUT + 2*1000000000)):
+            if (t_s * 1000000000 > (
+                self.last_pstore_aggr +
+                self.pstore.AGGR_DB_LOWRES +
+                self.pstore.HIGHRES_INTERVAL +
+                self.pstore.TIMEOUT + 2*1000000000)):
 
                 t_start = t_s
+
                 # the previous lowres interval
                 age = self.last_pstore_aggr
 
@@ -98,13 +121,18 @@ class Maintainer(threading.Thread):
                 self.logger.debug("Aggregation performed in %.3f seconds" % (t_stop - t_start))
 
 
-            self.logger.debug("thread %d run time: %f s" % (self.ident, resource.getrusage(1)[0]))
+            self.logger.debug("thread %d run time: %f s" %
+                (self.ident, resource.getrusage(1)[0]))
             self.manager.run_stats()
 
             sleep(1)
 
 
     def stop(self):
-        """ Stop thread """
+        """ Stop thread.
+
+            Sets the stop-flag which will make the Maintainer thread stop
+            during its next iteration.
+        """
 
         self.thread_stop = True

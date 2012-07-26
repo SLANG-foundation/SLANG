@@ -1,4 +1,9 @@
-#! /ust/bin/python
+#! /usr/bin/python
+#
+# config.py
+#
+# Configuration handling for SLANG
+#
 
 import logging
 
@@ -13,11 +18,12 @@ class Config:
     lines = None
     __shared_state = {}
 
-    def __init__(self, filename=None):
-        """ Constructor
 
-                Creates config instance and makes sure configuration
-                file is loaded.
+    def __init__(self, filename=None):
+        """ Constructor.
+
+            Creates config instance and makes sure configuration
+            file is loaded.
         """
 
         self.__dict__ = self.__shared_state
@@ -41,8 +47,9 @@ class Config:
         if len(self.lines) < 5:
             raise ConfigError('Invalid configuration file')
 
+
     def get(self, param):
-        """ Get a config parameter
+        """ Get a config parameter.
 
                 Returns a string containing the value for config
                 patameter param.
@@ -67,14 +74,22 @@ class Config:
             return self.lines[4].strip()
         raise ConfigError("Invalid config parameter")
 
+
     def get_path(self):
-        """ Get path to config file. """
+        """ Get path to config file.
+        """
+
         return self.filename
 
+
 class ConfigError(Exception):
-    """ Config base exception class. """
+    """ Config base exception class.
+    """
     pass
 
 class NotFoundError(ConfigError):
-    """ Unknown config key. """
+    """ Unknown config key.
+
+        Throw when a value for an unknown configuration key was requested.
+    """
     pass

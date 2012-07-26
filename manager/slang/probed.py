@@ -1,4 +1,9 @@
 #! /usr/bin/python
+#
+# probed.py
+#
+# Starts up 'probed' and received measurement results from it.
+#
 
 import subprocess
 import sys
@@ -11,8 +16,12 @@ import signal
 import probe
 import config
 
+
 class Probed(threading.Thread):
-    """ Manages probed
+    """ Manages the application 'probed'.
+
+        This class handles everything regarding the application 'probed' which
+        performs all measurments and feeds us with measurement results.
     """
 
     probed = None
@@ -24,7 +33,12 @@ class Probed(threading.Thread):
     _flag_run_stats = False
     nrun = 0
 
+
     def __init__(self, pstore):
+        """ Constructor.
+
+            Starts up probed and opens the FIFO used for communication.
+        """
 
         threading.Thread.__init__(self)
 
@@ -43,8 +57,10 @@ class Probed(threading.Thread):
             time.sleep(1)
             self.open_fifo()
 
+
     def start_probed(self):
-        """ Start probed application """
+        """ Start probed application.
+        """
 
         probed_args = ['/usr/bin/probed', '-q']
         probed_args += ['-p', self.config.get('port')]
@@ -90,36 +106,44 @@ class Probed(threading.Thread):
 
 
     def stop(self):
-        """ Stop thread execution """
+        """ Stop thread execution.
+
+            Sets the stop-flag which will make sure the thread is stopped
+            during the next iteration.
+        """
         self._flag_thread_stop = True
 
 
     def run_stats(self):
-        """ Log thread statistics
+        """ Log thread statistics.
         """
         self._flag_run_stats = True
 
 
     def reload(self):
-        """ Reload probed application """
+        """ Reload probed application.
+        """
 
         self.probed.send_signal(signal.SIGHUP)
         self.pstore.flush_queue()
 
 
     def run(self):
-        """ Function which is run when thread is started.
+        """ Start thread.
 
             Will infinitely read from fifo.
         """
 
         while True:
 
+            # Has anyone waved the stop flag?
             if self._flag_thread_stop:
                 break
 
+            # Has anyone waved the statistics flag?
             if self._flag_run_stats is True:
-                self.logger.debug("thread %d run time: %f" % (self.ident, resource.getrusage(1)[0]))
+                self.logger.debug("thread %d run time: %f" %
+                    (self.ident, resource.getrusage(1)[0]))
                 self._flag_run_stats = False
 
             # check if probed is alive
@@ -133,6 +157,7 @@ class Probed(threading.Thread):
                 self.pstore.flush_queue()
                 continue
 
+            # Is FIFO open?
             if self.fifo.closed:
                 self.logger.warn('FIFO closed. Retrying...')
                 time.sleep(1)
@@ -142,7 +167,6 @@ class Probed(threading.Thread):
             try:
                 # ~780 probes can be held in fifo buff before pause
                 data = self.fifo.read(28)
-#                self.logger.debug("got ipc: %d bytes " % len(data))
             except Exception, e:
                 self.logger.error('Unable to read from FIFO: %s' % e)
                 time.sleep(1)
@@ -153,6 +177,7 @@ class Probed(threading.Thread):
             if len(data) < 1:
                 continue
 
+            # Create Probe object from data and send to ProbeStore
             try:
                 p = probe.from_struct(data)
                 self.pstore.add(p)
@@ -162,8 +187,12 @@ class Probed(threading.Thread):
             self.nrun += 1
 
 
+        # Main loop ended. Shut down!
         self.probed.terminate()
         self.fifo.close()
 
+
 class ProbedError(Exception):
+    """ Exception for errors related to probed.
+    """
     pass

@@ -1,3 +1,10 @@
+#! /usr/bin/python
+#
+# remoteproc.py
+#
+# Procedures accessable over XML-RPC
+#
+
 from twisted.web import xmlrpc, server
 import logging
 import time
@@ -5,16 +12,21 @@ import xmlrpclib
 
 import manager
 
+
 class RemoteProc(xmlrpc.XMLRPC):
-    """ Remote procedures """
+    """ Remote procedures.
+    """
 
     allow_none = True
     pstore = None
     manager = None
     logging = None
 
+
     def __init__(self, pstore, manager):
-        """ Constructor """
+        """ Constructor.
+        """
+
         xmlrpc.XMLRPC.__init__(self)
         self.allowNone = True
 
@@ -22,8 +34,10 @@ class RemoteProc(xmlrpc.XMLRPC):
         self.manager = manager
         self.pstore = pstore
 
+
     def xmlrpc_reload(self):
-        """ Reload application """
+        """ Reload application.
+        """
 
         try:
             self.manager.reload()
@@ -36,7 +50,8 @@ class RemoteProc(xmlrpc.XMLRPC):
 
 
     def xmlrpc_recv_config(self, cfg):
-        """ Receive a new config, reload application. """
+        """ Receive a new config, reload application.
+        """
 
         try:
             self.manager.write_config(cfg)
@@ -70,6 +85,7 @@ class RemoteProc(xmlrpc.XMLRPC):
 
     xmlrpc_get_last_highres.signature = [ ['array', 'integer', 'integer'], ]
 
+
     def xmlrpc_get_last_lowres(self, session_id, num = 1):
         """ Get latest finished low-resolution data.
 
@@ -92,6 +108,7 @@ class RemoteProc(xmlrpc.XMLRPC):
         return data
 
     xmlrpc_get_last_lowres.signature = [ ['array', 'integer', 'integer'], ]
+
 
     def xmlrpc_get_last_dyn_aggregate(self, session_id, num = 1):
         """ Get last precomputed aggregate data.
@@ -118,7 +135,8 @@ class RemoteProc(xmlrpc.XMLRPC):
 
 
     def xmlrpc_get_current_sessions(self):
-        """ Get current measurement sessions there is data for. """
+        """ Get current measurement sessions there is data for.
+        """
 
         return self.pstore.current_sessions()
 
@@ -126,14 +144,17 @@ class RemoteProc(xmlrpc.XMLRPC):
 
 
     def xmlrpc_get_storage_statistics(self):
-        """ Get some statistics from the probe storage. """
+        """ Get some statistics from the probe storage.
+        """
 
         return self.pstore.get_storage_statistics()
 
     xmlrpc_get_storage_statistics.signature = [ [ 'struct' ], ]
 
+
     def xmlrpc_flush_queue(self):
-        """ Flush probe queue. """
+        """ Flush probe queue.
+        """
 
         self.pstore.flush_queue()
         return True
