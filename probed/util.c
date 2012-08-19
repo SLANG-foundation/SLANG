@@ -70,21 +70,96 @@ void debug(int enabled) {
 /**
  * Calculates the difference between two timespec.
  *
- * Calculates the value \p end - \p beg.
+ * Calculates the value \p a - \p b.
  * 
  * \param[out] r Pointer to timespec where result will be written.
- * \param[in] end Time #1.
- * \param[in] beg Time #2.
+ * \param[in] a Time #1.
+ * \param[in] b Time #2.
+ * \return sign; 0 on positive, 1 on negative.
  */
-void diff_ts (/*@out@*/ ts_t *r, ts_t *end, ts_t *beg) {
+int diff_ts (/*@out@*/ ts_t *r, ts_t *a, ts_t *b) {
+
+	int neg = 0;
+
 	memset(r, 0, sizeof *r);
-	if ((end->tv_nsec - beg->tv_nsec) < 0) {
-		r->tv_sec = end->tv_sec - beg->tv_sec - 1;
-		r->tv_nsec = 1000000000 + end->tv_nsec - beg->tv_nsec;
+
+	/*
+	 * This is a very long and straight-forward implementation.
+	 * Can (should? :)) be optimized!
+	 */
+
+	/* seconds larger? */
+	if (a->tv_sec > b->tv_sec) {
+
+		r->tv_sec = a->tv_sec - b->tv_sec;
+
+		/* nanoseconds larger? */
+		if (a->tv_nsec > b->tv_nsec) {
+
+			r->tv_nsec = a->tv_nsec - b->tv_nsec;
+
+		/* nanoseconds smaller? */
+		} else if (a->tv_nsec < b->tv_nsec) {
+
+			r->tv_sec -= 1;
+			r->tv_nsec = 1000000000 + a->tv_nsec - b->tv_nsec;
+
+		/* nanoseconds equal */
+		} else {
+
+			r->tv_nsec = 0;
+
+		}
+
+	/* seconds smaller? */
+	} else if (a->tv_sec < b->tv_sec) {
+
+		neg = 1;
+		r->tv_sec = b->tv_sec - a->tv_sec;
+
+		/* nanoseconds larger? */
+		if (a->tv_nsec > b->tv_nsec) {
+
+			r->tv_sec -= 1;
+			r->tv_nsec = b->tv_nsec + 1000000000 - a->tv_nsec;
+
+		/* nanoseconds smaller? */
+		} else if (a->tv_nsec < b->tv_nsec) {
+
+			r->tv_nsec = b->tv_nsec - a->tv_nsec;
+
+		/* nanoseconds equal */
+		} else {
+
+			r->tv_nsec = 0;
+
+		}
+
+	/* seconds equal */
 	} else {
-		r->tv_sec = end->tv_sec - beg->tv_sec;
-		r->tv_nsec = end->tv_nsec - beg->tv_nsec;
+
+		r->tv_sec = 0;
+
+		/* nanoseconds larger? */
+		if (a->tv_nsec > b->tv_nsec) {
+
+			r->tv_nsec = a->tv_nsec - b->tv_nsec;
+
+		} else if (a->tv_nsec < b->tv_nsec) {
+
+			neg = 1;
+			r->tv_nsec = b->tv_nsec - a->tv_nsec;
+
+		} else {
+
+			r->tv_nsec = 0;
+
+		}
+
 	}
+
+	return neg;
+
 }
 
 /** 
