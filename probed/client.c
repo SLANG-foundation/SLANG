@@ -165,8 +165,17 @@ void client_send_fork(int pipe) {
 
 	int niter = 0;
 	int time_dev = 0;
+	int t_dev = 0;
+	int neg;
 	char b = 's';
-	ts_t last, now, diff;
+	ts_t last, now, time_passed, diff, ideal;
+
+	/* ideal time between timer checks
+	 * the number '1000' is there to convert bewtween usec and nsec.
+	 */
+	ideal.tv_sec = 0;
+	ideal.tv_nsec = SEND_INTERVAL *
+		SEND_INTERVAL_DEV_INTERVAL * 1000;
 
 	/* Do not react to SIGCHLD (when a child dies) */
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
@@ -211,20 +220,38 @@ void client_send_fork(int pipe) {
 			 * SEND_INTERVAL_DEV_INTERVAL iterations take?
 			 */
 			(void)clock_gettime(CLOCK_REALTIME, &now);
-			diff_ts(&diff, &now, &last);
+			diff_ts(&time_passed, &now, &last);
 			memcpy(&last, &now, sizeof last);
+			neg = diff_ts(&diff, &time_passed, &ideal);
 
 			/*
 			 * Calculate deviation from ideal time.
 			 * Division by 1000 is conversion from nsec to usec.
 			 */
-			time_dev += diff.tv_nsec / 1000 /
-				SEND_INTERVAL_DEV_INTERVAL - SEND_INTERVAL;
+			t_dev = diff.tv_nsec / 1000 /
+				SEND_INTERVAL_DEV_INTERVAL;
+			if (neg) {
+				time_dev -= t_dev;
+			} else {
+				time_dev += t_dev;
+			}
 
-			/* Warn if we have very high values */
+			/* Warn if we have very high values
+			* and limit the modifier */
 			if (time_dev > 300 || time_dev < -300) {
-				syslog(LOG_INFO, "time_dev large: %d",
-					time_dev);
+
+				syslog(LOG_INFO, "time diff large @%d: s: %d ns: %d; time_dev: %d",
+					niter, (int)diff.tv_sec, (int)diff.tv_nsec, time_dev);
+				syslog(LOG_INFO, "time_passed: s: %d ns: %d; ideal: s: %d ns: %d",
+					(int)time_passed.tv_sec, (int)time_passed.tv_nsec,
+					(int)ideal.tv_sec, (int)ideal.tv_nsec);
+
+				if (time_dev > 300) {
+					time_dev = 300;
+				} else {
+					time_dev = -300;
+				}
+
 			}
 
 		}
@@ -381,7 +408,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 	struct msess *s;
 	struct res_fifo r_fifo;
 	ts_t now, diff, rtt;
-	int i;
+	int i, neg1 = 0, neg2 = 0, neg3 = 0;
 
 	r = NULL;
 	for (s = msess_head.lh_first; s != NULL; s = s->list.le_next)
@@ -421,17 +448,22 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 					r_fifo.state = STATE_DS_ERR;
 				else
 					r_fifo.state = STATE_SUCCESS;
+
 				/* Calculate RTT */
-				diff_ts(&diff, &r->ts[3], &r->ts[0]);
-				diff_ts(&now, &r->ts[2], &r->ts[1]);
-				diff_ts(&rtt, &diff, &now);
+				neg1 = diff_ts(&diff, &r->ts[3], &r->ts[0]);
+				neg2 = diff_ts(&now, &r->ts[2], &r->ts[1]);
+				neg3 = diff_ts(&rtt, &diff, &now);
 				r_fifo.rtt_sec = (uint32_t)rtt.tv_sec;
 				r_fifo.rtt_nsec = (uint32_t)rtt.tv_nsec;
-				now.tv_sec = 0;
-				now.tv_nsec = 0;
-				/* Check that RTT is positive */
-				if (cmp_ts(&now, &rtt) == 1)
+
+				/* Check that RTT calculations did not result in any
+				 * negative numbers */
+				if (neg1 || neg2 || neg3) {
 					r_fifo.state = STATE_TS_ERR;
+					syslog(LOG_ERR, "RTT calculation resulted in negative "
+						"value: neg1 %d neg2 %d neg3 %d\n", neg1, neg2, neg3);
+				}
+
 				/* Check that all timestamps are present */
 				for (i = 0; i < 4; i++)
 					if (r->ts[i].tv_sec == 0 && r->ts[i].tv_nsec == 0)
@@ -443,6 +475,7 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 						r_fifo.state = STATE_TS_ERR;
 				}
 				count_client_done++;
+
 				/* Pipe (daemon) output */
 				if (cfg.op == DAEMON)
 					client_write_fifo(&r_fifo);
@@ -458,9 +491,14 @@ void client_res_update(addr_t *a, data_t *d, /*@null@*/ ts_t *ts, int dscp) {
 								(int)r->seq, (int)r->id, (int)diff.tv_sec);
 					} else { /* STATE_SUCCESS implicit */
 						res_ok++;
-						diff_ts(&diff, &r->ts[3], &r->ts[0]);
-						diff_ts(&now, &r->ts[2], &r->ts[1]);
-						diff_ts(&rtt, &diff, &now);
+						neg1 = diff_ts(&diff, &r->ts[3], &r->ts[0]);
+						neg2 = diff_ts(&now, &r->ts[2], &r->ts[1]);
+						neg3 = diff_ts(&rtt, &diff, &now);
+						if (neg1 || neg2 || neg3) {
+							printf("RTT calculation resulted in negative "
+								"value: neg1 %d neg2 %d neg3 %d\n",
+								neg1, neg2, neg3);
+						}
 						if (rtt.tv_sec > 0)
 							printf("Response %4d from %d in %10ld.%09ld\n",
 									(int)r->seq, (int)r->id, rtt.tv_sec,
