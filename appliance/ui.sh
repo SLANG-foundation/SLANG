@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # SUDO ITSELF
-if [ "$1" = "" ]
+if [ "$1" = "" -a `id -u` -ne 0 ]
 then
 	sudo $0 noloop
 	exit
